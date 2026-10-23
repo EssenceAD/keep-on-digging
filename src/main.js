@@ -98,7 +98,7 @@ const SPRITES = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper'
 const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'ancient', 'pocket_water', 'pocket_gas', 'relic_chest'];
 const FX = ['fx_hit', 'fx_dirt', 'fx_rock', 'fx_vein', 'fx_vein_glow', 'fx_daebak', 'fx_gas', 'fx_water', 'fx_collapse', 'fx_cart', 'fx_pulse'];
 const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'red_swing', 'brown_idle', 'brown_walk',
-  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'slime', ...FX];
+  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', ...FX];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
   ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
@@ -392,7 +392,8 @@ const MINERS = [
 ];
 const crew = MINERS.map((m, k) => actor({ ...m, anim: `${m.id}_idle`, x: 100 + k * 16, y: SURFACE_Y + 0.5, hp: B.minerHp, state: 'idle', face: 1 }));
 const mole = actor({ anim: 'mole_sniff', x: 118, y: SURFACE_Y + 0.5, shadow: false, goal: undefined, wait: 0 });
-const cart = actor({ anim: 'cart_roll_empty', x: SHED_X - 30, y: SURFACE_Y - 1, load: 0, moving: false, face: -1 });
+const cart = actor({ anim: 'cart_roll_empty', x: SHED_X - 30, y: SURFACE_Y - 1, node: 'S', cargo: { C: 0, s: 0, g: 0, j: 0, c: 0 }, mode: 'park', moving: false, face: -1, path: [], idleT: 0 });
+const cable = new Graphics(); charsA.addChild(cable);
 const bubble = new Sprite(tex('bubble_dig')); lampsU.addChild(bubble); bubble.visible = false;
 const headHalo = halo(0xfff0a0, 8, 0.6);
 
@@ -472,6 +473,7 @@ function startRound(card, bid) {
   };
   piles = [];
   for (const a of crew) resetCrewMember(a);
+  Object.assign(cart, { node: 'S', x: SHED_X - 30, y: SURFACE_Y - 1, mode: 'park', path: [], cargo: { C: 0, s: 0, g: 0, j: 0, c: 0 }, trips: 0 });
   S.auction = null;
   buildWorld();
   mole.x = GX + 8; mole.goal = undefined; mole.wait = 0.5;
@@ -1004,10 +1006,12 @@ function bumpCounter(key) {
   n.scale.set(1.3); n.tint = 0xfff4b8;
   bumps.push({ n, t: 0.16 });
 }
+let inFlight = 0;                                         // 창고로 날아가는 중인 광석 (용량 계산에 포함)
 function orePopup(kind, x, y, n) {
   sfx('ore');
   const [sx, sy] = toScreen(x, y);
-  flyNumber(kind, sx, sy, n, () => { stash[kind] += n; refreshUI(); bumpCounter('wh'); sfx('stash', true); });
+  inFlight += n;
+  flyNumber(kind, sx, sy, n, () => { inFlight -= n; stash[kind] += n; refreshUI(); bumpCounter('wh'); sfx('stash', true); });
 }
 function flyNumber(kind, sx, sy, n, done) {
   const el = document.createElement('div');
@@ -1131,6 +1135,7 @@ function syncRound() {                                     // 세계 → 저장
   S.round.rail = W.rail.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
   S.round.water = W.water.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
   S.round.piles = piles;
+  S.round.cartCargo = { ...cart.cargo };
 }
 /** 광맥에 닿으면 덩어리 전체가 채굴 대상 (가까운 칸부터) */
 function claimVeinsNear(gx, gy) {
@@ -1156,6 +1161,7 @@ function claimVeinsNear(gx, gy) {
 function breakCell(gx, gy, from) {
   const t = W.g[gy][gx];
   W.g[gy][gx] = '.';
+  W.rail[gy][gx] = true;                                   // 뚫린 길엔 레일이 깔림
   // 세로로 들어간 칸(위·아래에서, 또는 지상에서 0줄)엔 사다리
   if (from === 'S' || (from != null && cxy(from)[0] === gx)) {
     W.ladder[gy][gx] = true;
@@ -1326,19 +1332,26 @@ function updateDigger(a, dt) {
   rd.jobs = rd.jobs.filter((j) => W.g[j.y][j.x] !== '.');
   a.state = 'idle'; setAnim(a, 'red_idle');
 }
-/** 운반 광부: 광석 더미 → (4단계부터 광차, 지금은) 지상 창고 */
-function carryTarget() { return 'S'; }
+/** 운반 광부: 광석 더미 → 광차 (광차가 서 있고 자리가 있을 때) */
+const cartLoad = () => Object.values(cart.cargo).reduce((x, y) => x + y, 0);
+const cartOpen = () => cart.mode === 'park' && cartLoad() < B.cartCapacity;
 function updateCarrier(a, dt) {
   if (a.busy) return;
   if (a.path?.length) { a.state = a.carrying ? 'carry' : 'walk'; moveAlong(a, dt); return; }
-  if (a.carrying) {                                         // 도착: 내려놓기
-    if (nodeOf(a) === carryTarget()) {
-      if (Math.abs(a.x - SHED_X) > 1) { const d = SHED_X - a.x; a.face = Math.sign(d); a.x += Math.sign(d) * Math.min(Math.abs(d), B.carrySpeed * T * dt); setAnim(a, `${a.id}_walk`); a.state = 'carry'; return; }
-      deliver(a.carrying.type, a.carrying.n, a.x, a.y - 16);
-      a.carrying = null; return;
+  if (a.carrying) {                                         // 광차에 붓기
+    if (cartOpen() && nodeOf(a) === cart.node && (cart.node !== 'S' || Math.abs(a.x - cart.x) < 6)) {
+      const n = Math.min(a.carrying.n, B.cartCapacity - cartLoad());
+      cart.cargo[a.carrying.type] += n; a.carrying.n -= n;
+      sfx('ore', true); cart.idleT = 0;
+      if (!a.carrying.n) a.carrying = null;
+      return;
     }
-    const path = findPath(nodeOf(a), (n) => n === carryTarget());
-    if (path) a.path = path; else { a.state = 'idle'; setAnim(a, `${a.id}_idle`); }
+    if (cartOpen()) {
+      if (cart.node === 'S' && nodeOf(a) === 'S') { const d = cart.x - a.x; a.face = Math.sign(d) || 1; a.x += Math.sign(d) * Math.min(Math.abs(d), B.carrySpeed * T * dt); setAnim(a, a.id + '_walk'); a.state = 'carry'; return; }
+      const path = findPath(nodeOf(a), (n) => n === cart.node);
+      if (path) { a.path = path; return; }
+    }
+    a.state = 'carry'; setAnim(a, a.id + '_idle');          // 광차 기다림 (들고 서 있음)
     return;
   }
   // 줍기: 가장 가까운 더미
@@ -1365,11 +1378,154 @@ function updateCarrier(a, dt) {
   }
   a.state = 'idle'; setAnim(a, `${a.id}_idle`);
 }
-function deliver(type, n, x, y) {
-  const room = B.warehouseCapacity - whTotal();
-  const put = Math.min(n, room);
-  if (put > 0) orePopup(type, x, y, put);
-  if (put < n) toast('창고가 꽉 찼어요! [판매] 탭에서 팔아요', 'momo');
+// ---- 광차 (명세2 §5-3): 뚫린 길에 레일 자동 부설 · 세로 갱은 도르래로 오르내림 · 적재 8 · 2칸/초 · 창고 60
+const cartY = (gy) => GY + gy * T + 14;
+const gyOf = (n) => (n === 'S' ? -1 : cxy(n)[1]);
+const blockedForCart = (gx, gy) => waterAt(gx, gy) || (S.round?.monsters ?? []).some((m) => m.gx === gx && m.gy === gy && m.until > time);
+const cartSupported = (gx, gy) => gy + 1 >= W.rows || !isDug(gx, gy + 1) || ladderAt(gx, gy);
+function cartNeighbors(n, out) {
+  out.length = 0;
+  if (n === 'S') { for (let gx = 0; gx < GW; gx++) if (isDug(gx, 0) && !blockedForCart(gx, 0)) out.push(idx(gx, 0)); return out; }
+  const [x, y] = cxy(n);
+  if (y === 0) out.push('S');
+  for (const dx of [-1, 1]) if (isDug(x + dx, y) && !blockedForCart(x + dx, y) && cartSupported(x + dx, y)) out.push(idx(x + dx, y));
+  for (const dy of [-1, 1]) if (isDug(x, y + dy) && !blockedForCart(x, y + dy)) out.push(idx(x, y + dy));
+  return out;
+}
+function cartPath(start, goal) {
+  if (goal(start)) return [];
+  const prev = new Map([[start, null]]), q = [start], nb = [];
+  while (q.length) {
+    const n = q.shift();
+    for (const m of cartNeighbors(n, nb)) {
+      if (prev.has(m)) continue;
+      prev.set(m, n);
+      if (goal(m)) { const path = [m]; let k = n; while (k !== start) { path.unshift(k); k = prev.get(k); } return path; }
+      q.push(m);
+    }
+  }
+  return null;
+}
+/** 광차가 설 자리: 붉은 수염에게서 가장 가까운, 바닥이 있는 칸 */
+function cartStop() {
+  const red = crew[0];
+  if (typeof red.node !== 'number') return 'S';
+  const seen = new Set([red.node]), q = [red.node], nb = [];
+  while (q.length) {
+    const n = q.shift();
+    if (n !== 'S') { const [x, y] = cxy(n); if (!blockedForCart(x, y) && (y + 1 >= W.rows || !isDug(x, y + 1))) return n; }
+    for (const m of cartNeighbors(n, nb)) if (!seen.has(m)) { seen.add(m); q.push(m); }
+  }
+  return 'S';
+}
+function cartMove(dt) {                                     // 경로 따라 (가로 = 레일 · 세로 = 도르래)
+  const n = cart.path[0];
+  let tx, ty, final = true;
+  if (n === 'S') { tx = typeof cart.node === 'number' ? cellX(cxy(cart.node)[0]) : cart.x; ty = SURFACE_Y - 1; }
+  else {
+    const [gx, gy] = cxy(n); tx = cellX(gx);
+    if (cart.node === 'S' && Math.abs(cart.x - tx) > 0.5) { ty = SURFACE_Y - 1; final = false; } else ty = cartY(gy);
+  }
+  const dx = tx - cart.x, dy = ty - cart.y, d = Math.hypot(dx, dy), st = B.cartSpeed * T * dt;
+  cart.vertical = Math.abs(dx) < 0.5 && Math.abs(dy) > 0.5;
+  if (Math.abs(dx) > 0.5) cart.face = Math.sign(dx);
+  if (d <= st) { cart.x = tx; cart.y = ty; if (final) { cart.node = n; cart.path.shift(); } }
+  else { cart.x += dx / d * st; cart.y += dy / d * st; }
+  cart.moving = true;
+}
+function cartSurfaceTo(x, dt) {                             // 지상에서 옆으로
+  const d = x - cart.x;
+  if (Math.abs(d) < 0.5) { cart.x = x; return true; }
+  cart.face = Math.sign(d); cart.vertical = false; cart.moving = true;
+  cart.x += Math.sign(d) * Math.min(Math.abs(d), B.cartSpeed * T * dt);
+  return false;
+}
+let fullNagT = 0;
+function updateCart(dt) {
+  cart.moving = false;
+  if (state() !== 'DIG') { cart.mode = 'park'; return; }
+  const load = cartLoad();
+  // 떨어짐: 서 있던 칸 밑이 뚫리면 → 적재 절반이 그 칸에 흩어짐
+  if (cart.mode === 'park' && typeof cart.node === 'number' && !cartSupported(...cxy(cart.node))) {
+    const [gx, gy] = cxy(cart.node);
+    let land = gy; while (land + 1 < W.rows && isDug(gx, land + 1)) land++;
+    cart.fallTo = land; cart.mode = 'fall'; cart.fallV = 0;
+  }
+  if (cart.mode === 'fall') {
+    cart.fallV = Math.min(B.fallMax * T, cart.fallV + B.fallAccel * T * dt);
+    cart.y += cart.fallV * dt;
+    if (cart.y >= cartY(cart.fallTo)) {
+      cart.y = cartY(cart.fallTo); cart.node = idx(cxy(cart.node)[0], cart.fallTo); cart.mode = 'park';
+      fx('fx_collapse', cart.x, cart.y - 6); sfx('break'); shake = 0.2; shakeAmp = 2;
+      for (const k of Object.keys(cart.cargo)) {
+        const spill = Math.floor(cart.cargo[k] * B.cartSpill);
+        if (spill) { cart.cargo[k] -= spill; piles.push({ gx: cxy(cart.node)[0], gy: cart.fallTo, type: k, n: spill }); }
+      }
+      toast('광차가 떨어졌어요! 광석이 흩어졌어요 — 광부들이 주워 담아요');
+    }
+    return;
+  }
+  if (cart.mode === 'park') {
+    const working = piles.length || crew.some((a) => a.carrying) || S.round?.jobs?.some((j) => j.vein != null);
+    cart.idleT = load && !working ? cart.idleT + dt : 0;
+    if (load >= B.cartCapacity || cart.idleT > 2) {         // 가득 찼거나 캘 게 없으면 지상으로
+      const path = cartPath(cart.node, (n) => n === 'S');
+      if (path) { cart.path = path; cart.mode = 'toShed'; cart.idleT = 0; return; }
+    }
+    const stop = cartStop();
+    if (stop !== cart.node && !load) {                       // 빈 광차는 붉은 수염 근처로 따라감
+      const path = cartPath(cart.node, (n) => n === stop);
+      if (path?.length) { cart.path = path; cart.mode = 'back'; }
+    } else if (cart.node === 'S' && stop === 'S' && Math.abs(cart.x - (SHED_X - 30)) > 1) cartSurfaceTo(SHED_X - 30, dt);
+    return;
+  }
+  if (cart.mode === 'toShed') {
+    if (cart.path.length) { cartMove(dt); return; }
+    if (!cartSurfaceTo(SHED_X - 6, dt)) return;
+    cart.mode = 'unload'; cart.unloadT = B.cartUnloadSeconds;
+    return;
+  }
+  if (cart.mode === 'unload') {
+    cart.unloadT -= dt;
+    if (cart.unloadT > 0) return;
+    let room = B.warehouseCapacity - whTotal() - inFlight;
+    for (const k of Object.keys(cart.cargo)) {
+      const put = Math.min(cart.cargo[k], room);
+      if (put > 0) { cart.cargo[k] -= put; room -= put; orePopup(k, cart.x, cart.y - 14, put); }
+    }
+    if (cartLoad() > 0) {                                     // 창고가 꽉 참 → 지상에서 멈춤 · 광부 팔짱
+      cart.unloadT = 1;
+      fullNagT -= 1;
+      if (fullNagT <= 0) { fullNagT = 8; for (const a of crew) emote(a, '창고가 꽉 찼어요!', 2); toast('창고가 꽉 찼어요! [판매] 탭에서 팔아요', 'momo'); }
+      return;
+    }
+    cart.trips = (cart.trips ?? 0) + 1;
+    const stop = cartStop();
+    cart.path = cartPath('S', (n) => n === stop) ?? [];
+    cart.mode = cart.path.length ? 'back' : 'park';
+    return;
+  }
+  if (cart.mode === 'back') {
+    if (cart.path.length) { cartMove(dt); return; }
+    cart.mode = 'park';
+  }
+}
+function drawCart(dt) {
+  const load = cartLoad();
+  setAnim(cart, load ? (cart.cargo.c > load / 2 ? 'cart_roll_glow' : 'cart_roll') : 'cart_roll_empty');
+  if (!cart.moving || cart.vertical) { cart.p.t = 0; cart.p.i = 0; }   // 멈추거나 도르래로 오르내릴 땐 바퀴 멈춤
+  if (cart.moving && !cart.vertical) {
+    cart.sparkT = (cart.sparkT ?? 0) - dt;
+    if (cart.sparkT <= 0) { cart.sparkT = 0.28; fx('fx_cart', cart.x - cart.face * 6, cart.y - 3, { flip: cart.face < 0 }); particle(dustA, { x: cart.x - cart.face * 7, y: cart.y - 2, vx: -cart.face * 8, vy: -6, life: 0.8, color: 0x8a7a6a, g: 0, drag: 1.2, size: 1 }); }
+  }
+  cable.clear();
+  if (cart.moving && cart.vertical) {                        // 도르래 줄: 위쪽 지상(권양기) 또는 세로 갱 꼭대기에서
+    const gx = Math.round((cart.x - GX - 8) / T);
+    let gy = Math.max(0, Math.floor((cart.y - GY) / T));
+    while (gy > 0 && isDug(gx, gy - 1)) gy--;
+    const top = gy === 0 ? SURFACE_Y - 2 : GY + gy * T;
+    cable.moveTo(cart.x + 2, top).lineTo(cart.x + 2, cart.y - 10).stroke({ width: 0.5, color: 0x3d3a4c });
+  }
 }
 
 // ---- 중력 (§1): 발밑이 비면 멈칫 → 가속 낙하 → 착지(먼지·엉덩방아·"으악!") · 2칸↑ 기절 · 4칸↑ 기절 + 체력 −1
@@ -1479,6 +1635,8 @@ function updateCrew(dt) {
   });
   for (let k = marks.length - 1; k >= 0; k--) { marks[k].t -= dt; marks[k].s.alpha = Math.floor(marks[k].t * 10) % 2 ? 1 : 0.4; if (marks[k].t <= 0) { marks[k].s.destroy(); marks.splice(k, 1); } }
   updateStars(dt);
+  if (W) updateCart(dt);
+  drawCart(dt);
 }
 const pileSprites = [];
 
@@ -1651,6 +1809,7 @@ layout();
 if (!S.round) startAuction();
 else {
   piles = S.round.piles ?? []; S.round.jobs ??= []; S.round.claimed ??= [];
+  Object.assign(cart.cargo, S.round.cartCargo ?? {});
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }
 
