@@ -1,6 +1,6 @@
 {
   "name": "keep-on-digging",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "용사님, 채굴하실게요~ (Keep On Digging) — 비주얼 프로토타입",
   "scripts": {
     "dev": "vite --host",

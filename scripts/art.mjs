@@ -2,6 +2,7 @@
 //   art/shaft.px.js        갱도 타일·소품 (형철 초안 + Code 추가분)
 //   art/mine.px.js         지상 띠 · 격자 양옆 패럴랙스 바위 · HUD 아이콘
 //   art/office/office.px.js 사무소 내부 (이름이 겹치지 않게 폴더를 나눔: out/ 이 따로 생긴다)
+//   art/ui/ui.px.js        UI 킷 (나무·돌·양피지, 9-slice) → public/art/ui/
 // pxl: crsolver/claude-pxl (MIT) — ~/.claude/skills/pxl-pixel-art 에 클론 (PXL 환경변수로 경로 바꿀 수 있음)
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -11,7 +12,8 @@ import { join } from 'node:path';
 const pxl = process.env.PXL || join(homedir(), '.claude/skills/pxl-pixel-art/bin/pxl.js');
 rmSync('art/out', { recursive: true, force: true });
 rmSync('art/office/out', { recursive: true, force: true });
-for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/office/office.px.js'])
+rmSync('art/ui/out', { recursive: true, force: true });
+for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/office/office.px.js', 'art/ui/ui.px.js'])
   execFileSync(process.execPath, [pxl, 'build', f], { stdio: ['ignore', 'ignore', 'inherit'] });
 
 rmSync('public/art', { recursive: true, force: true });
@@ -19,6 +21,7 @@ for (const dir of ['sprites', 'anims']) {
   mkdirSync(`public/art/${dir}`, { recursive: true });
   cpSync(`art/out/${dir}`, `public/art/${dir}`, { recursive: true, filter: (f) => !f.endsWith('.gif') });
 }
+cpSync('art/ui/out/sprites', 'public/art/ui', { recursive: true });
 // 기준컷(pxl이 구운 장면): 첫 프레임 PNG만
 mkdirSync('public/art/scenes', { recursive: true });
 for (const [from, name] of [['art/out/scenes', 'surface'], ['art/out/scenes', 'shaft_night'], ['art/office/out/scenes', 'office_night']])

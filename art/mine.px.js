@@ -104,3 +104,43 @@ sprite("icon_glow", { outline: "k" }, `
   GGgGG
   .GGG.
   ..G..`)
+
+// ================================================================ 세로 화면 패럴랙스: 위(밤하늘) · 아래(깊은 어둠)
+// 가로로 이어지는 띠 (128 폭). 세로 화면에선 격자가 화면 너비를 채우므로 겹은 위·아래로 간다 (§6-1).
+const SKY = 128
+sprite("sky_far", { w: SKY, h: 96 },                                      // 0.2: 지상 위로 이어지는 밤하늘
+  grad(0, 0, SKY, 96, "NNm", "v", 0.6),
+  (c) => { const r = c.rng(8); for (let k = 0; k < 18; k++) c.px(Math.floor(r() * SKY), Math.floor(r() * 90), r() < 0.3 ? "q" : "I") })
+sprite("deep_far", { w: SKY, h: 96 },                                     // 0.2: 깊은 곳 자갈벽, 아래로 갈수록 어둠
+  rect(0, 0, SKY, 96, "O"),
+  (c) => {
+    const r = c.rng(31)
+    for (let k = 0; k < 40; k++) {
+      const x = Math.floor(r() * SKY), y = Math.floor(r() * 96), rx = 3 + Math.floor(r() * 5), ry = 2 + Math.floor(r() * 3)
+      for (const ox of [-SKY, 0, SKY]) { c.ellipse(x + ox, y, rx + 1, ry + 1, "k"); c.ellipse(x + ox, y, rx, ry, "O"); c.hline(x + ox - rx + 2, y - ry, rx, "o") }
+    }
+  },
+  dither(0, 40, SKY, 28, "O", "k", 0.5), rect(0, 68, SKY, 28, "k"))
+sprite("deep_mid", { w: SKY, h: 64 },                                     // 0.5: 석순·낡은 갱목 실루엣
+  poly([10, 64, 16, 20, 22, 64], "K"), poly([40, 64, 44, 34, 49, 64], "K"), poly([86, 64, 93, 10, 100, 64], "K"),
+  rect(60, 8, 4, 56, "K"), rect(58, 8, 22, 3, "K"), line(64, 11, 78, 30, "K", 2), rect(76, 8, 4, 56, "K"))
+sprite("deep_fg", { w: SKY, h: 32 },                                      // 1.3: 화면 맨 아래 초점 밖 바위
+  poly([0, 32, 4, 14, 20, 6, 38, 12, 46, 32], "k"), poly([70, 32, 80, 18, 98, 14, 112, 22, 120, 32], "k"),
+  hline(8, 9, 14, "K"), hline(82, 17, 16, "K"))
+
+// HUD·판매 창 아이콘 (구리 · 은 · 보석)
+sprite("icon_copper", { outline: "k" }, `
+  ..eE..
+  .ddeE.
+  dEddde
+  .dddd.`)
+sprite("icon_silver", { outline: "k" }, `
+  ..II..
+  .iIIi.
+  siiIis
+  .ssss.`)
+sprite("icon_gem", { outline: "k" }, `
+  .RrrR.
+  RrxrrR
+  .RrrR.
+  ..RR..`)

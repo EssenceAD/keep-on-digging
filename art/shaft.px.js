@@ -207,3 +207,28 @@ anim("gold_shimmer", { w: T, h: T, frames: 12, fps: 12 }, (c) => {
     c.px(x, y, c.is(x, y, "alL") && d < 1.5 ? (d < 0.6 ? "x" : "L") : "_")
   }
 })
+
+// 광부 머리 위 말풍선 (§5-1-3: 갱도 안에는 초상 대신 pxl 스프라이트만) — 캐는 중 · 걷는 중 · 쉬는 중
+const BUBBLE = `
+  .kkkkkkkk.
+  kxxxxxxxxk
+  kxxxxxxxxk
+  kxxxxxxxxk
+  kxxxxxxxxk
+  kxxxxxxxxk
+  .kkkxkkkk.
+  ...kk.....`
+sprite("bubble_dig", BUBBLE, grid(3, 1, `
+  .iii.
+  i.W.i
+  ..W..
+  ..W..`))
+sprite("bubble_walk", BUBBLE, grid(2, 2, `
+  .a..a
+  aaaaa
+  .a..a`))
+sprite("bubble_rest", BUBBLE, grid(3, 1, `
+  bbb.
+  ..b.
+  .b..
+  bbb.`))
