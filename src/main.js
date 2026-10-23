@@ -23,7 +23,7 @@ const VERSION = 'v0.5';
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
 let saving = true;
-const save = () => saving && writeSave(S);
+const save = () => { if (!saving) return; syncRound?.(); writeSave(S); };
 setInterval(save, B.autosaveSeconds * 1000);
 window.addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
@@ -455,7 +455,8 @@ function startAuction() {
   S.round = null;
   AU.phase = 'pick'; AU.card = null; AU.log = []; AU.queue = [];
   W = null; buildWorld();
-  for (const a of crew) { a.x = 100 + crew.indexOf(a) * 16; a.y = SURFACE_Y + 0.5; a.state = 'idle'; setAnim(a, `${a.id}_idle`); }
+  for (const a of crew) resetCrewMember(a);
+  piles = [];
   todayCards(); save(); buildUI();
 }
 /** 낙찰(또는 공짜 구획) → 격자 생성 → 탐사 */
@@ -467,12 +468,19 @@ function startRound(card, bid) {
     state: 'SURVEY', card, bid, grid, ladder: blank(), rail: blank(), water: blank(),
     startedAt: now(), surveyLeft: B.surveySeconds, xrayLeft: B.xrayPerDay,
     stats: { revenue: 0, maxVein: 0, relics: 0, relicGold: 0, events: [], jackpots: 0 },
+    jobs: [], claimed: [], piles: [], gasUntil: 0,
   };
+  piles = [];
+  for (const a of crew) resetCrewMember(a);
   S.auction = null;
   buildWorld();
   mole.x = GX + 8; mole.goal = undefined; mole.wait = 0.5;
   save(); buildUI();
   toast(card.free ? '공짜 구획이에요. 힌트는 없어요' : `${card.name} 낙찰! 두더지가 냄새를 맡아요`, 'momo');
+}
+function resetCrewMember(a) {
+  a.node = 'S'; a.x = 100 + crew.indexOf(a) * 16; a.y = SURFACE_Y + 0.5; a.path = []; a.job = null; a.carrying = null; a.fall = null; a.busy = null; a.hp = a.hp || B.minerHp; a.state = 'idle';
+  setAnim(a, `${a.id}_idle`);
 }
 function startDig() {
   if (!S.round) return;
@@ -1070,15 +1078,426 @@ function drawEmotes(dt) {
   }
 }
 
+// ================================================================ 시추 (명세2 §5): 갱도 그리기 → 광부가 차례로 판다 · 광맥은 통째로 · 중력(§1)
+// 이동 그래프: 'S'(지상) + 뚫린 칸. 옆으로는 발밑이 받쳐 주는 칸만, 위아래는 사다리로 (세로로 판 칸엔 사다리가 생긴다)
+const idx = (gx, gy) => gy * GW + gx;
+const cxy = (n) => [n % GW, Math.floor(n / GW)];
+const cellX = (gx) => GX + gx * T + 8;
+const floorY = (gy) => GY + (gy + 1) * T + 1;
+const ladderAt = (gx, gy) => !!W && gy >= 0 && gy < W.rows && gx >= 0 && gx < GW && W.ladder[gy][gx];
+const waterAt = (gx, gy) => !!W && gy >= 0 && gy < W.rows && gx >= 0 && gx < GW && W.water[gy][gx];
+/** 발밑이 받쳐 주나 (사다리거나 아래가 막혔거나 맨 아래) */
+const supported = (gx, gy) => ladderAt(gx, gy) || gy + 1 >= W.rows || !isDug(gx, gy + 1);
+function graphNeighbors(n, out) {
+  out.length = 0;
+  if (n === 'S') { for (let gx = 0; gx < GW; gx++) if (isDug(gx, 0)) out.push(idx(gx, 0)); return out; }
+  const [x, y] = cxy(n);
+  if (y === 0) out.push('S');
+  for (const dx of [-1, 1]) if (isDug(x + dx, y) && supported(x + dx, y) && supported(x, y)) out.push(idx(x + dx, y));
+  if (isDug(x, y - 1) && (ladderAt(x, y) || ladderAt(x, y - 1))) out.push(idx(x, y - 1));
+  if (isDug(x, y + 1) && (ladderAt(x, y) || ladderAt(x, y + 1))) out.push(idx(x, y + 1));
+  return out;
+}
+/** 너비 우선: start에서 goal(n) 참인 곳까지 노드 목록 (start 제외). 못 가면 null */
+function findPath(start, goal) {
+  if (goal(start)) return [];
+  const prev = new Map([[start, null]]), q = [start], nb = [];
+  while (q.length) {
+    const n = q.shift();
+    for (const m of graphNeighbors(n, nb)) {
+      if (prev.has(m)) continue;
+      prev.set(m, n);
+      if (goal(m)) { const path = [m]; let k = n; while (k !== start) { path.unshift(k); k = prev.get(k); } return path; }
+      q.push(m);
+    }
+  }
+  return null;
+}
+const nodeOf = (a) => a.node ?? 'S';
+
+// ---- 칸 파기 · 광맥 · 유물 (사건은 6단계)
+const canDig = (t) => (B.hardness[t] ?? 9) <= B.pickTier;
+const digSeconds = (t) => ORE_KEYS.has(t) ? B.digTime.ore : (B.digTime[t] ?? 1);
+let piles = [];                                           // 캔 광석 더미: { gx, gy, type, n } — 운반 광부가 나른다
+const marks = [];                                          // 빨간 X
+function markX(gx, gy) {
+  const s = new Sprite(tex('mark_x')); s.anchor.set(0.5); s.scale.set(1 / DENS * 1.4); s.position.set(cellX(gx), GY + gy * T + 8);
+  markU.addChild(s); marks.push({ s, t: B.badCellFlash });
+}
+function syncRound() {                                     // 세계 → 저장
+  if (!W || !S.round) return;
+  S.round.grid = W.g.map((r) => r.join(''));
+  S.round.ladder = W.ladder.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
+  S.round.rail = W.rail.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
+  S.round.water = W.water.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
+  S.round.piles = piles;
+}
+/** 광맥에 닿으면 덩어리 전체가 채굴 대상 (가까운 칸부터) */
+function claimVeinsNear(gx, gy) {
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const x = gx + dx, y = gy + dy;
+    if (x < 0 || x >= GW || y < 0 || y >= W.rows) continue;
+    const id = W.veins.id[y][x];
+    if (id < 0 || !ORE_KEYS.has(W.g[y][x])) continue;
+    const v = W.veins.list[id];
+    if (S.round.claimed.includes(id)) continue;
+    S.round.claimed.push(id);
+    const cells = v.cells.filter(([cx, cy]) => ORE_KEYS.has(W.g[cy][cx]))
+      .sort((p, q) => Math.abs(p[0] - x) + Math.abs(p[1] - y) - Math.abs(q[0] - x) - Math.abs(q[1] - y));
+    S.round.jobs.unshift(...cells.map(([cx, cy]) => ({ x: cx, y: cy, vein: id })));
+    S.round.stats.maxVein = Math.max(S.round.stats.maxVein, v.size);
+    if (v.size >= B.bigVein && !S.round.jackpotVeins?.includes(id)) {
+      (S.round.jackpotVeins ??= []).push(id); S.round.stats.jackpots++;
+      bigVein(cellX(x), GY + y * T + 8);
+    } else toast(`광맥 발견! ${ORES.find((o) => o.key === v.type)?.name ?? ''} ${v.size}칸 — 광부들이 다 캘게요`);
+    tutorialDone(4);
+  }
+}
+function breakCell(gx, gy, from) {
+  const t = W.g[gy][gx];
+  W.g[gy][gx] = '.';
+  // 세로로 들어간 칸(위·아래에서, 또는 지상에서 0줄)엔 사다리
+  if (from === 'S' || (from != null && cxy(from)[0] === gx)) {
+    W.ladder[gy][gx] = true;
+    if (from !== 'S') { const [fx, fy] = cxy(from); W.ladder[fy][fx] = true; }
+  }
+  const x0 = GX + gx * T, y0 = GY + gy * T;
+  sfx('break', true);
+  const cols = DEBRIS[t] ?? DEBRIS.d;
+  for (let i = 0; i < 8; i++)
+    particle(dustA, { x: x0 + Math.random() * T, y: y0 + Math.random() * T, vx: (Math.random() - 0.5) * 70, vy: -20 - Math.random() * 60, life: 0.6 + Math.random() * 0.4, color: cols[i % cols.length], solid: true, fade: false, size: Math.random() < 0.4 ? 1 : 0.5 });
+  if (ORE_KEYS.has(t)) {
+    fx(t === 'c' ? 'fx_vein_glow' : 'fx_vein', x0 + 8, y0 + 8);
+    const p = piles.find((q) => q.gx === gx && q.gy === gy && q.type === t);
+    if (p) p.n++; else piles.push({ gx, gy, type: t, n: 1 });
+  } else fx(t === 'd' ? 'fx_dirt' : 'fx_rock', x0 + 8, y0 + 8);
+  if (t === 'R') {                                          // 유물 상자: 금화 + 도감
+    const gold = Math.round(B.relicGold[0] + Math.random() * (B.relicGold[1] - B.relicGold[0]));
+    S.round.stats.relics++; S.round.stats.relicGold += gold; S.stats.relics.push({ day: S.day, gold });
+    const [sx, sy] = toScreen(x0 + 8, y0 + 4);
+    flyNumber('coin', sx, sy, gold, () => { S.gold += gold; refreshUI(); bumpCounter('coin'); });
+    toast(`유물 상자! 금화 ${gold}`, 'halabeoji'); sfx('bell');
+  }
+  onCellBroken?.(gx, gy, t);
+  refreshAround(gx, gy, 1); drawEdges(); drawSolid(); drawProps();
+  claimVeinsNear(gx, gy);
+  syncRound();
+}
+let onCellBroken = null;                                    // 6단계 사건(지하수·가스·몬스터)이 여기 붙는다
+
+// ---- 갱도 그리기 (손가락 연속 드래그, 상하좌우만)
+const drawing = { on: false, path: [], from: null, g: new Graphics(), label: null };
+markU.addChild(drawing.g);
+const cellAtWorld = (wx, wy) => [Math.floor((wx - GX) / T), Math.floor((wy - GY) / T)];
+const inGrid = (gx, gy) => !!W && gx >= 0 && gx < GW && gy >= 0 && gy < W.rows;
+const adjDug = (gx, gy) => isDug(gx - 1, gy) || isDug(gx + 1, gy) || isDug(gx, gy - 1) || isDug(gx, gy + 1);
+/** 그리기 시작점: 지상에 닿은 0줄 · 뚫린 칸 · 뚫린 칸과 맞닿은 칸 */
+const validStart = (gx, gy) => inGrid(gx, gy) && (gy === 0 || isDug(gx, gy) || adjDug(gx, gy));
+function drawPush(gx, gy) {
+  const p = drawing.path, last = p[p.length - 1];
+  if (!inGrid(gx, gy)) return;
+  if (last && last[0] === gx && last[1] === gy) return;
+  const prev = p[p.length - 2];
+  if (prev && prev[0] === gx && prev[1] === gy) { p.pop(); return; }   // 되돌아가면 지움
+  if (last && Math.abs(last[0] - gx) + Math.abs(last[1] - gy) > 1) {   // 빨리 그어 건너뛴 칸은 ㄱ자로 채움
+    let [x, y] = last;
+    while (x !== gx) { x += Math.sign(gx - x); drawPush(x, y); }
+    while (y !== gy) { y += Math.sign(gy - y); drawPush(x, y); }
+    return;
+  }
+  if (p.some(([x, y]) => x === gx && y === gy)) return;
+  p.push([gx, gy]);
+}
+function drawPreview() {
+  const g = drawing.g; g.clear();
+  if (!drawing.on || !drawing.path.length) { if (drawing.label) drawing.label.visible = false; return; }
+  const p = drawing.path;
+  let total = 0, cut = false;
+  const under = new Set(crew.filter((a) => typeof a.node === 'number').map((a) => { const [x, y] = cxy(a.node); return `${x},${y + 1}`; }));
+  const blink = Math.floor(time * 6) % 2 === 0;
+  p.forEach(([gx, gy], i) => {
+    const x = cellX(gx), y = GY + gy * T + 8;
+    const t = W.g[gy][gx];
+    const shown = revealed(gx, gy) ? t : 'd';
+    if (i > 0) { const [px, py] = p[i - 1]; g.moveTo(cellX(px), GY + py * T + 8).lineTo(x, y); }
+    if (t !== '.' && !cut) { if (revealed(gx, gy) && !canDig(t)) cut = true; else total += digSeconds(shown); }
+  });
+  g.stroke({ width: 3, color: 0xe8702e, alpha: 0.55, cap: 'round', join: 'round' });
+  p.forEach(([gx, gy]) => {
+    const x = GX + gx * T, y = GY + gy * T;
+    const warn = under.has(`${gx},${gy}`);
+    if (warn && blink) g.rect(x + 1, y + 1, T - 2, T - 2).stroke({ width: 1, color: 0xff3a3a });
+    else if (!isDug(gx, gy)) g.rect(x + 5, y + 5, 6, 6).fill({ color: 0xf5cf6a, alpha: 0.5 });
+  });
+  if (!drawing.label) { drawing.label = label('', { small: true, color: COLOR.paper }); worldUI.addChild(drawing.label); }
+  const [lx, ly] = p[p.length - 1];
+  const [sx, sy] = toScreen(cellX(lx), GY + ly * T);
+  drawing.label.text = `${total.toFixed(1)}초`; drawing.label.visible = true;
+  drawing.label.scale.set(L.uiS); drawing.label.position.set(Math.round(sx + 8 * L.uiS), Math.round(sy - 14 * L.uiS));
+}
+function commitPath() {
+  const p = drawing.path;
+  drawing.on = false; drawPreview();
+  if (!p.length) return;
+  const queued = new Set(S.round.jobs.map((j) => `${j.x},${j.y}`));
+  let from = isDug(p[0][0], p[0][1]) ? idx(p[0][0], p[0][1]) : null, added = 0;
+  for (let i = 0; i < p.length; i++) {
+    const [gx, gy] = p[i];
+    if (isDug(gx, gy)) { from = idx(gx, gy); continue; }
+    const t = W.g[gy][gx];
+    if (!canDig(t)) { markX(gx, gy); sfx('clink', true); toast(t === 'a' ? '고대석은 곡괭이 3등급부터예요' : '단단한 바위는 곡괭이 2등급부터예요'); break; }   // 못 뚫는 칸에서 끊고 나머지 취소
+    if (!queued.has(`${gx},${gy}`)) { S.round.jobs.push({ x: gx, y: gy, from: from ?? (gy === 0 ? 'S' : null) }); added++; }
+    from = idx(gx, gy);
+  }
+  if (added) { sfx('stash', true); tutorialDone(3); }
+  syncRound();
+}
+
+// ---- 광부 행동: 붉은 수염 = 선두 채굴 / 뚱보·금발 = 운반
+function moveAlong(a, dt) {
+  if (!a.path?.length) return true;
+  const n = a.path[0];
+  let tx, ty, final;
+  if (n === 'S') {                                         // 0줄 칸 → 지상: 위로 올라감
+    tx = typeof a.node === 'number' ? cellX(cxy(a.node)[0]) : a.x; ty = SURFACE_Y + 0.5; final = true;
+  } else {
+    const [gx, gy] = cxy(n);
+    tx = cellX(gx);
+    if (nodeOf(a) === 'S' && Math.abs(a.x - tx) > 0.5) { ty = SURFACE_Y + 0.5; final = false; }   // 지상에서 그 열까지 먼저 걷고
+    else { ty = floorY(gy); final = true; }
+  }
+  const vertical = Math.abs(tx - a.x) < 0.5;
+  let sp = (vertical ? B.climbSpeed : (a.carrying ? B.carrySpeed : B.walkSpeed)) * T;
+  if (typeof a.node === 'number' && waterAt(...cxy(a.node))) sp *= B.waterSlow;
+  const dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy), stepLen = sp * dt;
+  if (Math.abs(dx) > 0.5) a.face = Math.sign(dx);
+  if (d <= stepLen) { a.x = tx; a.y = ty; if (final) { a.node = n; a.path.shift(); } }
+  else { a.x += dx / d * stepLen; a.y += dy / d * stepLen; }
+  setAnim(a, `${a.id}_walk`);
+  return !a.path.length;
+}
+/** 서 있을 자리: target 칸에 맞닿은 뚫린 칸(0줄이면 지상도) */
+function standGoal(gx, gy) {
+  return (n) => {
+    if (n === 'S') return gy === 0;
+    const [x, y] = cxy(n);
+    return Math.abs(x - gx) + Math.abs(y - gy) === 1 && supported(x, y);
+  };
+}
+function updateDigger(a, dt) {
+  const rd = S.round;
+  if (a.busy) return;
+  if (a.job) {
+    const { x, y } = a.job;
+    if (W.g[y][x] === '.') { a.job = null; return; }
+    if (a.path?.length) { moveAlong(a, dt); return; }
+    // 도착: 곡괭이질 (0줄은 지상에서 그 열까지 걸어가서)
+    if (!standGoal(x, y)(nodeOf(a))) { a.job = null; return; }
+    if (nodeOf(a) === 'S' && Math.abs(a.x - cellX(x)) > 0.5) { const d = cellX(x) - a.x; a.face = Math.sign(d); a.x += Math.sign(d) * Math.min(Math.abs(d), B.walkSpeed * T * dt); setAnim(a, 'red_walk'); a.state = 'walk'; return; }
+    if (S.round.gasUntil > time) { setAnim(a, 'red_idle'); a.state = 'cough'; return; }
+    a.state = 'dig';
+    const sx = typeof a.node === 'number' ? cxy(a.node)[0] : x;
+    a.face = x > sx ? 1 : x < sx ? -1 : a.face;
+    setAnim(a, 'red_swing');
+    a.digT = (a.digT ?? 0) + dt;
+    if (a.p.i === 2 && a.lastFrame !== 2) {                // 내리치는 프레임: 스파크 · 파편
+      const t = W.g[y][x];
+      fx('fx_hit', cellX(x) - a.face * 6, GY + y * T + 8);
+      for (let i = 0; i < 3; i++) particle(dustA, { x: cellX(x) - a.face * 6, y: GY + y * T + 8, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.5, color: (DEBRIS[t] ?? DEBRIS.d)[i % 2], solid: true, fade: false, size: 0.5 });
+      sfx('hit', true);
+    }
+    a.lastFrame = a.p.i;
+    const need = digSeconds(W.g[y][x]);
+    if (a.digT >= need) {
+      a.digT = 0;
+      rd.jobs = rd.jobs.filter((j) => !(j.x === x && j.y === y));
+      breakCell(x, y, nodeOf(a));
+      a.job = null;
+    }
+    return;
+  }
+  // 다음 일: 순서대로, 갈 수 있는 첫 칸
+  for (const j of rd.jobs) {
+    if (W.g[j.y][j.x] === '.') continue;
+    if (!canDig(W.g[j.y][j.x])) continue;
+    const path = findPath(nodeOf(a), standGoal(j.x, j.y));
+    if (path) { a.job = j; a.path = path; a.digT = 0; a.state = 'walk'; return; }
+  }
+  rd.jobs = rd.jobs.filter((j) => W.g[j.y][j.x] !== '.');
+  a.state = 'idle'; setAnim(a, 'red_idle');
+}
+/** 운반 광부: 광석 더미 → (4단계부터 광차, 지금은) 지상 창고 */
+function carryTarget() { return 'S'; }
+function updateCarrier(a, dt) {
+  if (a.busy) return;
+  if (a.path?.length) { a.state = a.carrying ? 'carry' : 'walk'; moveAlong(a, dt); return; }
+  if (a.carrying) {                                         // 도착: 내려놓기
+    if (nodeOf(a) === carryTarget()) {
+      if (Math.abs(a.x - SHED_X) > 1) { const d = SHED_X - a.x; a.face = Math.sign(d); a.x += Math.sign(d) * Math.min(Math.abs(d), B.carrySpeed * T * dt); setAnim(a, `${a.id}_walk`); a.state = 'carry'; return; }
+      deliver(a.carrying.type, a.carrying.n, a.x, a.y - 16);
+      a.carrying = null; return;
+    }
+    const path = findPath(nodeOf(a), (n) => n === carryTarget());
+    if (path) a.path = path; else { a.state = 'idle'; setAnim(a, `${a.id}_idle`); }
+    return;
+  }
+  // 줍기: 가장 가까운 더미
+  if (a.pickT > 0) { a.pickT -= dt; setAnim(a, `${a.id}_idle`); a.state = 'carry'; return; }
+  const here = typeof a.node === 'number' ? cxy(a.node) : null;
+  const pile = here && piles.find((p) => p.gx === here[0] && p.gy === here[1] && p.n > 0);
+  if (pile) {
+    const n = Math.min(B.carryPerTrip, pile.n);
+    pile.n -= n; a.carrying = { type: pile.type, n }; a.pickT = B.pickupSeconds * n;
+    piles = piles.filter((p) => p.n > 0);
+    return;
+  }
+  const want = piles.filter((p) => p.n > 0);
+  if (want.length) {
+    const path = findPath(nodeOf(a), (n) => typeof n === 'number' && want.some((p) => idx(p.gx, p.gy) === n));
+    if (path) { a.path = path; a.state = 'walk'; return; }
+  }
+  // 할 일 없으면 붉은 수염 근처(한두 칸 뒤)에서 대기
+  const red = crew[0];
+  if (typeof red.node === 'number' && nodeOf(a) !== red.node && (a.followT = (a.followT ?? 0) - dt) <= 0) {
+    a.followT = 2 + Math.random();
+    const path = findPath(nodeOf(a), (n) => n === red.node);
+    if (path && path.length > 1) { a.path = path.slice(0, -1); return; }
+  }
+  a.state = 'idle'; setAnim(a, `${a.id}_idle`);
+}
+function deliver(type, n, x, y) {
+  const room = B.warehouseCapacity - whTotal();
+  const put = Math.min(n, room);
+  if (put > 0) orePopup(type, x, y, put);
+  if (put < n) toast('창고가 꽉 찼어요! [판매] 탭에서 팔아요', 'momo');
+}
+
+// ---- 중력 (§1): 발밑이 비면 멈칫 → 가속 낙하 → 착지(먼지·엉덩방아·"으악!") · 2칸↑ 기절 · 4칸↑ 기절 + 체력 −1
+function checkFall(a) {
+  if (a.fall || typeof a.node !== 'number' || a.path?.length) return;
+  const [gx, gy] = cxy(a.node);
+  if (!isDug(gx, gy)) {                                     // 서 있던 칸이 메워짐 → 가장 가까운 뚫린 칸 위로
+    for (let y = gy - 1; y >= -1; y--) { if (y < 0) { a.node = 'S'; a.y = SURFACE_Y + 0.5; break; } if (isDug(gx, y)) { a.node = idx(gx, y); a.y = floorY(y); break; } }
+    return;
+  }
+  if (supported(gx, gy)) return;
+  let land = gy;
+  while (land + 1 < W.rows && isDug(gx, land + 1) && !ladderAt(gx, land + 1)) land++;
+  if (land + 1 < W.rows && isDug(gx, land + 1) && ladderAt(gx, land + 1)) land++;
+  a.fall = { from: gy, to: land, pause: B.fallPause, v: 0 };
+  a.path = []; if (a.job) a.job = null;
+  a.state = 'fall';
+}
+function updateFall(a, dt) {
+  const f = a.fall;
+  if (f.pause > 0) { f.pause -= dt; return; }
+  f.v = Math.min(B.fallMax * T, f.v + B.fallAccel * T * dt);
+  a.y += f.v * dt;
+  const target = floorY(f.to);
+  if (a.y >= target) {
+    a.y = target; a.node = idx(cxy(a.node)[0], f.to);
+    const h = f.to - f.from;
+    a.fall = null;
+    fx('fx_dirt', a.x, a.y - 4); sfx('break', true);
+    emote(a, '으악!', 1.2);
+    shake = Math.max(shake, 0.12); shakeAmp = Math.max(shakeAmp, 1);
+    if (a.carrying) { const p = piles.find((q) => q.gx === cxy(a.node)[0] && q.gy === f.to && q.type === a.carrying.type); if (p) p.n += a.carrying.n; else piles.push({ gx: cxy(a.node)[0], gy: f.to, type: a.carrying.type, n: a.carrying.n }); a.carrying = null; }
+    let stun = B.landSeconds;
+    if (h >= B.hurtAt) { stun = B.hurtStunSeconds; hurt(a); }
+    else if (h >= B.stunAt) stun = B.stunSeconds;
+    a.busy = { t: stun, kind: h >= B.stunAt ? 'stun' : 'land', climbFrom: f.from, climbTo: f.to };
+    a.state = a.busy.kind;
+  }
+}
+function hurt(a, n = 1) {
+  if (!a.hp) return;
+  a.hp = Math.max(0, a.hp - n);
+  emote(a, a.hp ? `아야! ♥${a.hp}` : '쓰러졌어요…', 1.4);
+  if (!a.hp) a.restAt = time + 1.5;
+}
+const stars = [];
+function updateBusy(a, dt) {
+  a.busy.t -= dt;
+  setAnim(a, `${a.id}_idle`);
+  a.squash = a.busy.kind === 'land' || a.busy.kind === 'stun' ? 0.86 : 1;
+  if (a.busy.kind === 'stun' && Math.random() < dt * 6) {    // 머리 위 ★ 뱅글
+    const s = new Sprite(tex('star')); s.anchor.set(0.5); s.scale.set(0.5); markU.addChild(s);
+    stars.push({ s, a, t: 0.6, ang: Math.random() * 6.28 });
+  }
+  if (a.busy.t <= 0) {
+    // 막다른 구덩이면 떨어진 길에 사다리를 놓고 올라온다 (영영 갇히지 않게)
+    const { climbFrom, climbTo } = a.busy;
+    if (climbTo != null && typeof a.node === 'number' && !findPath(a.node, (n) => n === 'S')) {
+      const gx = cxy(a.node)[0];
+      for (let y = climbFrom; y <= climbTo; y++) if (isDug(gx, y)) W.ladder[y][gx] = true;
+      if (climbFrom > 0 && isDug(gx, climbFrom - 1)) W.ladder[climbFrom - 1][gx] = true;
+      drawProps(); emote(a, '사다리!', 1); syncRound();
+    }
+    a.busy = null; a.squash = 1; a.state = 'idle';
+  }
+}
+function updateStars(dt) {
+  for (let k = stars.length - 1; k >= 0; k--) {
+    const st = stars[k]; st.t -= dt; st.ang += dt * 8;
+    st.s.position.set(st.a.x + Math.cos(st.ang) * 6, st.a.y - 21 + Math.sin(st.ang) * 2);
+    if (st.t <= 0) { st.s.destroy(); stars.splice(k, 1); }
+  }
+}
+function updateCrew(dt) {
+  for (const a of crew) {
+    if (a.restAt && time >= a.restAt) {                    // 체력 0 → 지상에서 10초 쉼
+      a.restAt = null; a.node = 'S'; a.x = 100 + crew.indexOf(a) * 12; a.y = SURFACE_Y + 0.5; a.path = []; a.job = null; a.carrying = null; a.fall = null;
+      a.busy = { t: B.restSeconds, kind: 'rest' }; a.state = 'rest';
+    }
+    if (a.busy?.kind === 'rest') { a.busy.t -= dt; setAnim(a, `${a.id}_idle`); if (a.busy.t <= 0) { a.busy = null; a.hp = B.minerHp; a.state = 'idle'; } continue; }
+    if (a.fall) { updateFall(a, dt); continue; }
+    if (a.busy) { updateBusy(a, dt); continue; }
+    if (state() !== 'DIG') { setAnim(a, `${a.id}_idle`); a.state = 'idle'; continue; }
+    checkFall(a);
+    if (a.fall) continue;
+    if (a.id === 'red') updateDigger(a, dt); else updateCarrier(a, dt);
+  }
+  // 운반 중 광석 아이콘 (머리 위)
+  for (const a of crew) {
+    a.oreIcon ??= (() => { const s = new Sprite(); s.anchor.set(0.5, 1); s.scale.set(0.5); lampsU.addChild(s); return s; })();
+    a.oreIcon.visible = !!a.carrying;
+    if (a.carrying) { a.oreIcon.texture = tex(ICON[a.carrying.type]); a.oreIcon.position.set(a.x, a.y - 20); }
+  }
+  // 광맥 테두리 금색 깜빡 (캐는 중인 덩어리)
+  overA.clear();
+  if (W && S.round?.claimed?.length && Math.floor(time * 3) % 2 === 0) {
+    for (const id of S.round.claimed) for (const [x, y] of W.veins.list[id].cells) {
+      if (!ORE_KEYS.has(W.g[y][x])) continue;
+      overA.rect(GX + x * T, GY + y * T, T, T).stroke({ width: 1, color: 0xf5cf6a, alpha: 0.9 });
+    }
+  }
+  // 흩어진 광석 조각
+  pileSprites.forEach((s) => (s.visible = false));
+  piles.forEach((p, i) => {
+    const s = pileSprites[i] ?? (pileSprites[i] = (() => { const q = new Sprite(tex('ore_bits')); q.anchor.set(0.5, 1); charsA.addChildAt(q, 0); return q; })());
+    s.visible = true; s.position.set(cellX(p.gx) + ((i * 5) % 7) - 3, floorY(p.gy));
+  });
+  for (let k = marks.length - 1; k >= 0; k--) { marks[k].t -= dt; marks[k].s.alpha = Math.floor(marks[k].t * 10) % 2 ? 1 : 0.4; if (marks[k].t <= 0) { marks[k].s.destroy(); marks.splice(k, 1); } }
+  updateStars(dt);
+}
+const pileSprites = [];
+
+// ---------------------------------------------------------------- 튜토리얼 훅 (7단계에서 채움)
+function tutorialDone(stepN) { tutorialHook?.(stepN); }
+let tutorialHook = null;
+
 // ================================================================ 입력
-// 경매·결과 카드와 패널은 UI가 받는다. 탐사 중 투시 랜턴 → 톡한 곳 3×3. 랜턴 끌기. 빈 곳 끌기 = 둘러보기
+// 경매·결과 카드와 패널은 UI가 받는다. 탐사 중 투시 랜턴 → 톡한 곳 3×3. 랜턴 끌기.
+// 시추 중: 0줄·뚫린 칸·뚫린 칸 옆에서 시작한 드래그 = 갱도 그리기, 그 밖 드래그 = 둘러보기
 let drag = null;
 app.canvas.addEventListener('pointerdown', (e) => {
   unlockAudio();
   if (inPanels(e.clientX, e.clientY)) return;
   const [wx, wy] = toWorld(e.clientX, e.clientY);
   if (state() === 'SURVEY' && xrayArmed) { xrayAt(wx, wy); return; }
-  const mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
+  let mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
+  const [gx, gy] = cellAtWorld(wx, wy);
+  if (mode === 'maybe' && state() === 'DIG' && validStart(gx, gy)) { mode = 'draw'; drawing.on = true; drawing.path = []; drawPush(gx, gy); }
   drag = { id: e.pointerId, mode, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY };
 });
 app.canvas.addEventListener('pointermove', (e) => {
@@ -1087,14 +1506,19 @@ app.canvas.addEventListener('pointermove', (e) => {
   drag.lx = e.clientX; drag.ly = e.clientY;
   if (drag.mode === 'maybe' && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 8) drag.mode = 'pan';
   if (drag.mode === 'pan') { cam.panX -= dx; cam.panY -= dy; clampPan(); }
+  if (drag.mode === 'draw') { const [wx, wy] = toWorld(e.clientX, e.clientY); drawPush(...cellAtWorld(wx, wy)); }
   if (drag.mode === 'lantern') {
     lantern.x = Math.max(GX + 4, Math.min(WW - GX - 4, lantern.x + dx));
     lantern.y = Math.max(SURFACE_Y - 30, Math.min(WH - 16, lantern.y + dy));
     lantern.vel -= dx * 0.05;
   }
 });
-window.addEventListener('pointerup', (e) => { if (drag && e.pointerId === drag.id) drag = null; });
-window.addEventListener('pointercancel', () => { drag = null; });
+window.addEventListener('pointerup', (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (drag.mode === 'draw') commitPath();
+  drag = null;
+});
+window.addEventListener('pointercancel', () => { drag = null; drawing.on = false; drawPreview(); });
 
 // ================================================================ 매 프레임
 let fpsT = 0, fpsN = 0, shotWaiter = null;
@@ -1102,10 +1526,6 @@ const lights = [];
 function addLight(x, y, z, r, color, power) { if (lights.length < MAX_LIGHTS) lights.push([x, y, z, r, color, power]); }
 const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23 + seed * 2) + 0.15 * Math.sin(t * 41 + seed * 3);
 
-function updateCrewIdle(dt) {
-  // 2단계: 광부들은 지상에서 대기 (3단계에서 채굴 루프)
-  for (const a of crew) { setAnim(a, `${a.id}_idle`); }
-}
 
 app.ticker.add((tk) => {
   const real = Math.min(tk.deltaMS / 1000, 0.05);
@@ -1128,7 +1548,8 @@ app.ticker.add((tk) => {
   if (st === 'AUCTION') updateAuction(real);
   if (st === 'SURVEY') updateSurvey(dt);
   updateMole(dt);
-  updateCrewIdle(dt);
+  updateCrew(dt);
+  drawPreview();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
 
   // 랜턴: 진자 흔들림
@@ -1228,10 +1649,14 @@ app.ticker.add((tk) => {
 buildWorld();
 layout();
 if (!S.round) startAuction();
-else { buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft); }
+else {
+  piles = S.round.piles ?? []; S.round.jobs ??= []; S.round.claimed ??= [];
+  buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
+}
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
+  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
