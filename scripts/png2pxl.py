@@ -2,6 +2,9 @@
 """GPT가 그린 확대 픽셀아트(마젠타 배경) → pxl 그리드 문자열.
 
 사용: python3 scripts/png2pxl.py art/raw/miner_red_chibi.png --cols 32 --rows 40 --pal art/chars.px.js --name _miner_base
+ 정리 옵션(Code 추가, 기본 꺼짐):
+   --samples 3   칸 가운데 60% 안에서 3×3점 다수결(GPT 격자가 칸 수와 딱 안 맞을 때 얼룩 줄임)
+   --clean       ① 가장자리에서 이어지는 마젠타 번짐(보라·분홍 테두리)까지 투명 ② 실루엣 바깥 1px를 잉크(k)로 재추적
  - 셀 중심 샘플링으로 원본 격자를 복원(최근접 축소)
  - 마젠타(#FF00FF 근처) → 투명 '.'
  - 나머지 색은 pal() 목록에서 가장 가까운 키로 양자화 (Lab 거리)
@@ -34,6 +37,8 @@ def main():
     ap.add_argument("png"); ap.add_argument("--cols", type=int, required=True); ap.add_argument("--rows", type=int, required=True)
     ap.add_argument("--pal", required=True); ap.add_argument("--name", default="_sprite")
     ap.add_argument("--crop", help="x,y,w,h 원본에서 잘라낼 영역(픽셀)")
+    ap.add_argument("--samples", type=int, default=0, help="칸마다 N×N점 다수결 (0 = 가운데+4점)")
+    ap.add_argument("--clean", action="store_true", help="마젠타 번짐 제거 + 외곽선 잉크 재추적")
     a = ap.parse_args()
     im = Image.open(a.png).convert("RGB")
     if a.crop:
@@ -48,6 +53,9 @@ def main():
         L = to_lab(rgb)
         best = min(lab, key=lambda k: sum((p - q) ** 2 for p, q in zip(L, lab[k])))
         cache[rgb] = best; return best
+    def fringe(rgb):
+        r, g, b = rgb
+        return r > 150 and b > 150 and r - g > 55 and b - g > 55 and abs(r - b) < 90   # 마젠타 쪽으로 기운 밝은 색(번짐). 모모 보라처럼 어두운 보라는 아님
     rows = []
     for j in range(a.rows):
         row = ""
@@ -55,11 +63,45 @@ def main():
             # 셀 중심 + 주변 4점 다수결(확대 그림의 경계 흔들림 방지)
             cx, cy = int((i + 0.5) * cw), int((j + 0.5) * ch)
             votes = {}
-            for dx, dy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
-                k = key(im.getpixel((min(max(cx + dx, 0), im.width - 1), min(max(cy + dy, 0), im.height - 1))))
+            if a.samples:
+                pts = [(int((i + 0.2 + 0.6 * (u + 0.5) / a.samples) * cw) - cx, int((j + 0.2 + 0.6 * (v + 0.5) / a.samples) * ch) - cy)
+                       for u in range(a.samples) for v in range(a.samples)]
+            else:
+                pts = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
+            for dx, dy in pts:
+                rgb = im.getpixel((min(max(cx + dx, 0), im.width - 1), min(max(cy + dy, 0), im.height - 1)))
+                k = "~" if a.clean and fringe(rgb) and key(rgb) != "." else key(rgb)
                 votes[k] = votes.get(k, 0) + 1
+            if "~" in votes and max(votes, key=votes.get) == "~":
+                # 번짐 후보: 진짜 색이 하나라도 많으면 그 색, 아니면 일단 '~'(아래에서 가장자리와 이어지면 투명)
+                pass
             row += max(votes, key=votes.get)
         rows.append(row)
+    if a.clean:
+        g = [list(r) for r in rows]
+        H, W = len(g), len(g[0])
+        # ① 가장자리 투명칸에서 '~'를 타고 번진 곳 → 투명. 갇힌 '~'는 가까운 색으로
+        stack = [(x, y) for y in range(H) for x in range(W) if g[y][x] == "." and (x in (0, W - 1) or y in (0, H - 1))]
+        seen = set(stack)
+        while stack:
+            x, y = stack.pop()
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < W and 0 <= ny < H and (nx, ny) not in seen and g[ny][nx] in ".~":
+                    seen.add((nx, ny)); g[ny][nx] = "."; stack.append((nx, ny))
+        for y in range(H):
+            for x in range(W):
+                if g[y][x] == "~":
+                    near = [g[y + dy][x + dx] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)) if 0 <= x + dx < W and 0 <= y + dy < H and g[y + dy][x + dx] not in ".~"]
+                    g[y][x] = max(set(near), key=near.count) if near else "."
+        # 외톨이 점 지우기
+        for y in range(H):
+            for x in range(W):
+                if g[y][x] != "." and sum(1 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)) if 0 <= x + dx < W and 0 <= y + dy < H and g[y + dy][x + dx] != ".") <= 1:
+                    g[y][x] = "."
+        # ② 실루엣 가장자리 1px = 잉크
+        edge = [(x, y) for y in range(H) for x in range(W) if g[y][x] != "." and any(not (0 <= x + dx < W and 0 <= y + dy < H) or g[y + dy][x + dx] == "." for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+        for x, y in edge: g[y][x] = "k"
+        rows = ["".join(r) for r in g]
     print(f'sprite("{a.name}", `')
     for r in rows: print("  " + r)
     print("`)")

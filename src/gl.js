@@ -26,7 +26,8 @@ uniform sampler2D uAlbedo;
 uniform sampler2D uNormal;
 uniform sampler2D uSolid;
 uniform vec2 uView;
-uniform vec2 uCam;
+uniform vec2 uCam;      // 화면 왼쪽 위의 월드 좌표 (타일 단위 px)
+uniform float uDens;    // 화면 픽셀 / 월드 px (캐릭터 밀도 2 = 타일 1px이 화면 2px)
 uniform vec2 uWorld;
 uniform vec3 uAmbient;
 uniform vec4 uLightPos[${MAX_LIGHTS}];
@@ -41,7 +42,7 @@ void main() {
   vec4 nrm = texture(uNormal, vUV);
   if (nrm.a < 0.5) { finalColor = alb; return; }
   vec3 N = normalize(nrm.rgb / nrm.a * 2.0 - 1.0);
-  vec2 wp = uCam + floor(vUV * uView) + 0.5;
+  vec2 wp = uCam + (floor(vUV * uView) + 0.5) / uDens;
   vec3 light = uAmbient;
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (float(i) >= uCount) break;
@@ -122,6 +123,7 @@ export function makeLightPass(albedo, normal, solid) {
     u: {
       uView: { value: [1, 1], type: 'vec2<f32>' },
       uCam: { value: [0, 0], type: 'vec2<f32>' },
+      uDens: { value: 2, type: 'f32' },
       uWorld: { value: [1, 1], type: 'vec2<f32>' },
       uAmbient: { value: [0.3, 0.3, 0.3], type: 'vec3<f32>' },
       uLightPos: { value: new Float32Array(MAX_LIGHTS * 4), type: 'vec4<f32>', size: MAX_LIGHTS },
