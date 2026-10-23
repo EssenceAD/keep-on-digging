@@ -29,11 +29,11 @@ export const B = {
   // ---------------------------------------------------------------- 격자 생성 (§5-1)
   oreMix: { C: 50, s: 30, g: 15, j: 4, c: 1 },   // 구리·은·금·보석·발광 비율 (뒷산)
   depthWeight: 1.5,                 // 깊을수록 귀한 광종 가중 (맨 아래 줄에서 ×1.5)
-  veinsPerRow: 0.32,                // 줄당 광맥 덩어리 수 (L 16줄 ≈ 5개)
+  veinsPerRow: 0.4,                 // 줄당 광맥 덩어리 수 (L 16줄 ≈ 6개)
   veinSize: [3, 20],
   bigVeinChance: 0.55,              // 구획마다 큰 광맥(≥ bigVein칸) 하나가 있을 확률
-  rockShare: 0.18,                  // 바탕 바위 비율 (힌트 🪨면 rockHint)
-  rockHint: 0.40,
+  rockShare: 0.28,                  // 바탕 바위 비율 (힌트 🪨면 rockHint)
+  rockHint: 0.45,
   hardShare: 0.10,                  // 단단한 바위
   ancientDepth: 0.75,               // 이 깊이 아래에 고대석 띠가 섞임
   ancientShare: 0.12,

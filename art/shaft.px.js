@@ -229,3 +229,45 @@ sprite("bubble_rest", BUBBLE, grid(3, 1, `
   ..b.
   .b..
   bbb.`))
+
+// ================================================================ 명세2 (핵심 루프) 추가 — Code
+// 칸: 고대석 · 지하수 주머니 · 가스 주머니 · 유물 상자 · 동굴(빈 공간)
+sprite("ancient", { w: T, h: T },
+  rect(0, 0, T, T, "O"), box(0, 0, T, T, "k"), hline(1, 1, 14, "o"), vline(1, 1, 14, "o"),
+  box(3, 3, 10, 10, "k"), hline(4, 4, 8, "s"), vline(4, 4, 8, "s"),
+  vline(8, 5, 6, "k"), line(6, 6, 8, 8, "k"), line(10, 6, 8, 8, "k"), px(8, 11, "a"), px(8, 4, "A"),
+  bump("bevel", { w: 2, depth: 1.2 }))
+sprite("pocket_water", { w: T, h: T },
+  stamp("rock", 0, 0), ellipse(8, 9, 5, 4, "k"), ellipse(8, 9, 4, 3, "b"), hline(5, 7, 5, "x"), px(10, 10, "x"), px(6, 11, "x"))
+sprite("pocket_gas", { w: T, h: T },
+  stamp("rock", 0, 0), ellipse(8, 9, 5, 4, "k"), ellipse(8, 9, 4, 3, "F"), circ(6, 8, 1, "f"), circ(10, 10, 1, "f"), px(9, 7, "y"))
+sprite("relic_chest", { w: T, h: T },
+  stamp("dirt_2", 0, 0), rect(3, 6, 10, 7, "k"), rect(4, 7, 8, 5, "w"), hline(4, 7, 8, "u"), hline(4, 9, 8, "A"),
+  rect(7, 8, 2, 3, "a"), px(7, 8, "l"), hline(3, 13, 10, "D"))
+sprite("cave", { w: T, h: T },
+  rect(0, 0, T, T, "O"), ellipse(8, 9, 7, 6, "k"), poly([3, 3, 5, 3, 4, 7], "o"), poly([10, 3, 13, 3, 12, 6], "o"), hline(2, 15, 12, "o"))
+// 갱도 소품: 사다리(세로로 판 칸) · 못 뚫는 칸 빨간 X · 흩어진 광석 조각 · 기절 별
+sprite("ladder", { w: T, h: T },
+  vline(3, 0, T, "W"), vline(12, 0, T, "W"), vline(4, 0, T, "u"), vline(13, 0, T, "u"),
+  ...[2, 7, 12].flatMap((y) => [hline(3, y, 11, "w"), hline(3, y + 1, 11, "W")]))
+sprite("mark_x", { outline: "k" }, `
+  rr.....rr
+  .rr...rr.
+  ..rr.rr..
+  ...rrr...
+  ..rr.rr..
+  .rr...rr.
+  rr.....rr`)
+sprite("ore_bits", `
+  ...a.
+  .aal.
+  aAaaA`)
+sprite("star", ".l.\nlLl\n.l.")
+// 갱도 몬스터(이번 단계: 길만 막음) — 동굴 슬라임 2f
+anim("slime", { outline: "k", fps: 4 }, `
+  ...ffff...
+  ..fvvvvf..
+  .fvvkvkvf.
+  .fvvvvvvf.
+  ffffffffff`,
+  frame(), frame(grid(0, 0, "..........\n...ffff...\n..fvvvvf..\n.fvvkvkvf.\nffffffffff")))

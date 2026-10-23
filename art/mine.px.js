@@ -144,3 +144,31 @@ sprite("icon_gem", { outline: "k" }, `
   RrxrrR
   .RrrR.
   ..RR..`)
+
+pal({ b: "#3d5a9a", B: "#5a7ac0" })
+// 경매 카드 힌트 아이콘 (🪨 바위층 · 💧 지하수 · 🏺 유물 · ✨ 발광)
+sprite("hint_rock", { outline: "k" }, `
+  ..sSs..
+  .sSSSi.
+  sSSiSSi
+  SSSSSSi
+  .SSSSS.`)
+sprite("hint_water", { outline: "k" }, `
+  ...b...
+  ..bBb..
+  .bBxBb.
+  bBBBBBb
+  .bBBBb.
+  ..bbb..`)
+sprite("hint_relic", { outline: "k" }, `
+  .WWWWW.
+  WwwawwW
+  WAAlAAW
+  WwwwwwW
+  WWWWWWW`)
+sprite("hint_glow", { outline: "k" }, `
+  ...z...
+  ..GgG..
+  zGgzgGz
+  ..GgG..
+  ...z...`)
