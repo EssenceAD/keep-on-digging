@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0b0910" />
+  <title>용사님, 채굴하실게요~ · 비주얼 프로토타입</title>
+  <script type="module" crossorigin src="./assets/index-B5gTvukj.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/Geometry-BQVFlLoT.js">
+  <link rel="modulepreload" crossorigin href="./assets/State-NyIHBxNI.js">
+  <link rel="modulepreload" crossorigin href="./assets/canvasUtils-BJLFdxRr.js">
+  <link rel="modulepreload" crossorigin href="./assets/Cache-DQgWyLfi.js">
+  <link rel="modulepreload" crossorigin href="./assets/init-C6xaCQsY.js">
+  <link rel="modulepreload" crossorigin href="./assets/GCManagedHash-CNkLxtjG.js">
+  <link rel="modulepreload" crossorigin href="./assets/RenderTexture-BIdNHYWM.js">
+  <link rel="modulepreload" crossorigin href="./assets/getTextureBatchBindGroup-B9gCsZdA.js">
+  <link rel="modulepreload" crossorigin href="./assets/GraphicsContext-L_CaxJck.js">
+  <link rel="modulepreload" crossorigin href="./assets/localUniformBit-BOGrcT1E.js">
+  <link rel="modulepreload" crossorigin href="./assets/Graphics--GQ1KSca.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-hTkkA8ca.css">
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="loading">갱도 불 켜는 중…</div>
+
+  <div class="hud tl glass">
+    <b>돌망치 상회</b> · 뒷산 1구획
+    <small>HD-2D 비주얼 프로토타입 v0.1</small>
+  </div>
+  <div class="hud tr">
+    <div class="glass stat"><i class="ic ic-g"></i><span id="cnt-g">0</span></div>
+    <div class="glass stat"><i class="ic ic-c"></i><span id="cnt-c">0</span></div>
+    <div class="glass stat"><i class="ic ic-ore"></i><span id="cnt-ore">0</span></div>
+  </div>
+  <div class="hud bl glass hint">칸 톡 = 곡괭이 · 랜턴 끌기 = 빛 옮기기 · 빈 곳 끌기 = 화면 이동<span id="fps"></span></div>
+  <div class="hud br">
+    <button id="btn-boom" class="glass">대박 연출</button>
+    <button id="btn-ref" class="glass">pxl 기준컷</button>
+    <button id="btn-low" class="glass">저사양 끔</button>
+    <button id="btn-sound" class="glass">소리 켬</button>
+    <button id="btn-full" class="glass">전체 화면</button>
+  </div>
+  <div id="toast" class="glass"></div>
+  <div id="ref"><figure class="glass"><img id="ref-img" alt="pxl이 구운 기준 장면" /><figcaption>pxl이 구운 기준컷 (lamp 2 + lighting ambient 0.3 + glow) · 눌러서 닫기</figcaption></figure></div>
+  <div id="rotate">폰을 가로로 돌려 주세요</div>
+</body>
+</html>
