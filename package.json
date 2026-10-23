@@ -1,0 +1,22 @@
+{
+  "name": "keep-on-digging",
+  "version": "0.1.0",
+  "description": "용사님, 채굴하실게요~ (Keep On Digging) — 비주얼 프로토타입",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "art": "node scripts/art.mjs",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "galmuri": "^2.40.3",
+    "pixi.js": "^8.22.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.5"
+  },
+  "private": true
+}

@@ -1,0 +1,106 @@
+{
+ "frames": {
+  "lantern_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "sourceSize": {
+    "w": 9,
+    "h": 11
+   },
+   "duration": 125
+  },
+  "lantern_1": {
+   "frame": {
+    "x": 9,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "sourceSize": {
+    "w": 9,
+    "h": 11
+   },
+   "duration": 125
+  },
+  "lantern_2": {
+   "frame": {
+    "x": 18,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "sourceSize": {
+    "w": 9,
+    "h": 11
+   },
+   "duration": 125
+  },
+  "lantern_3": {
+   "frame": {
+    "x": 27,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 9,
+    "h": 11
+   },
+   "sourceSize": {
+    "w": 9,
+    "h": 11
+   },
+   "duration": 125
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "lantern.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 36,
+   "h": 11
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "lantern",
+    "from": 0,
+    "to": 3,
+    "direction": "forward"
+   }
+  ]
+ }
+}
