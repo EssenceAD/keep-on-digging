@@ -39,8 +39,14 @@ body.low .glass { backdrop-filter: none; -webkit-backdrop-filter: none; backgrou
 .ic { width: 21px; height: 21px; display: inline-block; background-position: center; background-size: contain; background-repeat: no-repeat; image-rendering: pixelated; }
 .ic-g, .pop-g i { background-image: url('/art/sprites/icon_gold.png'); }
 .ic-c, .pop-c i { background-image: url('/art/sprites/icon_glow.png'); }
-.ic-ore, .pop-ore i { background-image: url('/art/sprites/cart_full.png'); width: 26px; }
+.ic-ore, .pop-ore i { background-image: url('/art/sprites/cart.png'); width: 26px; }
 
+.ml { left: max(10px, env(safe-area-inset-left)); bottom: 44px; display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; line-height: 1.5; }
+.ml img { width: 64px; height: 64px; image-rendering: pixelated; display: block; background: rgba(10, 8, 14, 0.5); border-radius: 2px; }
+.ml b { color: #e8823a; font-weight: normal; }
+.ml small { display: block; color: var(--dim); font-size: 10px; }
+.ml.pulse img { animation: knock 0.18s ease-out; }
+@keyframes knock { 0% { transform: translateY(0); } 40% { transform: translateY(2px) rotate(-2deg); } 100% { transform: none; } }
 .bl { left: max(10px, env(safe-area-inset-left)); bottom: 10px; padding: 5px 9px; color: var(--dim); font-size: 11px; }
 #fps { margin-left: 10px; color: #8f8; opacity: 0.7; }
 .br { right: max(10px, env(safe-area-inset-right)); bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60vw; }
@@ -82,12 +88,15 @@ button.on { color: #9f9; border-color: rgba(150, 255, 150, 0.6); }
 #ref { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(5, 4, 8, 0.7); }
 #ref.show { display: grid; }
 #ref figure { margin: 0; padding: 8px; text-align: center; }
-#ref img { height: min(76vh, 672px); image-rendering: pixelated; display: block; }
+#ref .refs { display: flex; gap: 8px; }
+#ref img { height: min(72vh, 576px); image-rendering: pixelated; display: block; }
 #ref figcaption { margin-top: 6px; color: var(--dim); font-size: 11px; }
 
 #rotate { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: #0b0910; color: var(--text); font-size: 16px; }
 @media (orientation: portrait) and (max-width: 700px) { #rotate { display: grid; } }
 @media (max-height: 420px) {
+  .ml { bottom: 10px; }
+  .ml img { width: 48px; height: 48px; }
   .tl small, .bl { display: none; }
   .stat { font-size: 12px; padding: 3px 8px 3px 5px; min-width: 52px; }
   button { padding: 4px 7px; font-size: 11px; }

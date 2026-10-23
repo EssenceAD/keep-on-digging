@@ -1,0 +1,106 @@
+{
+ "frames": {
+  "miner_red_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 15
+   },
+   "duration": 125
+  },
+  "miner_red_1": {
+   "frame": {
+    "x": 20,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 15
+   },
+   "duration": 125
+  },
+  "miner_red_2": {
+   "frame": {
+    "x": 40,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 15
+   },
+   "duration": 125
+  },
+  "miner_red_3": {
+   "frame": {
+    "x": 60,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 15
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 15
+   },
+   "duration": 125
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "miner_red.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 80,
+   "h": 15
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "miner_red",
+    "from": 0,
+    "to": 3,
+    "direction": "forward"
+   }
+  ]
+ }
+}

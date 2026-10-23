@@ -1,5 +1,7 @@
 // 「용사님, 채굴하실게요~」 HD-2D 비주얼 프로토타입
-// 갱도 격자 12×16 + 런타임 랜턴 조명(노멀맵) + 광부 + 광차 + 광맥 + 곡괭이 주스 + 패럴랙스 3겹 + 틸트 시프트 + 저사양 토글
+// 갱도 격자 12×16(화면 높이 = 9칸) + 런타임 랜턴 조명(노멀맵) + 광부 + 광차 + 광맥 + 곡괭이 주스
+// + 격자 양옆 2칸 패럴랙스 바위 3겹 + 틸트 시프트(격자 영역 마스크) + 저사양 토글
+// 타일·소품: 형철 초안 art/shaft.px.js
 import 'galmuri/dist/galmuri.css';
 import './style.css';
 import {
@@ -13,45 +15,49 @@ TextureSource.defaultOptions.scaleMode = 'nearest';
 
 // ---------------------------------------------------------------- 세계
 const T = 16, GW = 12, GH = 16;
-const GX = 192, GY = 48;                  // 구획(격자) 왼쪽 위
-const WW = 576, WH = GY + GH * T + 32;    // 336
+const SIDE = 2;                           // 격자 양옆 패럴랙스 바위 칸 수
+const GX = SIDE * T, GY = 48;             // 구획(격자) 왼쪽 위
+const WW = GX * 2 + GW * T;               // 256
+const WH = GY + GH * T + T;               // 320
 const COLS = WW / T, ROWS = WH / T;
-const VIEW_H = 224;
-const SHAFT_TOP_X = 236;                  // 지상 권양기 도르래 케이블
+const VIEW_ROWS = 9;                      // 화면 높이 = 9칸
+const VIEW_H = VIEW_ROWS * T;             // 144
+const SHAFT_TOP_X = 76;                   // 지상 권양기 도르래 케이블
 
-// . 갱도  T 갱도+버팀목  o 동굴  d 흙  r 바위  h 단단한 바위  a 고대석  w 지하수  g 금  c 발광 광석
+// . 갱도  T 갱도+갱목  d 흙  r 바위  h 단단한 바위  C 구리  s 은  g 금  c 발광 광석  j 보석
 const MAP = [
   'ddTddddddddd',
-  'dd.ddrddddrd',
-  'dr.ddrrddddd',
-  'rd.rddddwwdr',
-  'rr.....Tdwdr',
+  'dd.ddrddCddd',
+  'dr.ddrrdCCdd',
+  'rd.rdddddddr',
+  'rr.....TdrCr',
   'hrrrdrr.rdrh',
-  'hrhrrrd.rrhh',
-  'hhrrcrr.rrrh',
-  'hrrccc..ggrr',
-  'ahrrcrrhggrh',
-  'aahrrhoohggg',
-  'aahhhooohggg',
-  'aaahhhhhgggh',
-  'aaaahhhhhghh',
-  'waaaahhhhhhh',
-  'aaaaaahhhhhh',
+  'hrhrsrd.rrhh',
+  'hhrssrr.rrrh',
+  'hrrcccr..ggr',
+  'hhrrcrrhggrh',
+  'hhhrrhrrhggg',
+  'hjhhhrrrhggg',
+  'hhjhhhhhgggh',
+  'hhhhhhhhhghh',
+  'hhhhjhhhhhhh',
+  'hhhhhhhhhhhh',
 ];
 const grid = MAP.map((r) => r.split(''));
-const HP = { d: 2, r: 3, h: 5, w: 1, g: 3, c: 3 };          // a(고대석)·바깥 암반은 1단계 곡괭이로 못 판다
-const LIP = {                                                // 드러난 윗면 테두리 (팔레트 그대로)
-  d: [0xa07a4c, 0x7d5636], r: [0x9c95b2, 0x736c8c], h: [0x736c8c, 0x524c68], B: [0x736c8c, 0x524c68],
-  a: [0x7a948a, 0x536a62], g: [0xf0b03c, 0xc47a22], c: [0x9c95b2, 0x736c8c], w: [0x5a94c8, 0x244a70],
+const HP = { d: 2, r: 3, h: 5, C: 3, s: 3, g: 3, c: 3, j: 4 };   // B(바깥 암반)는 못 판다
+const ORE = { g: 'g', c: 'c' };                                   // HUD에 세는 광종
+const LIP = {                                                     // 드러난 윗면 테두리 (shaft.px.js 팔레트)
+  d: [0x8a6c52, 0x6e5440], r: [0xa3a2b6, 0x7c7a92], h: [0x3e3848, 0x2a2634], B: [0x3e3848, 0x2a2634],
+  C: [0xe0a060, 0x7c7a92], s: [0xe8ecf8, 0x7c7a92], g: [0xf5cf6a, 0xd39a3a], c: [0x6fe0d8, 0x7c7a92], j: [0xc98af0, 0x7c7a92],
 };
 const DEBRIS = {
-  d: [0x5c3d2a, 0x7d5636, 0x3a2620, 0xa07a4c], r: [0x524c68, 0x736c8c, 0x36304a], h: [0x524c68, 0x9c95b2, 0x36304a],
-  g: [0xc47a22, 0xf0b03c, 0x7a4416, 0x524c68], c: [0x2db4a2, 0x7cffe0, 0x524c68], w: [0x5a94c8, 0x244a70, 0x16283e],
-  a: [0x536a62, 0x7a948a], B: [0x524c68, 0x736c8c],
+  d: [0x55402f, 0x6e5440, 0x3a2a22, 0x8a6c52], r: [0x5a5770, 0x7c7a92, 0x3d3a4c], h: [0x3e3848, 0x2a2634, 0x5a5770],
+  C: [0xb87a4a, 0xe0a060, 0x5a5770], s: [0x9aa0b8, 0xe8ecf8, 0x5a5770], g: [0xd39a3a, 0xf5cf6a, 0x8a5a24, 0x5a5770],
+  c: [0x2fa09a, 0x6fe0d8, 0x5a5770], j: [0x8a4ab0, 0xc98af0, 0x5a5770], B: [0x3e3848, 0x2a2634],
 };
-const empty = (ch) => ch === '.' || ch === 'T' || ch === 'o';
+const empty = (ch) => ch === '.' || ch === 'T';
 
-/** 세계 칸(열, 행) → 'sky' | 격자 문자 | 'B'(바깥 암반) */
+/** 세계 칸(열, 행) → 'sky' | 격자 문자 | 'B'(바깥 암반: 양옆 패럴랙스 · 맨 아래) */
 function cellAt(cx, cy) {
   if (cy < GY / T) return 'sky';
   const gx = cx - GX / T, gy = cy - GY / T;
@@ -64,9 +70,11 @@ const isSolid = (ch) => ch !== 'sky' && !empty(ch);
 const qs = new URLSearchParams(location.search);
 let low = qs.get('low') === '1';
 try { if (!qs.has('low') && localStorage.getItem('kod.low') === '1') low = true; } catch {}
-const AMBIENT = Number(qs.get('ambient') || 0.3);
-const AMB_COLOR = [0.86, 0.8, 1.0];      // 회보라 앰비언트
+const AMBIENT = Number(qs.get('ambient') || 0.4);
+const AMB_COLOR = [0.86, 0.82, 1.0];     // 회보라 앰비언트
 const TINT = [1.05, 0.98, 0.9];          // 뒷산 층 색온도 (갈색·노을)
+const LANTERN_R = 100 * 1.3, LANTERN_POWER = 0.8;
+const TILT_BAND = 0.1;                   // 틸트 시프트: 위아래 10%
 
 // ---------------------------------------------------------------- 시작
 const app = new Application();
@@ -78,10 +86,10 @@ document.getElementById('stage').appendChild(app.canvas);
 const R = app.renderer;
 
 const A = (p) => `${import.meta.env.BASE_URL}art/${p}`;
-const SPRITES = ['dirt_1', 'dirt_2', 'rock_1', 'rock_2', 'hard_rock', 'ancient', 'water', 'gold_ore', 'glow_rock',
-  'timber', 'rails', 'far_wall', 'mid_pillars', 'fg_rocks', 'wall_lamp', 'cart', 'cart_full'];
-const NORMALS = ['dirt_1', 'dirt_2', 'rock_1', 'rock_2', 'hard_rock', 'ancient', 'gold_ore', 'glow_rock', 'timber'];
-const ANIMS = ['glow_crystals', 'gold_shimmer', 'lantern', 'miner'];
+const SPRITES = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'gem',
+  'tunnel', 'tunnel_beam', 'rail', 'cart', 'cart_empty', 'stalactite', 'mushroom', 'side_far', 'side_mid', 'side_fg'];
+const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver'];
+const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'miner_red'];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
   ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
@@ -106,12 +114,18 @@ const wU = new Container();   // 조명 뒤에 그리는 것: 발광체 · 헤�
 // 지상: pxl이 구운 조명 그대로 (런타임 비용 0)
 wA.addChild(new Sprite(loaded[A('scenes/surface.png')]));
 
-// 패럴랙스: 먼 벽 0.2 · 중간 기둥 0.5 (갱도 틈으로 보인다)
-const farA = new TilingSprite({ texture: tex('far_wall'), width: WW, height: WH - GY });
-const midA = new TilingSprite({ texture: tex('mid_pillars'), width: WW, height: WH - GY });
-farA.y = midA.y = GY;
-farA.tint = 0x6c6480; midA.tint = 0x9a90a8;   // 먼 벽은 한 톤 어둡게: 갱도(빈칸)와 바위(타일)가 한눈에 갈리게
-wA.addChild(farA, midA);
+// 격자 양옆 2칸만 패럴랙스 바위: 먼 바위 0.2 · 중간 0.5 (조명 받음) / 앞 1.3 (어두운 실루엣)
+function sideLayer(name, parent) {
+  const make = (x, flip) => {
+    const s = new TilingSprite({ texture: tex(name), width: GX, height: WH - GY });
+    s.position.set(flip ? WW : x, GY);
+    if (flip) s.scale.x = -1;
+    parent.addChild(s);
+    return s;
+  };
+  return [make(0, false), make(WW - GX, true)];
+}
+const farA = sideLayer('side_far', wA), midA = sideLayer('side_mid', wA);
 wN.addChild(new Graphics().rect(0, GY, WW, WH - GY).fill(0x8080ff));
 
 const tilesA = new Container(), tilesN = new Container();
@@ -120,58 +134,81 @@ const propsA = new Container(), propsN = new Container(), dustA = new Container(
 wA.addChild(tilesA, shimmerA, crackG, edgeA, propsA, dustA);
 wN.addChild(tilesN, edgeN, propsN);
 
-const crystalsU = new Container(), lampsU = new Container(), halosU = new Container(), sparksU = new Container();
-const fgU = new TilingSprite({ texture: tex('fg_rocks'), width: 10, height: 10 });
-fgU.tint = 0x0b0910;
-wU.addChild(crystalsU, lampsU, halosU, sparksU, fgU);
+const lampsU = new Container(), halosU = new Container(), sparksU = new Container(), fgU = new Container();
+wU.addChild(lampsU, halosU, sparksU, fgU);
+const fgSides = sideLayer('side_fg', fgU);
+for (const s of fgSides) s.tint = 0x2a2232;
 
 // ---------------------------------------------------------------- 타일
 const tiles = new Map();      // "cx,cy" → { a, n, extra }
 const damage = new Map();
 const hash = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
-const TILE_NAME = { d: (x, y) => `dirt_${1 + (hash(x, y) % 2)}`, r: (x, y) => `rock_${1 + (hash(x, y) % 2)}`,
-  h: () => 'hard_rock', B: () => 'hard_rock', a: () => 'ancient', w: () => 'water', g: () => 'gold_ore', c: () => 'glow_rock' };
+const TILE_NAME = {
+  d: (x, y) => `dirt_${1 + (hash(x, y) % 3)}`, r: () => 'rock', h: () => 'hard_rock', B: () => 'hard_rock',
+  C: () => 'ore_copper', s: () => 'ore_silver', g: () => 'ore_gold', c: () => 'ore_glow', j: () => 'gem',
+  '.': () => 'tunnel', T: () => 'tunnel_beam',
+};
+const glowTiles = [];
 
 function placeTile(cx, cy) {
   const ch = cellAt(cx, cy);
-  if (!isSolid(ch)) return;
+  if (ch === 'sky') return;
+  const gx = cx - GX / T;
+  if (ch === 'B' && (gx < 0 || gx >= GW)) return;          // 양옆은 패럴랙스 겹이 맡는다
   const name = TILE_NAME[ch](cx, cy);
-  const a = new Sprite(tex(name));
+  const a = new Sprite(name === 'ore_glow' ? F.ore_glow[0] : tex(name));
   a.position.set(cx * T, cy * T);
   if (ch === 'B') a.tint = 0x8a849c;
   tilesA.addChild(a);
-  const n = NORMALS.includes(name) ? new Sprite(ntex(name)) : new Sprite(Texture.WHITE);
-  if (!NORMALS.includes(name)) { n.width = n.height = T; n.tint = 0x8080ff; }
-  n.position.set(cx * T, cy * T);
-  tilesN.addChild(n);
-  const t = { a, n, extra: [] };
+  const t = { a, n: null, extra: [] };
+  if (NORMALS.includes(name)) {
+    t.n = new Sprite(ntex(name)); t.n.position.set(cx * T, cy * T); tilesN.addChild(t.n);
+  }
   if (ch === 'g') {
     const s = new Sprite(F.gold_shimmer[0]);
-    s.position.set(cx * T, cy * T);
-    s.visible = false;
-    s.phase = (hash(cx, cy) % 1000) / 1000 * 3;
-    shimmerA.addChild(s);
-    t.extra.push(s);
+    s.position.set(cx * T, cy * T); s.visible = false; s.phase = (hash(cx, cy) % 1000) / 1000 * 3;
+    shimmerA.addChild(s); t.extra.push(s);
   }
   if (ch === 'c') {
-    const s = new Sprite(F.glow_crystals[0]);
-    s.position.set(cx * T, cy * T);
-    s.phase = (hash(cx, cy) % 12);
-    crystalsU.addChild(s);
-    t.extra.push(s);
+    a.phase = hash(cx, cy) % 12;
+    const h = halo(0x6fe0d8, 30, 0.22); h.position.set(cx * T + 8, cy * T + 8); h.phase = a.phase;
+    t.extra.push(h); glowTiles.push(t); t.cx = cx; t.cy = cy;
   }
   tiles.set(`${cx},${cy}`, t);
 }
+function removeTile(cx, cy) {
+  const t = tiles.get(`${cx},${cy}`);
+  if (!t) return;
+  t.a.destroy(); t.n?.destroy(); t.extra.forEach((e) => e.destroy());
+  const gi = glowTiles.indexOf(t); if (gi >= 0) glowTiles.splice(gi, 1);
+  tiles.delete(`${cx},${cy}`);
+}
+
+// ---------------------------------------------------------------- 헤일로
+const haloTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = Texture.from(c); t.source.scaleMode = 'linear'; return t;
+})();
+function halo(color, size, alpha) {
+  const s = new Sprite(haloTex); s.anchor.set(0.5); s.blendMode = 'add'; s.tint = color;
+  s.width = s.height = size; s.alpha = alpha; s.baseAlpha = alpha; halosU.addChild(s); return s;
+}
+
 for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++) placeTile(cx, cy);
 
-// 버팀목 · 레일 (정적 소품)
-grid.forEach((row, gy) => row.forEach((ch, gx) => {
-  if (ch !== 'T') return;
-  const s = new Sprite(tex('timber')); s.position.set(GX + gx * T, GY + gy * T); propsA.addChild(s);
-  const n = new Sprite(ntex('timber')); n.position.copyFrom(s.position); propsN.addChild(n);
-}));
+// 레일 · 종유석 · 버섯 (정적 소품)
 for (const [gx, gy] of [[2, 4], [3, 4], [4, 4], [5, 4], [6, 4], [7, 4], [7, 8], [8, 8]]) {
-  const s = new Sprite(tex('rails')); s.position.set(GX + gx * T, GY + gy * T + 12); propsA.addChild(s);
+  const s = new Sprite(tex('rail')); s.position.set(GX + gx * T, GY + gy * T + 12); propsA.addChild(s);
+}
+for (const [gx, gy, ox] of [[4, 4, 3], [6, 4, 9], [2, 2, 6], [7, 6, 2]]) {
+  const s = new Sprite(tex('stalactite')); s.position.set(GX + gx * T + ox, GY + gy * T); propsA.addChild(s);
+}
+for (const [gx, gy, ox] of [[5, 4, 2], [5, 4, 7], [3, 4, 10]]) {
+  const s = new Sprite(tex('mushroom')); s.position.set(GX + gx * T + ox, GY + gy * T + 12); propsA.addChild(s);
+  halo(0x6fe0d8, 12, 0.35).position.set(s.x + 2, s.y + 1);
 }
 
 // 드러난 면: 윗면은 밝은 테두리(노멀 ↑), 옆·아랫면은 잉크 선(노멀 옆·↓) → 랜턴이 지나가면 결이 산다
@@ -187,15 +224,15 @@ function drawEdges() {
       edgeN.rect(x, y + T, T, 2).fill(0x80e6cc);
     }
     if (isSolid(above) && cy - 1 >= GY / T) {
-      edgeA.rect(x, y - 1, T, 1).fill(0x140f18);
+      edgeA.rect(x, y - 1, T, 1).fill(0x1a1220);
       edgeN.rect(x, y - 2, T, 2).fill(0x801acc);
     }
     if (isSolid(left)) {
-      edgeA.rect(x - 1, y, 1, T).fill(0x140f18);
+      edgeA.rect(x - 1, y, 1, T).fill(0x1a1220);
       edgeN.rect(x - 2, y, 2, T).fill(0xe680cc);
     }
     if (isSolid(right)) {
-      edgeA.rect(x + T, y, 1, T).fill(0x251b28);
+      edgeA.rect(x + T, y, 1, T).fill(0x2b1f35);
       edgeN.rect(x + T, y, 2, T).fill(0x1a80cc);
     }
   }
@@ -210,8 +247,7 @@ solidTex.source.scaleMode = 'linear';
 function drawSolid() {
   const g = solidCanvas.getContext('2d'), img = g.createImageData(COLS, ROWS);
   for (let cy = 0; cy < ROWS; cy++) for (let cx = 0; cx < COLS; cx++) {
-    const ch = cellAt(cx, cy), v = ch === 'w' ? 120 : isSolid(ch) ? 255 : 0;
-    const i = (cy * COLS + cx) * 4;
+    const v = isSolid(cellAt(cx, cy)) ? 255 : 0, i = (cy * COLS + cx) * 4;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
@@ -222,7 +258,7 @@ drawSolid();
 function drawCracks() {
   crackG.clear();
   for (const [key, dmg] of damage) {
-    const [cx, cy] = key.split(',').map(Number), ch = cellAt(cx, cy), hp = HP[ch];
+    const [cx, cy] = key.split(',').map(Number), hp = HP[cellAt(cx, cy)];
     if (!hp) continue;
     const stage = Math.min(3, Math.ceil((dmg / hp) * 3)), x = cx * T, y = cy * T, h = hash(cx, cy);
     const rays = [[8, 8, 3, 2], [8, 8, 13, 4], [8, 8, 5, 13], [8, 8, 14, 12], [8, 8, 9, 1]];
@@ -230,52 +266,43 @@ function drawCracks() {
       const [x0, y0, x1, y1] = rays[(h + i) % rays.length];
       crackG.moveTo(x + x0, y + y0).lineTo(x + x1, y + y1);
     }
-    crackG.stroke({ width: 1, color: 0x140f18, alignment: 0.5 });
-    crackG.rect(x + 7, y + 7, 2, 2).fill(0x140f18);
+    crackG.stroke({ width: 1, color: 0x1a1220, alignment: 0.5 });
+    crackG.rect(x + 7, y + 7, 2, 2).fill(0x1a1220);
   }
 }
 
-// ---------------------------------------------------------------- 등불 · 랜턴 · 헤일로
-const haloTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  const t = Texture.from(c); t.source.scaleMode = 'linear'; return t;
-})();
-function halo(color, size, alpha) {
-  const s = new Sprite(haloTex); s.anchor.set(0.5); s.blendMode = 'add'; s.tint = color;
-  s.width = s.height = size; s.alpha = alpha; s.baseAlpha = alpha; halosU.addChild(s); return s;
-}
-
-const wallLamps = [[GX + 2 * T, GY + 4 * T + 1], [GX + 7 * T, GY + 6 * T + 2]].map(([x, y], i) => {
-  const s = new Sprite(tex('wall_lamp')); s.position.set(x, y); lampsU.addChild(s);
-  return { x: x + 9, y: y + 6, seed: i * 2.3, halo: halo(0xffb060, 26, 0.5) };
+// ---------------------------------------------------------------- 벽 랜턴 2 · 움직이는 랜턴 1 (shaft.px.js "lantern")
+const LANTERN_FLAME = [-0.5, 4];          // 고리(위 가운데) 기준 불꽃 위치
+const wallLamps = [[GX + 2 * T + 9, GY + 4 * T + 3], [GX + 7 * T + 9, GY + 6 * T + 4]].map(([x, y], i) => {
+  const br = new Graphics().moveTo(x - 9, y - 1).lineTo(x, y - 1).lineTo(x, y).stroke({ width: 1, color: 0x5c3832 });
+  lampsU.addChild(br);
+  const s = new Sprite(F.lantern[0]); s.anchor.set(0.5, 0); s.position.set(x, y); lampsU.addChild(s);
+  return { s, x: x + LANTERN_FLAME[0], y: y + LANTERN_FLAME[1], seed: i * 2.3, halo: halo(0xffb060, 24, 0.5) };
 });
 
-const lantern = { x: GX + 5 * T + 8, y: GY + 4 * T + 1, ang: 0, vel: 0, frame: 0 };
+const lantern = { x: GX + 5 * T + 8, y: GY + 4 * T + 2, ang: 0, vel: 0 };
 const lanternS = new Sprite(F.lantern[0]); lanternS.anchor.set(0.5, 0); lampsU.addChild(lanternS);
-const lanternHalo = halo(0xffa050, 34, 0.55);
+const lanternHalo = halo(0xffa050, 30, 0.5);
 const lanternFlame = () => {
-  const ox = -0.5, oy = 6, c = Math.cos(lantern.ang), s = Math.sin(lantern.ang);
+  const [ox, oy] = LANTERN_FLAME, c = Math.cos(lantern.ang), s = Math.sin(lantern.ang);
   return [lantern.x + ox * c - oy * s, lantern.y + ox * s + oy * c];
 };
 
-// ---------------------------------------------------------------- 광부 (임시 그림)
-const miner = { gx: 8, gy: 8, x: 0, t: 0, frame: 0, walking: 0, from: 0, to: 0 };
-const minerX = (gx) => GX + gx * T + 8 - 12;
+// ---------------------------------------------------------------- 붉은 수염 광부
+const miner = { gx: 8, gy: 8, x: 0, t: 0, frame: 0, walking: 0, from: 0, to: 0, strikes: 0 };
+const minerX = (gx) => GX + gx * T + 1;
 miner.x = minerX(miner.gx);
-const minerS = new Sprite(F.miner[0]); propsA.addChild(minerS);
-const headHalo = halo(0xfff0a0, 10, 0.6);
+const minerS = new Sprite(F.miner_red[0]); propsA.addChild(minerS);
+const headHalo = halo(0xfff0a0, 8, 0.6);
 
 // ---------------------------------------------------------------- 광차: 금맥 앞 → 수직갱 → 지상 창고 왕복
-const railY = (gy) => GY + gy * T + 15;
+const railY = (gy) => GY + gy * T + 14;
 const ROUTE = [
   [GX + 7 * T + 8, railY(8), 'load'], [GX + 7 * T + 8, railY(4), 'lift'], [GX + 2 * T + 8, railY(4)],
-  [GX + 2 * T + 8, 39, 'lift'], [436 - 14, 39, 'unload'],
+  [GX + 2 * T + 8, 39, 'lift'], [190, 39, 'unload'],
 ];
 const cart = { seg: 0, dir: 1, t: 0, wait: 1.2, x: ROUTE[0][0], y: ROUTE[0][1], full: true, spark: 0, moving: false };
-const cartS = new Sprite(tex('cart_full')); cartS.anchor.set(0.5, 1); propsA.addChild(cartS);
+const cartS = new Sprite(tex('cart')); cartS.anchor.set(0.5, 1); propsA.addChild(cartS);
 const cable = new Graphics(); propsA.addChild(cable);
 
 // ---------------------------------------------------------------- 입자 (풀링 · 폰 상한 300)
@@ -284,9 +311,9 @@ function particle(layer, o) {
   const cap = low ? 80 : 300;
   if (pool.filter((p) => p.alive).length >= cap) return;
   let p = pool.find((q) => !q.alive);
-  if (!p) { p = { s: new Sprite(Texture.WHITE) }; p.s.width = p.s.height = 1; pool.push(p); }
+  if (!p) { p = { s: new Sprite(Texture.WHITE) }; pool.push(p); }
   if (p.s.parent !== layer) layer.addChild(p.s);
-  Object.assign(p, { alive: true, g: 220, drag: 0, fade: true, size: 1 }, o);
+  Object.assign(p, { alive: true, g: 220, drag: 0, fade: true, size: 1, solid: false }, o);
   p.s.visible = true; p.s.tint = p.color; p.s.alpha = 1; p.s.width = p.s.height = p.size; p.age = 0;
 }
 function updateParticles(dt) {
@@ -312,9 +339,9 @@ function hitTile(cx, cy, by = 'player') {
   const player = by === 'player';
   const hp = HP[ch];
   const cxp = cx * T + 8, cyp = cy * T + 8;
-  if (!hp) {                                             // 고대석·암반: 쨍, 불꽃만
+  if (!hp) {                                             // 바깥 암반: 쨍, 불꽃만
     sfx('clink', !player);
-    for (let i = 0; i < 3; i++) particle(sparksU, { x: cxp, y: cyp, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.25, color: 0xfff0a8 });
+    for (let i = 0; i < 3; i++) particle(sparksU, { x: cxp, y: cyp, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.25, color: 0xfff4b8 });
     if (player) { shake = 0.1; shakeAmp = 1; toast('단단해서 지금 곡괭이로는 안 파져요'); }
     return false;
   }
@@ -323,10 +350,10 @@ function hitTile(cx, cy, by = 'player') {
   const cols = DEBRIS[ch];
   for (let i = 0; i < 6; i++)                           // 파편 6개
     particle(dustA, { x: cxp + (Math.random() - 0.5) * 10, y: cyp + (Math.random() - 0.5) * 10, vx: (Math.random() - 0.5) * 110, vy: -50 - Math.random() * 70, life: 0.5 + Math.random() * 0.3, color: cols[i % cols.length], solid: true, fade: false, size: Math.random() < 0.3 ? 2 : 1 });
-  if (ch === 'r' || ch === 'h' || ch === 'g')
+  if (ch !== 'd')
     for (let i = 0; i < 2; i++) particle(sparksU, { x: cxp, y: cyp, vx: (Math.random() - 0.5) * 90, vy: -30 - Math.random() * 50, life: 0.18, color: 0xffd080 });
   const d = (damage.get(`${cx},${cy}`) || 0) + (player ? 1 : 0.35);
-  if ((ch === 'g' || ch === 'c') && (player || Math.random() < 0.45)) orePopup(ch, cxp, cyp - 4, 1);
+  if (ORE[ch] && (player || Math.random() < 0.45)) orePopup(ORE[ch], cxp, cyp - 4, 1);
   if (d >= hp - 1e-6) breakTile(cx, cy, ch, player);
   else damage.set(`${cx},${cy}`, d);
   drawCracks();
@@ -335,18 +362,16 @@ function hitTile(cx, cy, by = 'player') {
 
 function breakTile(cx, cy, ch, player) {
   damage.delete(`${cx},${cy}`);
-  const gx = cx - GX / T, gy = cy - GY / T;
-  grid[gy][gx] = '.';
-  const t = tiles.get(`${cx},${cy}`);
-  if (t) { t.a.destroy(); t.n.destroy(); t.extra.forEach((e) => e.destroy()); tiles.delete(`${cx},${cy}`); }
+  grid[cy - GY / T][cx - GX / T] = '.';
+  removeTile(cx, cy);
+  placeTile(cx, cy);                                     // 판 자리는 갱도 타일로
   sfx('break', !player);
   const cols = DEBRIS[ch], x0 = cx * T, y0 = cy * T;
   for (let i = 0; i < 14; i++)
     particle(dustA, { x: x0 + Math.random() * T, y: y0 + Math.random() * T, vx: (Math.random() - 0.5) * 70, vy: -20 - Math.random() * 60, life: 0.7 + Math.random() * 0.4, color: cols[i % cols.length], solid: true, fade: false, size: Math.random() < 0.4 ? 2 : 1 });
   for (let i = 0; i < 8; i++)                            // 먼지 구름
     particle(dustA, { x: x0 + Math.random() * T, y: y0 + Math.random() * T, vx: (Math.random() - 0.5) * 30, vy: -8 - Math.random() * 10, life: 1.2, color: 0x8a7a6a, g: 0, drag: 1.5, size: 2 });
-  if (ch === 'g' || ch === 'c') orePopup(ch, x0 + 8, y0 + 4, 3);
-  if (ch === 'w') for (let i = 0; i < 10; i++) particle(dustA, { x: x0 + 8, y: y0 + 8, vx: (Math.random() - 0.5) * 60, vy: -60 - Math.random() * 40, life: 0.6, color: 0x5a94c8, solid: true });
+  if (ORE[ch]) orePopup(ORE[ch], x0 + 8, y0 + 4, 3);
   drawEdges(); drawSolid(); drawCracks();
   if (ch === 'g' && player && !boomed) { boomed = true; bigVein(x0 + 8, y0 + 8); }
 }
@@ -358,7 +383,7 @@ function bigVein(x, y) {
   sfx('bell');
   for (let i = 0; i < 40; i++) {
     const a = Math.random() * Math.PI * 2, v = 30 + Math.random() * 90;
-    particle(sparksU, { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0.8 + Math.random() * 0.6, color: [0xfff0a8, 0xf0b03c, 0xffffff][i % 3], g: 60, size: Math.random() < 0.3 ? 2 : 1 });
+    particle(sparksU, { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0.8 + Math.random() * 0.6, color: [0xfff4b8, 0xf5cf6a, 0xffffff][i % 3], g: 60, size: Math.random() < 0.3 ? 2 : 1 });
   }
   const el = document.createElement('div');
   el.className = 'daebak'; el.textContent = '대박!';
@@ -366,18 +391,17 @@ function bigVein(x, y) {
   setTimeout(() => el.remove(), 1600);
 }
 
-// ---------------------------------------------------------------- 카메라 · 화면 크기
-const cam = { x: GX + 7 * T - 200, y: 28 };
-let viewW = 400, px = 4, cssScale = 2, offX = 0, offY = 0;
+// ---------------------------------------------------------------- 카메라 · 화면 크기 (칸 = 화면 높이 / 9)
+const cam = { x: 0, y: GY + 6 * T + 8 - VIEW_H / 2 };
+let viewW = WW, px = 4, cssScale = 2, offX = 0, offY = 0;
 let albedoRT, normalRT, litRT, finalRT, lightPass, postPass;
 const display = new Sprite();
 app.stage.addChild(display);
 
 function layout() {
   const dpr = R.resolution, dw = window.innerWidth * dpr, dh = window.innerHeight * dpr;
-  const ratio = Math.min(dh / VIEW_H, dw / 256);
-  px = ratio >= 3 ? Math.floor(ratio) : ratio;   // 폰(고밀도)은 정수 배율, 저밀도 화면만 소수 배율로 꽉 채움
-  viewW = Math.max(256, Math.min(WW - 16, Math.floor(dw / px)));
+  px = Math.min(dh / VIEW_H, dw / 160);                  // 세로 9칸이 화면을 꽉 채운다
+  viewW = Math.max(160, Math.min(WW, Math.floor(dw / px)));
   cssScale = px / dpr;
   offX = Math.round((window.innerWidth - viewW * cssScale) / 2);
   offY = Math.round((window.innerHeight - VIEW_H * cssScale) / 2);
@@ -391,7 +415,6 @@ function layout() {
   display.texture = finalRT;
   display.scale.set(cssScale);
   display.position.set(offX, offY);
-  fgU.width = viewW; fgU.height = VIEW_H;
   clampCam();
 }
 function clampCam() {
@@ -409,9 +432,8 @@ let drag = null;
 app.canvas.addEventListener('pointerdown', (e) => {
   unlockAudio();
   const [wx, wy] = toWorld(e);
-  const [fx, fy] = [lantern.x, lantern.y + 6];
-  const mode = Math.hypot(wx - fx, wy - fy) < 14 ? 'lantern' : 'maybe';
-  drag = { id: e.pointerId, mode, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now() };
+  const mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
+  drag = { id: e.pointerId, mode, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY };
   app.canvas.setPointerCapture(e.pointerId);
 });
 app.canvas.addEventListener('pointermove', (e) => {
@@ -421,7 +443,7 @@ app.canvas.addEventListener('pointermove', (e) => {
   if (drag.mode === 'maybe' && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 8) drag.mode = 'pan';
   if (drag.mode === 'pan') { cam.x -= dx; cam.y -= dy; clampCam(); }
   if (drag.mode === 'lantern') {
-    lantern.x = Math.max(8, Math.min(WW - 8, lantern.x + dx));
+    lantern.x = Math.max(GX + 4, Math.min(WW - GX - 4, lantern.x + dx));
     lantern.y = Math.max(GY + 2, Math.min(WH - 16, lantern.y + dy));
     lantern.vel -= dx * 0.05;
   }
@@ -452,7 +474,7 @@ function tap(wx, wy) {
 // ---------------------------------------------------------------- HUD (DOM: 반투명 유리 + 번짐 없는 테두리)
 const $ = (id) => document.getElementById(id);
 const counter = { g: $('cnt-g'), c: $('cnt-c'), ore: $('cnt-ore') };
-function bump(el) { el.parentElement.classList.remove('pulse'); void el.offsetWidth; el.parentElement.classList.add('pulse'); }
+function bump(el) { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
 
 function orePopup(kind, x, y, n) {
   sfx('ore');
@@ -476,7 +498,7 @@ function orePopup(kind, x, y, n) {
     ], { duration: 460, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' });
     fly.onfinish = () => {
       el.remove();
-      stash[kind] += n; counter[kind].textContent = stash[kind]; bump(counter[kind]); sfx('stash', true);
+      stash[kind] += n; counter[kind].textContent = stash[kind]; bump(counter[kind].parentElement); sfx('stash', true);
     };
   };
 }
@@ -500,19 +522,23 @@ $('btn-sound').onclick = () => { unlockAudio(); setSound(!soundOn()); $('btn-sou
 $('btn-boom').onclick = () => { unlockAudio(); bigVein(GX + 9 * T + 8, GY + 9 * T + 8); };
 $('btn-ref').onclick = () => $('ref').classList.add('show');
 $('ref').onclick = () => $('ref').classList.remove('show');
-$('ref-img').src = A('scenes/mine_night.gif');
+$('ref-shaft').src = A('scenes/shaft_night.png');
+$('ref-office').src = A('scenes/office_night.png');
+$('miner-face').src = `${import.meta.env.BASE_URL}assets/portraits/miner_red.png`;
 $('btn-full').onclick = async () => {
   try {
     await document.documentElement.requestFullscreen?.();
     await screen.orientation?.lock?.('landscape');
   } catch {}
 };
+const minerCard = $('miner-card'), minerState = $('miner-state');
 
 // ---------------------------------------------------------------- 매 프레임
 let time = 0, fpsT = 0, fpsN = 0;
 const lights = [];
 function addLight(x, y, z, r, color, power) { if (lights.length < MAX_LIGHTS) lights.push([x, y, z, r, color, power]); }
 const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23 + seed * 2) + 0.15 * Math.sin(t * 41 + seed * 3);
+const NAMES = { d: '흙', r: '바위', h: '단단한 바위', C: '구리', s: '은', g: '금맥', c: '발광 광석', j: '보석' };
 
 app.ticker.add((tk) => {
   const real = Math.min(tk.deltaMS / 1000, 0.05);
@@ -526,26 +552,32 @@ app.ticker.add((tk) => {
   time += dt;
 
   // 광부: 오른쪽 칸을 계속 캔다. 파내면 한 칸 걸어 들어간다
+  const floorY = GY + miner.gy * T + T - 15;
   if (miner.walking > 0) {
     miner.walking = Math.max(0, miner.walking - dt / 0.9);
     miner.x = miner.to + (miner.from - miner.to) * miner.walking;
-    minerS.texture = F.miner[0];
-    minerS.y = GY + miner.gy * T + T - 18 - (Math.floor(time * 8) % 2);
+    minerS.texture = F.miner_red[0];
+    minerS.y = floorY - (Math.floor(time * 8) % 2);
   } else {
     const tgt = cellAt(GX / T + miner.gx + 1, GY / T + miner.gy);
     const floor = cellAt(GX / T + miner.gx + 1, GY / T + miner.gy + 1);
     if (!isSolid(tgt) && isSolid(floor) && miner.gx + 1 < GW) {
       miner.from = miner.x; miner.gx++; miner.to = minerX(miner.gx); miner.walking = 1;
+      minerState.textContent = '걸어 들어가는 중';
     } else if (isSolid(tgt) && HP[tgt]) {
       const prev = miner.frame;
       miner.t += dt; miner.frame = Math.floor(miner.t / 0.15) % 4;
-      if (miner.frame === 2 && prev !== 2) hitTile(GX / T + miner.gx + 1, GY / T + miner.gy, 'miner');
-      minerS.texture = F.miner[miner.frame];
-    } else minerS.texture = F.miner[0];
-    minerS.y = GY + miner.gy * T + T - 18;
+      if (miner.frame === 2 && prev !== 2) {
+        hitTile(GX / T + miner.gx + 1, GY / T + miner.gy, 'miner');
+        bump(minerCard);
+        minerState.textContent = `${NAMES[tgt] ?? '바위'} 캐는 중`;
+      }
+      minerS.texture = F.miner_red[miner.frame];
+    } else { minerS.texture = F.miner_red[0]; minerState.textContent = '쉬는 중'; }
+    minerS.y = floorY;
   }
   minerS.x = Math.round(miner.x);
-  const head = [minerS.x + 15, minerS.y + 4];
+  const head = [minerS.x + 6, minerS.y + 1];
 
   // 광차: 바퀴 불꽃 · 먼지
   if (cart.wait > 0) {
@@ -560,38 +592,36 @@ app.ticker.add((tk) => {
       const tag = ROUTE[cart.seg][2];
       if (tag === 'unload') {
         cart.wait = 1.0; cart.full = false; cart.dir = -1;
-        const [sx, sy] = [ROUTE[cart.seg][0], ROUTE[cart.seg][1] - 14];
-        orePopup('ore', sx, sy, 5);
+        orePopup('ore', ROUTE[cart.seg][0], ROUTE[cart.seg][1] - 14, 5);
       } else if (tag === 'load') { cart.wait = 1.4; cart.full = true; cart.dir = 1; }
     }
     const p = ROUTE[cart.seg], q = ROUTE[Math.max(0, Math.min(ROUTE.length - 1, cart.seg + cart.dir))];
     cart.x = p[0] + (q[0] - p[0]) * cart.t; cart.y = p[1] + (q[1] - p[1]) * cart.t;
-    if (!vertical && cart.moving) {
+    if (!vertical) {
       cart.spark -= dt;
       if (cart.spark <= 0) {
         cart.spark = 0.06 + Math.random() * 0.06;
         const back = Math.sign(a[0] - b[0]);
-        for (const wx of [-6, 6]) particle(sparksU, { x: cart.x + wx, y: cart.y - 1, vx: back * (20 + Math.random() * 40), vy: -20 - Math.random() * 30, life: 0.2, color: Math.random() < 0.5 ? 0xffd080 : 0xff8a2a });
-        particle(dustA, { x: cart.x - back * 10, y: cart.y - 2, vx: back * 8, vy: -6, life: 0.8, color: 0x8a7a6a, g: 0, drag: 1.2, size: 2 });
+        for (const wx of [-5, 5]) particle(sparksU, { x: cart.x + wx, y: cart.y - 1, vx: back * (20 + Math.random() * 40), vy: -20 - Math.random() * 30, life: 0.2, color: Math.random() < 0.5 ? 0xffd080 : 0xe8702e });
+        particle(dustA, { x: cart.x - back * 9, y: cart.y - 2, vx: back * 8, vy: -6, life: 0.8, color: 0x8a7a6a, g: 0, drag: 1.2, size: 2 });
       }
     }
   }
-  cartS.texture = tex(cart.full ? 'cart_full' : 'cart');
-  cartS.position.set(Math.round(cart.x), Math.round(cart.y + (cart.moving && time * 20 % 2 < 1 ? 0 : 0)));
+  cartS.texture = tex(cart.full ? 'cart' : 'cart_empty');
+  cartS.position.set(Math.round(cart.x), Math.round(cart.y));
   cartS.tint = cart.y < GY ? 0xe0a890 : 0xffffff;
   cable.clear();
   const inShaft2 = Math.abs(cart.x - (GX + 2 * T + 8)) < 1 && cart.y < railY(4) - 1;
   const inShaft7 = Math.abs(cart.x - (GX + 7 * T + 8)) < 1 && cart.y > railY(4) + 1 && cart.y < railY(8);
-  if (inShaft2) cable.moveTo(SHAFT_TOP_X, 9).lineTo(cart.x + 4, cart.y - 14).stroke({ width: 1, color: 0x3e3e4e });
-  if (inShaft7) cable.moveTo(cart.x + 4, GY + 4 * T).lineTo(cart.x + 4, cart.y - 14).stroke({ width: 1, color: 0x3e3e4e });
+  if (inShaft2) cable.moveTo(SHAFT_TOP_X, 9).lineTo(cart.x + 4, cart.y - 13).stroke({ width: 1, color: 0x3d3a4c });
+  if (inShaft7) cable.moveTo(cart.x + 4, GY + 4 * T).lineTo(cart.x + 4, cart.y - 13).stroke({ width: 1, color: 0x3d3a4c });
 
   // 랜턴: 진자 흔들림
   if (!drag || drag.mode !== 'lantern') lantern.vel += -Math.sin(lantern.ang) * 18 * dt;
   lantern.vel *= 1 - 1.4 * dt;
-  lantern.ang += lantern.vel * dt;
-  lantern.ang = Math.max(-0.9, Math.min(0.9, lantern.ang + Math.sin(time * 1.3) * 0.0006));
-  lantern.frame = Math.floor(time * 8) % F.lantern.length;
-  lanternS.texture = F.lantern[lantern.frame];
+  lantern.ang = Math.max(-0.9, Math.min(0.9, lantern.ang + lantern.vel * dt + Math.sin(time * 1.3) * 0.0006));
+  const lfr = F.lantern[Math.floor(time * 5) % F.lantern.length];
+  lanternS.texture = lfr;
   lanternS.position.set(Math.round(lantern.x), Math.round(lantern.y));
   lanternS.rotation = lantern.ang;
   const [lfx, lfy] = lanternFlame();
@@ -602,23 +632,27 @@ app.ticker.add((tk) => {
     s.visible = t < 1;
     if (s.visible) s.texture = F.gold_shimmer[Math.min(11, Math.floor(t * 12))];
   }
-  for (const s of crystalsU.children) s.texture = F.glow_crystals[(Math.floor(time * 8) + s.phase) % 12];
+  let gxs = 0, gys = 0;
+  for (const t of glowTiles) {
+    const f = (Math.floor(time * 6) + t.a.phase) % 12;
+    t.a.texture = F.ore_glow[f];
+    t.extra[0].alpha = t.extra[0].baseAlpha * (0.6 + 0.4 * Math.sin((f / 12) * Math.PI * 2));
+    gxs += t.cx * T + 8; gys += t.cy * T + 8;
+  }
 
   // 빛 목록
   lights.length = 0;
   const lf = flick(time, 0);
-  addLight(lfx, lfy, 10, 100 * (1 + 0.03 * lf), [1.0, 0.72, 0.46], 1.75 * (1 + 0.06 * lf));
+  addLight(lfx, lfy, 10, LANTERN_R * (1 + 0.03 * lf), [1.0, 0.72, 0.46], LANTERN_POWER * (1 + 0.06 * lf));
   for (const w of wallLamps) {
     const f = flick(time, w.seed);
-    addLight(w.x, w.y, 8, 72 * (1 + 0.03 * f), [1.0, 0.78, 0.52], 1.45 * (1 + 0.06 * f));
+    w.s.texture = F.lantern[Math.floor(time * 5 + w.seed) % F.lantern.length];
+    addLight(w.x, w.y, 8, 72 * (1 + 0.03 * f), [1.0, 0.78, 0.52], 1.2 * (1 + 0.06 * f));
     w.halo.position.set(w.x, w.y); w.halo.alpha = w.halo.baseAlpha * (1 + 0.15 * f);
   }
-  addLight(head[0] + 8, head[1] + 4, 6, 40, [1.0, 0.94, 0.68], 1.25);
-  let gxs = 0, gys = 0, gn = 0;
-  for (const [key, t] of tiles) if (t.extra[0] && crystalsU.children.includes(t.extra[0])) {
-    const [cx, cy] = key.split(',').map(Number); gxs += cx * T + 8; gys += cy * T + 8; gn++;
-  }
-  if (gn) addLight(gxs / gn, gys / gn, -8, 40 + gn * 5, [0.36, 0.95, 0.86], 1.05 + 0.25 * Math.sin(time * 2.2));
+  addLight(head[0] + 8, head[1] + 4, 6, 40, [1.0, 0.94, 0.68], 1.1);
+  const gn = glowTiles.length;
+  if (gn) addLight(gxs / gn, gys / gn, -8, 40 + gn * 5, [0.42, 0.88, 0.85], 0.95 + 0.25 * Math.sin(time * 2.2));
   if (boom) {
     boom.t -= real;
     const k = Math.max(0, boom.t / 1.6);
@@ -631,23 +665,21 @@ app.ticker.add((tk) => {
   halosU.visible = !low;
 
   // 먼지: 빛 속에서만 보이는 부유물
-  if (Math.random() < (low ? 0.08 : 0.35)) {
-    const x = cam.x + Math.random() * viewW, y = cam.y + Math.random() * VIEW_H;
+  if (Math.random() < (low ? 0.08 : 0.3)) {
+    const x = GX + Math.random() * GW * T, y = cam.y + Math.random() * VIEW_H;
     if (!isSolid(cellAt(Math.floor(x / T), Math.floor(y / T))) && y > GY)
       particle(dustA, { x, y, vx: (Math.random() - 0.5) * 4, vy: -1 - Math.random() * 2, life: 3 + Math.random() * 2, color: 0xc8b8a0, g: 0 });
   }
   updateParticles(dt);
 
-  // 카메라 · 흔들림
+  // 카메라 · 흔들림 · 패럴랙스 (월드에 놓인 겹: tilePosition = cam × (1 - 배율))
   let sx = 0, sy = 0;
   if (shake > 0) { shake -= real; sx = Math.round((Math.random() * 2 - 1) * shakeAmp); sy = Math.round((Math.random() * 2 - 1) * shakeAmp); }
   const cx = Math.round(cam.x) + sx, cy = Math.round(cam.y) + sy;
   for (const w of [wA, wN, wU]) w.position.set(-cx, -cy);
-  farA.tilePosition.set(Math.round(cx * 0.8), Math.round((cy - GY) * 0.8));
-  midA.tilePosition.set(Math.round(cx * 0.5), Math.round((cy - GY) * 0.5 + 20));
-  const fgTop = Math.max(cy, GY + 24);
-  fgU.position.set(cx, fgTop); fgU.height = Math.max(0, cy + VIEW_H - fgTop);
-  fgU.tilePosition.set(Math.round(-cx * 1.3), Math.round(-cy * 1.3 - (fgTop - cy)));
+  for (const s of farA) s.tilePosition.y = Math.round(cy * 0.8);
+  for (const s of midA) s.tilePosition.y = Math.round(cy * 0.5);
+  for (const s of fgSides) s.tilePosition.y = Math.round(-cy * 0.3);
   fgU.visible = !low;
 
   // 조명 합성 → 발광/헤일로 → 후처리
@@ -660,6 +692,8 @@ app.ticker.add((tk) => {
   lu.uCount = lights.length; lu.uSteps = low ? 6 : 12; lu.uRelief = low ? 0.6 : 1.1;
   const pu = postPass.shader.resources.u.uniforms;
   pu.uView = [viewW, VIEW_H]; pu.uTilt = low ? 0 : (shake > 0 ? 0.5 : 1); pu.uVig = low ? 0 : 0.38;
+  pu.uBand = TILT_BAND;
+  pu.uGrid = [(GX - cx) / viewW, (GY - cy) / VIEW_H, (GX + GW * T - cx) / viewW, (GY + GH * T - cy) / VIEW_H];
   pu.uTint = low ? [1, 1, 1] : TINT;
   flash = Math.max(0, flash - real * 3);
   pu.uFlash = [flash * 0.9, flash * 0.85, flash * 0.7];

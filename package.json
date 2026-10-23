@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "art": "node scripts/art.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "portraits": "node scripts/portraits.mjs"
   },
   "license": "ISC",
   "type": "module",
@@ -16,6 +17,7 @@
     "pixi.js": "^8.22.0"
   },
   "devDependencies": {
+    "pngjs": "^7.0.0",
     "vite": "^6.4.5"
   },
   "private": true

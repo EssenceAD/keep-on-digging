@@ -67,7 +67,7 @@ void main() {
   finalColor = vec4(alb.rgb * light, alb.a);
 }`;
 
-// 틸트 시프트(위아래 15% 블러) · 층 색온도 · 비네팅
+// 틸트 시프트(위아래 uBand 블러, 격자 영역은 마스크로 제외) · 층 색온도 · 비네팅
 const POST_FRAG = `
 precision highp float;
 in vec2 vUV;
@@ -75,6 +75,8 @@ out vec4 finalColor;
 uniform sampler2D uTex;
 uniform vec2 uView;
 uniform float uTilt;
+uniform float uBand;
+uniform vec4 uGrid;   // 격자 영역 (뷰 uv: x0, y0, x1, y1)
 uniform float uVig;
 uniform vec3 uTint;
 uniform vec3 uFlash;
@@ -82,7 +84,9 @@ uniform vec3 uFlash;
 void main() {
   vec2 px = 1.0 / uView;
   float y = vUV.y;
-  float b = clamp(max(0.15 - y, y - 0.85) / 0.15, 0.0, 1.0) * uTilt;
+  float b = clamp(max(uBand - y, y - (1.0 - uBand)) / uBand, 0.0, 1.0) * uTilt;
+  bool inGrid = vUV.x >= uGrid.x && vUV.x < uGrid.z && vUV.y >= uGrid.y && vUV.y < uGrid.w;
+  if (inGrid) b = 0.0;
   vec4 col = texture(uTex, vUV);
   if (b > 0.01) {
     vec4 acc = vec4(0.0);
@@ -136,6 +140,8 @@ export function makePostPass(lit) {
     u: {
       uView: { value: [1, 1], type: 'vec2<f32>' },
       uTilt: { value: 1, type: 'f32' },
+      uBand: { value: 0.1, type: 'f32' },
+      uGrid: { value: [0, 0, 0, 0], type: 'vec4<f32>' },
       uVig: { value: 0.5, type: 'f32' },
       uTint: { value: [1, 1, 1], type: 'vec3<f32>' },
       uFlash: { value: [0, 0, 0], type: 'vec3<f32>' },

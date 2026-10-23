@@ -12,13 +12,14 @@
 
   <div class="hud tl glass">
     <b>돌망치 상회</b> · 뒷산 1구획
-    <small>HD-2D 비주얼 프로토타입 v0.1</small>
+    <small>HD-2D 비주얼 프로토타입 v0.2</small>
   </div>
   <div class="hud tr">
     <div class="glass stat"><i class="ic ic-g"></i><span id="cnt-g">0</span></div>
     <div class="glass stat"><i class="ic ic-c"></i><span id="cnt-c">0</span></div>
     <div class="glass stat"><i class="ic ic-ore"></i><span id="cnt-ore">0</span></div>
   </div>
+  <div id="miner-card" class="hud ml glass"><img id="miner-face" alt="붉은 수염 광부" /><div><b>붉은 수염</b> · 광부<small id="miner-state">금맥 캐는 중</small></div></div>
   <div class="hud bl glass hint">칸 톡 = 곡괭이 · 랜턴 끌기 = 빛 옮기기 · 빈 곳 끌기 = 화면 이동<span id="fps"></span></div>
   <div class="hud br">
     <button id="btn-boom" class="glass">대박 연출</button>
@@ -28,7 +29,7 @@
     <button id="btn-full" class="glass">전체 화면</button>
   </div>
   <div id="toast" class="glass"></div>
-  <div id="ref"><figure class="glass"><img id="ref-img" alt="pxl이 구운 기준 장면" /><figcaption>pxl이 구운 기준컷 (lamp 2 + lighting ambient 0.3 + glow) · 눌러서 닫기</figcaption></figure></div>
+  <div id="ref"><figure class="glass"><div class="refs"><img id="ref-shaft" alt="갱도 초안" /><img id="ref-office" alt="사무소 초안" /></div><figcaption>pxl이 구운 초안 — shaft_night · office_night (art/shaft.px.js · art/office/office.px.js) · 눌러서 닫기</figcaption></figure></div>
   <div id="rotate">폰을 가로로 돌려 주세요</div>
   <script type="module" src="/src/main.js"></script>
 </body>
