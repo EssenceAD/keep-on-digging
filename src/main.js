@@ -495,6 +495,7 @@ function startDig() {
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) refreshAround(gx, gy, 0);
   save(); buildUI();
 }
+function askRetreat() { endRound(); }
 function endRound() {
   if (!S.round) return;
   S.round.state = 'RESULT';
@@ -866,8 +867,12 @@ function makeSurveyBar(x, y, w) {
 }
 function makeDigBar(x, y, w) {
   const c = new Container(); c.position.set(x, y);
-  const b = button('stone', 44, 16, '철수', () => endRound(), { small: true }); b.position.set(w - 48, 0); c.addChild(b);
-  setOverlayRect(x + w - 48, y, 44, 16);
+  const b = button('stone', 44, 16, '철수', () => askRetreat(), { small: true }); b.position.set(w - 48, 0); c.addChild(b);
+  let bw = 48;
+  if (W?.water.some((r) => r.some(Boolean)) && !(S.round.pumpLeft > 0)) {
+    const pmp = button('paper', 56, 16, `펌프 ${B.pumpCost}`, pump, { small: true }); pmp.position.set(w - 108, 0); c.addChild(pmp); bw = 108;
+  }
+  setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
 }
 function makeResult(x, y, w, h) {
@@ -1199,7 +1204,109 @@ function breakCell(gx, gy, from) {
   claimVeinsNear(gx, gy);
   syncRound();
 }
-let onCellBroken = null;                                    // 6단계 사건(지하수·가스·몬스터)이 여기 붙는다
+// ---------------------------------------------------------------- 사건 (명세2 §7): 붕괴 · 지하수 · 가스 · 갱도 몬스터
+const EVENT_NAME = { collapse: '갱도 붕괴', water: '지하수', gas: '가스', monster: '갱도 몬스터', boom: '가스 폭발' };
+function logEvent(kind) { S.round.stats.events.push(kind); eventLog.unshift(`${clockText().split(' ')[1]} ${EVENT_NAME[kind]}`); eventLog.length = Math.min(eventLog.length, 8); }
+const eventLog = [];
+let onCellBroken = (gx, gy, t) => {
+  const rd = S.round;
+  // 물 칸 바로 위·옆이 뚫리면 물이 흘러듦
+  if (t !== 'w' && (W.water[gy - 1]?.[gx] || W.water[gy][gx - 1] || W.water[gy][gx + 1]) && !(rd.pumpLeft > 0)) t = 'flow';
+  if (t === 'w' || t === 'flow') {                                           // 지하수: 그 칸에서 아래(·옆)로 이어진 뚫린 칸이 물로 참
+    const q = [[gx, gy]], seen = new Set([`${gx},${gy}`]);
+    while (q.length) {
+      const [x, y] = q.shift(); W.water[y][x] = true;
+      for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0]]) {
+        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+        if (isDug(nx, ny) && !seen.has(key) && (dy === 1 || !isDug(x, y + 1) || W.water[y + 1]?.[x])) { seen.add(key); q.push([nx, ny]); }
+      }
+    }
+    fx('fx_water', cellX(gx), GY + gy * T + 8);
+    if (t === 'flow') return;
+    sfx('break'); logEvent('water');
+    toast(`지하수가 터졌어요! 물 칸은 걸음이 느려지고 광차가 못 지나가요 — [펌프 ${B.pumpCost}]`, 'momo', 4);
+    buildUI();
+  }
+  if (t === 'x') {                                           // 가스: 30초 채굴 정지 · 랜턴 불꽃이 닿으면 폭발
+    rd.gasLeft = B.gasSeconds; rd.gasCell = [gx, gy];
+    fx('fx_gas', cellX(gx), GY + gy * T + 8); logEvent('gas');
+    for (const a of crew) emote(a, '콜록콜록', 2);
+    toast(`가스가 새어 나와요! ${B.gasSeconds}초 쉬어 가요 (랜턴 불꽃은 멀리…)`, 'momo', 4);
+  }
+  if (t === 'o' && Math.random() < B.monsterChance) {        // 동굴: 10%로 갱도 몬스터 (이번 단계: 광차 길막)
+    (rd.monsters ??= []).push({ gx, gy, until: time + B.monsterSeconds });
+    logEvent('monster');
+    toast('동굴에서 슬라임이 나왔어요! 광차가 지나가지 못해요', 'momo', 3);
+  }
+};
+function pump() {
+  if (S.gold < B.pumpCost) { toast('금화가 모자라요'); return; }
+  S.gold -= B.pumpCost; refreshUI(); sfx('stash');
+  S.round.pumpLeft = B.pumpSeconds; toast(`펌프 가동! ${B.pumpSeconds}초 뒤 물이 빠져요`);
+  buildUI();
+}
+function explode(gx, gy) {                                   // 랜턴 불꽃 + 가스 = 폭발: 3×3 흙·바위가 뚫림 + 근처 광부 체력 −1
+  const rd = S.round;
+  rd.gasLeft = 0; rd.gasCell = null; logEvent('boom');
+  flash = 0.8; shake = 0.5; shakeAmp = 4; sfx('bell'); sfx('break');
+  fx('fx_daebak', cellX(gx), GY + gy * T + 8); fx('fx_collapse', cellX(gx), GY + gy * T + 8);
+  const r = B.explosionRadius;
+  for (let y = gy - r; y <= gy + r; y++) for (let x = gx - r; x <= gx + r; x++) {
+    if (!inGrid(x, y) || isDug(x, y)) continue;
+    if (W.g[y][x] === 'd' || W.g[y][x] === 'r') breakCell(x, y, null);
+  }
+  for (const a of crew) if (typeof a.node === 'number') { const [x, y] = cxy(a.node); if (Math.abs(x - gx) <= r + 1 && Math.abs(y - gy) <= r + 1) hurt(a); }
+  toast('쾅! 가스가 폭발했어요 — 위험한 꼼수!', 'halabeoji', 3);
+}
+/** 붕괴: 뚫린 칸 ≥ 15일 때, 가로로 이어진 2~3칸이 흙으로 메워짐 */
+function collapse() {
+  const len = B.collapseLen[0] + Math.floor(Math.random() * (B.collapseLen[1] - B.collapseLen[0] + 1));
+  const busy = new Set(crew.concat([cart]).filter((a) => typeof a.node === 'number').map((a) => a.node));
+  const runs = [];
+  for (let y = 1; y < W.rows; y++) for (let x = 0; x + len <= GW; x++) {
+    let ok = true;
+    for (let k = 0; k < len; k++) if (!isDug(x + k, y) || ladderAt(x + k, y) || busy.has(idx(x + k, y))) { ok = false; break; }
+    if (ok) runs.push([x, y]);
+  }
+  if (!runs.length) return false;
+  const [x0, y0] = runs[Math.floor(Math.random() * runs.length)];
+  for (let k = 0; k < len; k++) { W.g[y0][x0 + k] = 'd'; W.rail[y0][x0 + k] = false; W.water[y0][x0 + k] = false; }
+  for (let k = 0; k < len; k++) refreshAround(x0 + k, y0, 1);
+  drawEdges(); drawSolid(); drawProps(); syncRound();
+  fx('fx_collapse', cellX(x0) + (len - 1) * T / 2, GY + y0 * T + 6);
+  shake = 0.3; shakeAmp = 2; sfx('break');
+  logEvent('collapse');
+  toast('갱도 천장이 무너졌어요! 다시 그리면 돼요 (흙 0.6초)', 'halabeoji', 3);
+  return true;
+}
+function updateEvents(dt) {
+  const rd = S.round;
+  if (!rd || rd.state !== 'DIG') return;
+  rd.eventT ??= B.eventGap[0] + Math.random() * (B.eventGap[1] - B.eventGap[0]);
+  rd.eventMax ??= B.eventsPerRound[0] + Math.floor(Math.random() * (B.eventsPerRound[1] - B.eventsPerRound[0] + 1));
+  rd.eventT -= dt;
+  const dug = W.g.flat().filter((c) => c === '.').length;
+  if (rd.eventT <= 0) {
+    rd.eventT = B.eventGap[0] + Math.random() * (B.eventGap[1] - B.eventGap[0]);
+    const done = rd.stats.events.filter((e) => e === 'collapse').length;
+    if (done < rd.eventMax && dug >= B.collapseMinDug) collapse();
+  }
+  if (rd.gasLeft > 0) {
+    rd.gasLeft -= dt;
+    const [lx, ly] = lanternFlame();
+    if (rd.gasCell && Math.hypot(lx - cellX(rd.gasCell[0]), ly - (GY + rd.gasCell[1] * T + 8)) <= B.gasLanternCells * T) explode(...rd.gasCell);
+    else if (rd.gasLeft <= 0) { rd.gasCell = null; toast('가스가 다 빠졌어요. 다시 캐요!'); }
+    if (Math.random() < dt * 0.5) for (const a of crew) if (a.y > GY && Math.random() < 0.4) emote(a, '콜록', 1);
+  }
+  if (rd.pumpLeft > 0) {
+    rd.pumpLeft -= dt;
+    if (rd.pumpLeft <= 0) { for (const row of W.water) row.fill(false); syncRound(); toast('물이 다 빠졌어요'); buildUI(); }
+  }
+  if (rd.monsters?.length) {
+    for (const m of rd.monsters) if (m.until <= time && !m.gone) { m.gone = true; toast('슬라임이 사라졌어요'); }
+    rd.monsters = rd.monsters.filter((m) => m.until > time);
+  }
+}
 
 // ---- 갱도 그리기 (손가락 연속 드래그, 상하좌우만)
 const drawing = { on: false, path: [], from: null, g: new Graphics(), label: null };
@@ -1310,7 +1417,7 @@ function updateDigger(a, dt) {
     // 도착: 곡괭이질 (0줄은 지상에서 그 열까지 걸어가서)
     if (!standGoal(x, y)(nodeOf(a))) { a.job = null; return; }
     if (nodeOf(a) === 'S' && Math.abs(a.x - cellX(x)) > 0.5) { const d = cellX(x) - a.x; a.face = Math.sign(d); a.x += Math.sign(d) * Math.min(Math.abs(d), B.walkSpeed * T * dt); setAnim(a, 'red_walk'); a.state = 'walk'; return; }
-    if (S.round.gasUntil > time) { setAnim(a, 'red_idle'); a.state = 'cough'; return; }
+    if (S.round.gasLeft > 0) { setAnim(a, 'red_idle'); a.state = 'cough'; return; }
     a.state = 'dig';
     const sx = typeof a.node === 'number' ? cxy(a.node)[0] : x;
     a.face = x > sx ? 1 : x < sx ? -1 : a.face;
@@ -1512,6 +1619,7 @@ function updateCart(dt) {
     cart.trips = (cart.trips ?? 0) + 1;
     const stop = cartStop();
     cart.path = cartPath('S', (n) => n === stop) ?? [];
+    if (stop !== 'S' && !cart.path.length) emote(cart, '길이 막혔어요!', 2);
     cart.mode = cart.path.length ? 'back' : 'park';
     return;
   }
@@ -1645,10 +1753,24 @@ function updateCrew(dt) {
   });
   for (let k = marks.length - 1; k >= 0; k--) { marks[k].t -= dt; marks[k].s.alpha = Math.floor(marks[k].t * 10) % 2 ? 1 : 0.4; if (marks[k].t <= 0) { marks[k].s.destroy(); marks.splice(k, 1); } }
   updateStars(dt);
+  if (W) updateEvents(dt);
+  // 물 · 몬스터
+  if (W) {
+    for (let y = 0; y < W.rows; y++) for (let x = 0; x < GW; x++) if (W.water[y][x] && isDug(x, y)) {
+      const px = GX + x * T, py = GY + y * T, wave = Math.round(Math.sin(time * 3 + x) * 0.6);
+      overA.rect(px, py + 3 + wave, T, T - 3 - wave).fill({ color: 0x3d5a9a, alpha: 0.55 }).rect(px, py + 3 + wave, T, 1).fill({ color: 0x9ac0f0, alpha: 0.8 });
+    }
+    const ms = S.round?.monsters ?? [];
+    slimes.forEach((sp, i) => { sp.visible = i < ms.length; });
+    ms.forEach((m, i) => {
+      const sp = slimes[i] ?? (slimes[i] = (() => { const q = new Sprite(F.slime[0]); q.anchor.set(0.5, 1); q.scale.set(1); charsA.addChild(q); return q; })());
+      sp.texture = F.slime[Math.floor(time * 4) % F.slime.length]; sp.position.set(cellX(m.gx), floorY(m.gy)); sp.visible = true;
+    });
+  }
   if (W) updateCart(dt);
   drawCart(dt);
 }
-const pileSprites = [];
+const pileSprites = [], slimes = [];
 
 // ---------------------------------------------------------------- 튜토리얼 훅 (7단계에서 채움)
 function tutorialDone(stepN) { tutorialHook?.(stepN); }
@@ -1804,7 +1926,9 @@ app.ticker.add((tk) => {
   pu.uGrid = [(GX * DENS - crx) / viewW, (GY * DENS - cry) / viewH, ((GX + GW * T) * DENS - crx) / viewW, ((GY + GH * T) * DENS - cry) / viewH];
   pu.uTint = low ? [1, 1, 1] : TINT;
   flash = Math.max(0, flash - real * 3);
-  pu.uFlash = [flash * 0.9, flash * 0.85, flash * 0.7];
+  const gas = S.round?.gasLeft > 0 ? 0.12 + 0.05 * Math.sin(time * 3) : 0;
+  pu.uFlash = [flash * 0.9, flash * 0.85 + gas * 0.6, flash * 0.7];
+  pu.uGas = gas;
 
   R.render({ container: wA, target: albedoRT, clear: true, clearColor: [0.04, 0.035, 0.06, 1] });
   R.render({ container: wN, target: normalRT, clear: true, clearColor: [0, 0, 0, 0] });
@@ -1826,7 +1950,7 @@ else {
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; },
+  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart,
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });

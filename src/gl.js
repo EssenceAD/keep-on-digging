@@ -81,6 +81,7 @@ uniform vec4 uGrid;   // 격자 영역 (뷰 uv: x0, y0, x1, y1)
 uniform float uVig;
 uniform vec3 uTint;
 uniform vec3 uFlash;
+uniform float uGas;    // 가스: 화면 가장자리 초록
 
 void main() {
   vec2 px = 1.0 / uView;
@@ -102,7 +103,8 @@ void main() {
   col.rgb *= uTint;
   vec2 q = (vUV - 0.5) * vec2(1.0, 1.25);
   col.rgb *= 1.0 - uVig * dot(q, q) * 1.6;
-  col.rgb += uFlash;
+  col.rgb += vec3(uFlash.r, uFlash.g - uGas * 0.6, uFlash.b);
+  col.rgb = mix(col.rgb, col.rgb * vec3(0.7, 1.15, 0.7) + vec3(0.0, 0.08, 0.0), clamp(uGas * 6.0 * dot(q, q), 0.0, 0.8));
   finalColor = vec4(col.rgb, 1.0);
 }`;
 
@@ -147,6 +149,7 @@ export function makePostPass(lit) {
       uVig: { value: 0.5, type: 'f32' },
       uTint: { value: [1, 1, 1], type: 'vec3<f32>' },
       uFlash: { value: [0, 0, 0], type: 'vec3<f32>' },
+      uGas: { value: 0, type: 'f32' },
     },
   });
 }
