@@ -169,10 +169,7 @@ sheet("shaft_props", ["miner", "pickaxe", "cart", "lantern", "support", "stalact
 // ================================================================ keep-on-digging 추가 (Code) — 같은 팔레트·문법
 pal({ "1": "#c4522a", "2": "#8a3420", "3": "#e07a3a" })   // 붉은 수염 (mine_miners3 첫째 광부)
 
-// 빈 광차 (광석을 창고에 내린 뒤)
-sprite("cart_empty", { outline: "k", w: 20, h: 14 },
-  rect(2, 3, 16, 8, "s"), rect(3, 4, 14, 6, "S"), hline(2, 3, 16, "i"), vline(2, 3, 8, "i"), rect(4, 4, 12, 2, "k"),
-  circ(6, 12, 2, "K"), circ(14, 12, 2, "K"), px(6, 12, "I"), px(14, 12, "I"))
+// (빈 광차는 v0.5부터 art/chars.px.js 광차를 쓴다)
 
 // 붉은 수염 광부: 위 "miner" 그림에 수염·구레나룻을 붉게, 멜빵 갈색 + 곡괭이 휘두르기 4프레임
 const MINER_RED = `

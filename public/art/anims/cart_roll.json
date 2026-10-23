@@ -1,0 +1,106 @@
+{
+ "frames": {
+  "cart_roll_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 23
+   },
+   "duration": 125
+  },
+  "cart_roll_1": {
+   "frame": {
+    "x": 30,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 23
+   },
+   "duration": 125
+  },
+  "cart_roll_2": {
+   "frame": {
+    "x": 60,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 23
+   },
+   "duration": 125
+  },
+  "cart_roll_3": {
+   "frame": {
+    "x": 90,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 30,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 30,
+    "h": 23
+   },
+   "duration": 125
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "cart_roll.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 120,
+   "h": 23
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "cart_roll",
+    "from": 0,
+    "to": 3,
+    "direction": "forward"
+   }
+  ]
+ }
+}

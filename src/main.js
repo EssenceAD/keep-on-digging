@@ -14,14 +14,26 @@ import { MAX_LIGHTS, makeLightPass, makePostPass } from './gl.js';
 import { sfx, setSound, soundOn, unlockAudio } from './sound.js';
 import { COLOR, bar, button, frame, icon, kit, label, loadUI, portraitFrame, setTextRes, tab } from './ui.js';
 import { BUYERS, ORES, createMarket } from './market.js';
+import { B } from './balance.js';
+import { loadSave, writeSave } from './save.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v0.4';
+const VERSION = 'v0.5';
+
+// ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
+const S = loadSave();
+const save = () => writeSave(S);
+setInterval(save, B.autosaveSeconds * 1000);
+window.addEventListener('pagehide', save);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+// 게임 시계: 현실 24분 = 하루
+const TICK_PER_DAY = B.dayRealSeconds;
+const clockText = () => { const t = S.tick / TICK_PER_DAY * 24; return `${S.day}일차 ${String(Math.floor(t)).padStart(2, '0')}:${String(Math.floor((t % 1) * 60)).padStart(2, '0')}`; };
+const whTotal = () => Object.values(S.warehouse).reduce((a, b) => a + b, 0);
 
 // ---------------------------------------------------------------- 세계 (단위 = 타일 1px. 화면에는 DENS배 촘촘하게 그린다)
 const T = 16, GW = 12, GH = 16;
 const DENS = 2;                           // 화면 픽셀 / 월드 px — 캐릭터·이펙트는 이 밀도(32×40 치비 = 1칸 × 1.25칸)
-const MIN_CELL = 36;                      // 칸의 화면 크기 최소 36px (§10)
 const SIDE = 2;                           // 격자 양옆 패럴랙스 바위 칸 수 (가로 화면에서 보인다)
 const GX = SIDE * T, GY = 48;             // 구획(격자) 왼쪽 위 (지상 띠 48px = 3칸)
 const WW = GX * 2 + GW * T;               // 256
@@ -73,8 +85,8 @@ const isSolid = (ch) => ch !== 'sky' && !empty(ch);
 
 // ---------------------------------------------------------------- 설정 · 저사양
 const qs = new URLSearchParams(location.search);
-let low = qs.get('low') === '1';
-try { if (!qs.has('low') && localStorage.getItem('kod.low') === '1') low = true; } catch {}
+let low = qs.has('low') ? qs.get('low') === '1' : !!S.settings.low;
+setSound(S.settings.sound !== false);
 const AMBIENT = Number(qs.get('ambient') || 0.4);
 const AMB_COLOR = [0.86, 0.82, 1.0];     // 회보라 앰비언트
 const TINT = [1.05, 0.98, 0.9];          // 뒷산 층 색온도 (갈색·노을)
@@ -95,11 +107,11 @@ const SPRITES = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper'
   'tunnel', 'tunnel_beam', 'rail', 'stalactite', 'mushroom', 'side_far', 'side_mid', 'side_fg',
   'sky_far', 'deep_far', 'deep_mid', 'deep_fg', 'bubble_dig', 'bubble_walk', 'bubble_rest',
   'icon_gold', 'icon_glow', 'icon_silver', 'icon_copper', 'icon_gem',
-  'wagon_full', 'wagon_empty', 'npc_halabeoji', 'npc_momo', 'npc_brok', 'npc_merchant'];
+  'cart_gold', 'cart_empty', 'npc_halabeoji', 'npc_momo', 'npc_brok', 'npc_merchant'];
 const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver'];
 const FX = ['fx_hit', 'fx_dirt', 'fx_rock', 'fx_vein', 'fx_vein_glow', 'fx_daebak', 'fx_gas', 'fx_water', 'fx_collapse', 'fx_cart', 'fx_pulse'];
 const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'red_swing', 'brown_idle', 'brown_walk',
-  'blonde_idle', 'blonde_walk', 'mole_sniff', 'wagon_roll', 'wagon_empty_roll', ...FX];
+  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', ...FX];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
   ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
@@ -397,7 +409,7 @@ const ROUTE = [
   [GX + 7 * T + 8, railY(8), 'load'], [GX + 7 * T + 8, railY(4), 'lift'], [GX + 2 * T + 8, railY(4)],
   [GX + 2 * T + 8, 39, 'lift'], [190, 39, 'unload'],
 ];
-const cart = actor({ anim: 'wagon_roll', seg: 0, dir: 1, t: 0, wait: 1.2, x: ROUTE[0][0], y: ROUTE[0][1], full: true, moving: false, trips: 0, sparkT: 0 });
+const cart = actor({ anim: 'cart_roll', seg: 0, dir: 1, t: 0, wait: 1.2, x: ROUTE[0][0], y: ROUTE[0][1], full: true, moving: false, trips: 0, sparkT: 0 });
 const cable = new Graphics(); propsA.addChild(cable);
 
 // ---------------------------------------------------------------- 입자 (풀링 · 폰 상한 300)
@@ -425,8 +437,7 @@ function updateParticles(dt) {
 }
 
 // ---------------------------------------------------------------- 창고 · 시세
-const stash = Object.fromEntries(ORES.map((o) => [o.key, 0]));
-let coins = 0;
+const stash = S.warehouse;                              // 창고 (저장됨)
 const market = createMarket();
 
 // ---------------------------------------------------------------- 주스
@@ -525,12 +536,13 @@ function computeLayout() {
   let portraitMode = H >= W * 0.9;
   let cell, uiS, panels, vis;
   if (!portraitMode) {
-    uiS = Math.max(2, Math.min(4, Math.floor(H / 260)));
-    const panelMin = 128 * uiS;                                     // 좌우 패널 최소 폭
-    if (W - 2 * panelMin < 160) portraitMode = true;                // 패널 둘 자리가 없으면 세로 배치
+    // 패드·PC 가로 (명세2 §10): 칸 = 높이/14, 좌우 패널 320px (왼쪽 광부·사건 · 오른쪽 판매)
+    uiS = 2;
+    const side = 320;
+    cell = Math.min(H / 14, (W - 2 * side) / 12);
+    if (cell < 20) portraitMode = true;                             // 패널 둘 자리가 없으면 세로 배치
     else {
-      cell = Math.max(MIN_CELL, Math.min(W / 12, H / 18, (W - 2 * panelMin) / 12));
-      const side = Math.max(panelMin, (W - 12 * cell) / 2), pad = 2 * uiS;
+      const pad = 2 * uiS;
       panels = {
         left: { x: pad, y: pad, w: side - 2 * pad, h: H - 2 * pad },
         right: { x: W - side + pad, y: pad, w: side - 2 * pad, h: H - 2 * pad },
@@ -539,17 +551,18 @@ function computeLayout() {
     }
   }
   if (portraitMode) {
+    // 세로 폰: 칸 = 너비/12. 위 HUD · 지상 띠 · 격자(보이는 만큼, 세로로 끌어 봄) · 아래 시트 32% (접으면 10%)
     uiS = Math.max(2, Math.min(3, Math.floor(W / 195)));
-    const hudH = 36 * uiS, sheetMin = 84 * uiS;
-    cell = Math.max(MIN_CELL, Math.min(W / 12, (H - hudH - sheetMin) / 17));
-    const sheetH = Math.max(sheetMin, H - hudH - 19 * cell);       // 지상 3칸 + 격자 16줄이 다 들어가면 남는 만큼 시트가 커진다
+    cell = W / 12;
+    const hudH = 36 * uiS;
+    const sheetH = Math.round(S.settings.sheetFolded ? Math.max(H * 0.10, 26 * uiS) : Math.max(H * 0.32, 84 * uiS));
     panels = { hud: { x: 0, y: 0, w: W, h: hudH }, sheet: { x: 0, y: H - sheetH, w: W, h: sheetH } };
     vis = { x0: 0, x1: W, y0: hudH, y1: H - sheetH, above: 3 };
   }
   const sc = cell / T;
-  const gridW = 12 * cell, gridH = 16 * cell, visW = vis.x1 - vis.x0, visH = vis.y1 - vis.y0;
-  const gridLeft = vis.x0 + (visW - gridW) / 2;                     // 넘치면 가운데 기준으로 양옆이 잘림 → 끌어서 본다
-  const gridTop = vis.y0 + Math.max(0, Math.min(vis.above * cell, visH - gridH));
+  const gridW = 12 * cell, gridH = GH * cell, visW = vis.x1 - vis.x0, visH = vis.y1 - vis.y0;
+  const gridLeft = vis.x0 + (visW - gridW) / 2;
+  const gridTop = vis.y0 + vis.above * cell;                       // 지상 띠는 늘 보이고, 넘치는 격자는 세로로 끌어 본다
   const overX = Math.max(0, gridW - visW) / sc, overY = Math.max(0, gridTop + gridH - vis.y1) / sc;
   return { W, H, dpr, portrait: portraitMode, cell, sc, uiS, gridLeft, gridTop, panels, overX, overY };
 }
@@ -598,7 +611,7 @@ function buildUI() {
     const sw = u(sheet.w), sh = u(L.H) - u(sheet.y);
     s.addChild(frame('stone', sw, sh + 6, 'panel'));             // 아래 모서리는 화면 밖으로
     const tabs = [['sell', '판매'], ['miner', '광부'], ['set', '설정']];
-    const tw = Math.floor((sw - 12) / 3);
+    const tw = Math.floor((sw - 12 - 22) / 3);
     const body = new Container(); body.position.set(5, 19);
     const bw = sw - 10, bh = sh - 23;
     const show = (key) => {
@@ -616,9 +629,13 @@ function buildUI() {
       if (key === 'sell') ui.sellAnchor = t;
       return t;
     });
+    // 접기/펴기 (32% ↔ 10%)
+    const fold = button('stone', 18, 14, S.settings.sheetFolded ? '▲' : '▼', () => { S.settings.sheetFolded = !S.settings.sheetFolded; save(); layout(); }, { small: true });
+    fold.position.set(sw - 24, 4); s.addChild(fold);
     s.addChild(body);
     uiRoot.addChild(s);
-    show(sheetTab);
+    if (S.settings.sheetFolded) { ui.tabs.forEach((t) => { t.setOn(t.key === sheetTab); t.on('pointertap', () => { S.settings.sheetFolded = false; save(); setTimeout(layout, 0); }); }); }
+    else show(sheetTab);
   } else {
     const { left, right } = L.panels;
     const lc = new Container(); lc.position.set(u(left.x), u(left.y));
@@ -649,13 +666,15 @@ function makeHud(w, h) {
   if (!wide && w - t1.width > 70) { const t2 = label('뒷산 1구획', { small: true, color: COLOR.dim }); t2.position.set(Math.round(t1.width) + 12, 6); c.addChild(t2); }
   if (wide) { const t2 = label(`뒷산 1구획 · ${VERSION}`, { small: true, color: COLOR.dim }); t2.position.set(7, 17); c.addChild(t2); }
   const cy = wide ? Math.round((h - 14) / 2) : 18;
-  const items = [['coin', kit('coin')], ['g', tex('icon_gold')], ['c', tex('icon_glow')]];
-  const slot = wide ? 34 : Math.floor((w - 14) / 3);
-  items.forEach(([key, tx], k) => {
-    const i = icon(tx), n = label('0');
-    const x0 = wide ? w - 8 - (items.length - k) * slot : 7 + k * slot;
+  // 금화 · 창고 n/60 · 날짜/시각 (명세2 §10)
+  const items = [['coin', kit('coin'), 40], ['wh', tex('icon_gold'), 46], ['clock', null, 70]];
+  const total = items.reduce((a, [, , sw]) => a + sw, 0);
+  let xa = wide ? w - 8 - total : 7;
+  items.forEach(([key, tx, sw]) => {
+    const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' });
+    const x0 = xa; xa += sw;
     i.position.set(x0, cy + Math.round((14 - i.height) / 2));
-    n.position.set(x0 + i.width + 3, cy);
+    n.position.set(x0 + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
     c.addChild(i, n);
     ui.counters[key] = n;
   });
@@ -733,7 +752,7 @@ function makeSettings(w) {
     ['사건 보기', () => randomEvent()],
     ['pxl 기준컷', () => document.getElementById('ref').classList.add('show')],
     [() => `저사양 ${low ? '켬' : '끔'}`, () => setLow(!low)],
-    [() => `소리 ${soundOn() ? '켬' : '끔'}`, () => { unlockAudio(); setSound(!soundOn()); }],
+    [() => `소리 ${soundOn() ? '켬' : '끔'}`, () => { unlockAudio(); setSound(!soundOn()); S.settings.sound = soundOn(); save(); }],
     ['전체 화면', () => document.documentElement.requestFullscreen?.().catch(() => {})],
   ];
   const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 62))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
@@ -749,9 +768,9 @@ function makeSettings(w) {
 
 function refreshUI() {
   if (!ui.counters) return;
-  ui.counters.coin && (ui.counters.coin.text = String(coins));
-  ui.counters.g && (ui.counters.g.text = String(stash.g));
-  ui.counters.c && (ui.counters.c.text = String(stash.c));
+  ui.counters.coin && (ui.counters.coin.text = String(S.gold));
+  ui.counters.wh && (ui.counters.wh.text = `${whTotal()}/${B.warehouseCapacity}`);
+  ui.counters.clock && (ui.counters.clock.text = clockText());
   const sel = ORES.find((o) => o.key === sellSel);
   ui.buyerFace?.setTexture(tex(NPC[sel.buyer]));
   if (ui.buyerName) ui.buyerName.text = `${BUYERS[sel.buyer]} · ${sel.name}`;
@@ -780,7 +799,7 @@ function sell(key, frac) {
   sfx('stash');
   const r = ui.rows[key];
   const from = r ? r.btn.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
-  flyNumber('coin', from.x + 15 * L.uiS, from.y, gain, () => { coins += gain; refreshUI(); bumpCounter('coin'); });
+  flyNumber('coin', from.x + 15 * L.uiS, from.y, gain, () => { S.gold += gain; refreshUI(); bumpCounter('coin'); });
   refreshUI();
 }
 
@@ -796,14 +815,14 @@ function bumpCounter(key) {
 function orePopup(kind, x, y, n) {
   sfx('ore');
   const [sx, sy] = toScreen(x, y);
-  flyNumber(kind, sx, sy, n, () => { stash[kind] += n; refreshUI(); bumpCounter(kind); sfx('stash', true); });
+  flyNumber(kind, sx, sy, n, () => { stash[kind] += n; refreshUI(); bumpCounter('wh'); sfx('stash', true); });
 }
 function flyNumber(kind, sx, sy, n, done) {
   const el = document.createElement('div');
   el.className = `pop pop-${kind}`;
   el.innerHTML = `<i></i>+${n}`;
   document.body.appendChild(el);
-  const target = ui.counters[kind] ?? ui.rows[kind]?.qty ?? ui.sellAnchor;
+  const target = ui.counters[kind] ?? (kind === 'coin' ? null : ui.counters.wh) ?? ui.rows[kind]?.qty ?? ui.sellAnchor;
   const p = target ? target.getGlobalPosition() : { x: L.W / 2, y: 0 };
   const tx = p.x + (target?.width ?? 0) * L.uiS / 2, ty = p.y + 6 * L.uiS;
   const up = el.animate([
@@ -841,10 +860,7 @@ function toast(msg, who) {
   toastT = who ? 2.6 : 1.4;
 }
 
-function setLow(v) {
-  low = v;
-  try { localStorage.setItem('kod.low', v ? '1' : '0'); } catch {}
-}
+function setLow(v) { low = v; S.settings.low = v; save(); }
 document.getElementById('ref').onclick = () => document.getElementById('ref').classList.remove('show');
 document.getElementById('ref-shaft').src = A('scenes/shaft_night.png');
 document.getElementById('ref-office').src = A('scenes/office_night.png');
@@ -973,8 +989,8 @@ function updateCart(dt) {
       }
     }
   }
-  setAnim(cart, cart.full ? 'wagon_roll' : 'wagon_empty_roll');
-  if (!cart.moving) cart.p.t = 0;                         // 멈추면 바퀴도 멈춤
+  setAnim(cart, cart.full ? 'cart_roll' : 'cart_roll_empty');
+  if (!cart.moving) { cart.p.t = 0; cart.p.i = 0; }      // 멈추면 바퀴도 멈춤
   cable.clear();
   const inShaft2 = Math.abs(cart.x - (GX + 2 * T + 8)) < 1 && cart.y < railY(4) - 1;
   const inShaft7 = Math.abs(cart.x - (GX + 7 * T + 8)) < 1 && cart.y > railY(4) + 1 && cart.y < railY(8);
@@ -1008,6 +1024,9 @@ app.ticker.add((tk) => {
   if (slowmo > 0) { slowmo -= real; dt *= 0.25; }
   time += dt;
   market.update(dt);
+  S.tick += real;                                          // 게임 시계 (슬로모·히트스톱과 무관)
+  if (S.tick >= TICK_PER_DAY) { S.tick -= TICK_PER_DAY; S.day++; }
+  if (ui.counters?.clock && (fpsN === 1)) ui.counters.clock.text = clockText();
   eventT -= dt;
   if (eventT <= 0) { eventT = 20 + Math.random() * 15; randomEvent(); }
   if (toastT > 0) { toastT -= real; if (toastT <= 0 && ui.toast) ui.toast.visible = false; }
@@ -1135,7 +1154,7 @@ app.ticker.add((tk) => {
 
 window.__kod = {
   cam, lantern, tiles, grid, lights, bigVein, toScreen, tap, stash, market, fx, randomEvent, actors,
-  get L() { return L; }, get ui() { return ui; }, get coins() { return coins; },
+  get L() { return L; }, get ui() { return ui; }, get S() { return S; },
   // README 스크린샷 (dev 서버에서만 저장됨). 창이 가려져 프레임이 안 돌 때도 찍히게: 시계를 직접 n프레임 돌린 뒤 찍는다
   async shot(name, frames = 240) {
     let t = performance.now();

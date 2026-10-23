@@ -176,6 +176,17 @@ anim("cart_roll", { w: 28, h: 21, frames: 4, fps: 8, outline: "k" }, (c) => {
   if (f === 1) c.px(2, 19, "L")                                              // 바퀴 불꽃
 })
 
+// ---- Code 추가 (v0.5): 빈 광차·발광 광석 광차도 굴러가게 (cart_roll과 같은 프레임, 더미만 바꿈)
+const roll = (name, pile) => anim(name, { w: 28, h: 21, frames: 4, fps: 8, outline: "k" }, (c) => {
+  const f = c.frame, jolt = f % 2
+  c.stamp(pile, 5, 1 + jolt); c.stamp("_cart_body", 0, 4 + jolt)
+  for (const [x, y] of [[3, 5], [11, 5], [19, 5], [3, 10], [19, 10]]) c.stamp("_rivet", x, y + 1 + jolt)
+  c.stamp("_wheel", 3, 13, { frame: f }); c.stamp("_wheel", 14, 13, { frame: f })
+  c.px(24 + f, 18 - (f % 2), "i"); c.px(25 + f, 19, "s")
+  if (f === 1) c.px(2, 19, "L")
+})
+roll("cart_roll_empty", "_ore_pile_empty"); roll("cart_roll_glow", "_ore_pile_glow")
+
 // ================================================================ 데모
 scene("chars_demo", { w: 160, h: 72, bg: "K" },
   rect(0, 40, 160, 32, "e"), hline(0, 40, 160, "W"),
