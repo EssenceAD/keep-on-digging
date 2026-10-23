@@ -11,7 +11,7 @@ import {
 import { MAX_LIGHTS, makeLightPass, makePostPass } from './gl.js';
 import { sfx, setSound, soundOn, unlockAudio } from './sound.js';
 import { COLOR, bar, button, frame, icon, kit, label, loadUI, portraitFrame, setTextRes, tab } from './ui.js';
-import { BUYERS, ORES, createMarket } from './market.js';
+import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
 import { loadSave, resetSave, writeSave } from './save.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
@@ -423,7 +423,10 @@ function updateParticles(dt) {
 
 // ---------------------------------------------------------------- 창고 · 시세
 const stash = S.warehouse;
-const market = createMarket();
+const market = createMarket(S.prices ?? undefined);
+S.prices = market;                                        // 저장 시 market.toJSON()
+const buyer = () => S.settings.buyer ?? 'merchant';
+const priceOf = (key) => market.price(key, buyer(), now());
 
 // ---------------------------------------------------------------- 주스
 let shake = 0, shakeAmp = 0, hitstop = 0, slowmo = 0, flash = 0, boom = null;
@@ -687,7 +690,7 @@ const inPanels = (sx, sy) => Object.values(L.panels).some((p) => sx >= p.x && sx
 
 // ================================================================ UI (art/ui/ui.px.js 틀 · 인물은 틀 안에서만)
 let ui = {};
-let sheetTab = 'sell', sellSel = 'g';
+let sheetTab = 'sell';
 
 function buildUI() {
   if (!L) return;
@@ -880,43 +883,43 @@ function makeResult(x, y, w, h) {
 function makeSell(w, h) {
   const c = new Container();
   c.addChild(frame('paper', w, h, 'panel'));
-  const compact = h < 110;
-  const pf = portraitFrame(tex(NPC[ORES.find((o) => o.key === sellSel).buyer]), 46, 'wood');
-  pf.position.set(5, 5); c.addChild(pf);
-  ui.buyerFace = pf;
-  let rowsX = 56, rowsY = 6, rowW = w - rowsX - 6;
-  if (!compact) {
-    const head = label('', { color: COLOR.paperInk, shadow: false }); head.position.set(56, 8); c.addChild(head);
-    const sub = label('시세는 10초마다 바뀌어요', { small: true, color: 0x8a7a68, shadow: false }); sub.position.set(56, 24); c.addChild(sub);
-    ui.buyerName = head;
-    rowsX = 6; rowsY = 56; rowW = w - 12;
-  }
-  const rowH = 17;
-  const maxRows = Math.max(1, Math.floor((h - rowsY - (compact ? 4 : 26)) / rowH));
-  ORES.slice(0, maxRows).forEach((o, i) => {
-    const r = new Container(); r.position.set(rowsX, rowsY + i * rowH);
+  // 머리: 매입자 초상(틀 안) + 이름·좋아하는 광종 + [바꾸기]
+  const by = buyer(), b = B.buyers[by];
+  const face = Math.min(36, h - 4 - 5 * 13 - 20);
+  const pf = portraitFrame(tex(NPC[by]), Math.max(24, face), 'wood'); pf.position.set(4, 4); c.addChild(pf);
+  const fx0 = Math.max(24, face) + 8;
+  const nm = label(b.name, { color: COLOR.paperInk, shadow: false, small: face < 30 }); nm.position.set(fx0, face < 30 ? 2 : 4); c.addChild(nm);
+  const likes = b.like.map((k) => ORES.find((o) => o.key === k).name).join('·');
+  const sub = label(`${likes} +${Math.round(b.bonus * 100)}%`, { small: true, color: 0x8a7a68, shadow: false }); sub.position.set(fx0, face < 30 ? 13 : 18); c.addChild(sub);
+  const sw = button('paper', 40, 16, '바꾸기', () => { S.settings.buyer = by === 'brok' ? 'merchant' : 'brok'; sfx('stash', true); save(); buildUI(); }, { small: true });
+  sw.position.set(w - 44, 4); c.addChild(sw);
+  // 행
+  const top = Math.max(24, face) + 6, rowH = 13;
+  const rowsN = Math.max(1, Math.min(ORES.length, Math.floor((h - top - 19) / rowH)));
+  const order = ORES.slice().sort((p, q) => (stash[q.key] > 0) - (stash[p.key] > 0));   // 가진 것 먼저
+  const rowW = w - 8;
+  order.slice(0, rowsN).forEach((o, i) => {
+    const r = new Container(); r.position.set(4, top + i * rowH);
     const bg = new Graphics(); r.addChild(bg);
-    const ic = icon(tex(ICON[o.key])); ic.position.set(2, Math.round((14 - ic.height) / 2) + 1); r.addChild(ic);
-    let x = 14;
-    if (!compact) { const nm = label(o.name, { color: COLOR.paperInk, shadow: false, small: true }); nm.position.set(x, 3); r.addChild(nm); x += 38; }
-    const qty = label('×0', { color: COLOR.paperInk, shadow: false, small: true }); qty.position.set(x, 3); r.addChild(qty); x += 24;
-    const price = label('0', { color: COLOR.paperInk, shadow: false, small: true }); price.position.set(x, 3); r.addChild(price); x += 18;
-    const arrow = icon(kit('arrow_up')); arrow.position.set(x, 4); r.addChild(arrow); x += 10;
-    const spark = new Graphics(); spark.position.set(x, 2); r.addChild(spark);
-    const btn = button('paper', 30, 14, '팔기', () => sell(o.key, 1), { small: true });
+    const ic = icon(tex(ICON[o.key])); ic.position.set(2, Math.round((13 - ic.height) / 2) + 1); r.addChild(ic);
+    let x = 13;
+    const nmw = rowW > 150 ? 36 : 0;
+    if (nmw) { const t = label(o.name, { color: COLOR.paperInk, shadow: false, small: true }); t.position.set(x, 2); r.addChild(t); x += nmw; }
+    const qty = label('×0', { color: COLOR.paperInk, shadow: false, small: true }); qty.position.set(x, 2); r.addChild(qty); x += 26;
+    const price = label('0', { color: COLOR.paperInk, shadow: false, small: true }); price.position.set(x, 2); r.addChild(price); x += 22;
+    const arrow = icon(kit('arrow_up')); arrow.position.set(x, 3); r.addChild(arrow); x += 10;
+    const spark = new Graphics(); spark.position.set(x, 1); r.addChild(spark);
+    const btn = button('paper', 30, 12, '팔기', () => sell(o.key, 1), { small: true });
     btn.position.set(rowW - 31, 0); r.addChild(btn);
-    bg.eventMode = 'static'; bg.cursor = 'pointer';
-    bg.hitArea = new Rectangle(0, 0, rowW - 33, 15);
-    bg.on('pointertap', () => { sellSel = o.key; refreshUI(); });
     ui.rows[o.key] = { r, bg, qty, price, arrow, spark, btn, w: rowW, sparkW: Math.max(0, rowW - 33 - x - 2) };
     c.addChild(r);
   });
-  if (!compact) {
-    const all = button('paper', 64, 16, '전부 팔기', () => ORES.forEach((o) => sell(o.key, 1)));
-    all.position.set(w - 70, h - 22); c.addChild(all);
-    const half = button('paper', 50, 16, '절반', () => ORES.forEach((o) => sell(o.key, 0.5)));
-    half.position.set(w - 124, h - 22); c.addChild(half);
-  }
+  const all = button('paper', 60, 15, '전부 팔기', () => ORES.forEach((o) => sell(o.key, 1)), { small: true });
+  all.position.set(w - 64, h - 18); c.addChild(all);
+  const half = button('paper', 44, 15, '절반', () => ORES.forEach((o) => sell(o.key, 0.5)), { small: true });
+  half.position.set(w - 112, h - 18); c.addChild(half);
+  const hint = label('창고에 두어도 돼요', { small: true, color: 0x8a7a68, shadow: false }); hint.position.set(6, h - 17);
+  hint.visible = w - 112 - 6 > hint.width + 4; c.addChild(hint);
   ui.sellAnchor ??= c;
   return c;
 }
@@ -963,16 +966,15 @@ function refreshUI() {
   ui.counters.coin && (ui.counters.coin.text = String(S.gold));
   ui.counters.wh && (ui.counters.wh.text = `${whTotal()}/${B.warehouseCapacity}`);
   ui.counters.clock && (ui.counters.clock.text = clockText());
-  const sel = ORES.find((o) => o.key === sellSel);
-  ui.buyerFace?.setTexture(tex(NPC[sel.buyer]));
-  if (ui.buyerName) ui.buyerName.text = `${BUYERS[sel.buyer]} · ${sel.name}`;
   for (const [key, r] of Object.entries(ui.rows)) {
     r.qty.text = `×${stash[key]}`;
-    r.price.text = String(market.price[key]);
-    const up = market.last[key];
+    r.price.text = String(priceOf(key));
+    const surge = market.surge?.key === key;
+    const up = surge && now() >= market.surge.start ? 1 : market.last[key];
     r.arrow.texture = kit(up < 0 ? 'arrow_down' : 'arrow_up'); r.arrow.visible = up !== 0;
     r.btn.setDisabled(stash[key] === 0);
-    r.bg.clear(); if (key === sellSel) r.bg.rect(0, 0, r.w - 33, 15).fill({ color: 0xd39a3a, alpha: 0.25 });
+    r.bg.clear(); if (surge) r.bg.rect(0, 0, r.w - 33, 12).fill({ color: 0x9cc45a, alpha: 0.18 + 0.18 * Math.sin(time * 8) });
+    r.price.tint = surge && now() >= market.surge.start ? 0x46702e : 0xffffff;
     const hist = market.hist[key].slice(-8), max = Math.max(...hist), min = Math.min(...hist);
     r.spark.clear();
     if (r.sparkW >= 16) hist.forEach((v, i) => {
@@ -991,7 +993,7 @@ function sell(key, frac) {
   const n = Math.ceil(stash[key] * frac);
   if (!n) return;
   stash[key] -= n;
-  const gain = n * market.price[key];
+  const gain = n * priceOf(key);
   sfx('stash');
   const r = ui.rows[key];
   const from = r ? r.btn.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
@@ -1038,22 +1040,23 @@ function flyNumber(kind, sx, sy, n, done) {
 
 // 알림: 양피지 틀. who(모모·할아범)가 있으면 왼쪽에 그 인물 치비를 틀 안에
 let toastT = 0;
-function toast(msg, who) {
+function toast(msg, who, secs) {
   const t = ui.toast;
   if (!t) return;
   t.removeChildren().forEach((c) => c.destroy());
-  const tx = label(msg, { color: COLOR.paperInk, shadow: false, small: true });
   const face = who ? 34 : 0;
-  const w = Math.ceil(tx.width) + 16 + face, h = who ? 44 : 20;
+  const maxW = Math.round(L.W / L.uiS) - 12 - face - 16;
+  const tx = label(msg, { color: COLOR.paperInk, shadow: false, small: true, wrap: maxW });
+  const w = Math.ceil(tx.width) + 16 + face, h = Math.max(who ? 44 : 20, Math.ceil(tx.height) + 10);
   t.addChild(frame('paper', w, h, 'panel'));
   if (who) { const pf = portraitFrame(tex(NPC[who]), 36, 'wood'); pf.position.set(4, 4); t.addChild(pf); }
   t.addChild(tx);
-  tx.position.set(8 + face + (who ? 4 : 0), Math.round((h - 12) / 2));
+  tx.position.set(8 + face + (who ? 4 : 0), Math.round((h - tx.height) / 2));
   const Wu = Math.round(L.W / L.uiS);
   const bottom = L.portrait ? Math.round(L.panels.sheet.y / L.uiS) - 4 : Math.round(L.H / L.uiS) - 8;
   t.position.set(Math.round((Wu - w) / 2), bottom - h);
   t.visible = true;
-  toastT = who ? 2.6 : 1.4;
+  toastT = secs ?? (who ? 2.6 : 1.4);
 }
 
 function setLow(v) { low = v; S.settings.low = v; save(); }
@@ -1062,6 +1065,13 @@ document.getElementById('ref-shaft').src = A('scenes/shaft_night.png');
 document.getElementById('ref-office').src = A('scenes/office_night.png');
 const uiFx = [];
 market.onTick = () => { refreshUI(); };
+// 급등: 30초 전 모모 편지 → 그 광종 행이 UI 펄스 → 40초 동안 ×1.8
+market.onWarn = (key) => {
+  const o = ORES.find((q) => q.key === key), who = B.buyers[buyerOf(key)].name;
+  toast(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! (30초 뒤)`, 'momo', 5);
+  sfx('bell');
+};
+market.onSurge = (key) => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${B.surgeMul}! 40초 동안`, 'momo', 3); sfx('stash'); };
 
 // 말풍선 그리기 (UI 층, 캐릭터 머리 위를 따라감)
 function drawEmotes(dt) {
@@ -1694,7 +1704,7 @@ app.ticker.add((tk) => {
   if (hitstop > 0) { hitstop -= real; dt = 0; }
   if (slowmo > 0) { slowmo -= real; dt *= 0.25; }
   time += dt;
-  market.update(dt);
+  market.update(dt, S.day, S.tick, now());
   S.tick += real;
   if (S.tick >= TICK_PER_DAY) { S.tick -= TICK_PER_DAY; S.day++; }
   if (ui.counters?.clock && fpsN === 1) ui.counters.clock.text = clockText();
@@ -1708,6 +1718,7 @@ app.ticker.add((tk) => {
   updateMole(dt);
   updateCrew(dt);
   drawPreview();
+  if (market.surge && fpsN % 3 === 0) refreshUI();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
 
   // 랜턴: 진자 흔들림

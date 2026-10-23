@@ -31,12 +31,13 @@ export function frame(style, w, h, kind = 'win') {
 }
 
 /** 픽셀 글자. small = Galmuri9(10px), 기본 Galmuri11(12px) */
-export function label(str, { color = COLOR.paper, small = false, align = 'left', shadow = true } = {}) {
+export function label(str, { color = COLOR.paper, small = false, align = 'left', shadow = true, wrap = 0 } = {}) {
   const t = new Text({
     text: str,
     resolution: textRes,
     style: {
       fontFamily: small ? 'Galmuri9' : 'Galmuri11', fontSize: small ? 10 : 12, fill: color, align,
+      wordWrap: wrap > 0, wordWrapWidth: wrap || 100, breakWords: true, lineHeight: small ? 12 : 14,
       dropShadow: shadow ? { color: INK, distance: 1, angle: Math.PI / 2, blur: 0, alpha: 1 } : undefined,
     },
   });
