@@ -323,7 +323,7 @@ function buildWorld() {
     rail: rd?.rail ? rd.rail.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),
     water: rd?.water ? rd.water.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),
   };
-  W.veins = findVeins(W.g.map((r) => r.join('')));
+  W.veins = findVeins(rd?.orig ?? W.g.map((r) => r.join('')));   // 덩어리 번호는 처음 격자 기준 (중간에 다시 열어도 같게)
   GH = rows; WH = GY + GH * T + T; ROWS = WH / T;
   // 겹(깊은 어둠 · 양옆 바위 · 앞 실루엣) 다시
   for (let k = layers.length - 1; k >= 0; k--) if (layers[k].s.parent !== skyA) { layers[k].s.destroy(); layers.splice(k, 1); }
@@ -469,7 +469,7 @@ function startRound(card, bid) {
   const blank = () => grid.map(() => '0'.repeat(GW));
   S.gold -= bid;
   S.round = {
-    state: 'SURVEY', card, bid, grid, ladder: blank(), rail: blank(), water: blank(),
+    state: 'SURVEY', card, bid, grid, orig: grid.slice(), ladder: blank(), rail: blank(), water: blank(),
     startedAt: now(), surveyLeft: B.surveySeconds, xrayLeft: B.xrayPerDay,
     stats: { revenue: 0, maxVein: 0, relics: 0, relicGold: 0, events: [], jackpots: 0 },
     jobs: [], claimed: [], piles: [], gasUntil: 0,
@@ -481,6 +481,7 @@ function startRound(card, bid) {
   buildWorld();
   mole.x = GX + 8; mole.goal = undefined; mole.wait = 0.5;
   save(); buildUI();
+  tutorialDone(1);
   toast(card.free ? '공짜 구획이에요. 힌트는 없어요' : `${card.name} 낙찰! 두더지가 냄새를 맡아요`, 'momo');
 }
 function resetCrewMember(a) {
@@ -490,16 +491,34 @@ function resetCrewMember(a) {
 function startDig() {
   if (!S.round) return;
   S.round.state = 'DIG';
+  tutorialDone(2);
   S.round.surveyLeft = 0;
   xray.clear();
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) refreshAround(gx, gy, 0);
   save(); buildUI();
 }
-function askRetreat() { endRound(); }
-function endRound() {
-  if (!S.round) return;
-  S.round.state = 'RESULT';
+let confirmRetreat = false;
+function askRetreat() { confirmRetreat = true; buildUI(); }
+const oreLeft = () => (W ? W.g.flat().filter((c) => ORE_KEYS.has(c)).length : 0);
+/** 라운드 끝: [철수] 또는 광맥 전부 고갈 → 결과 카드 */
+function endRound(reason = 'retreat') {
+  const rd = S.round;
+  if (!rd || rd.state === 'RESULT') return;
+  confirmRetreat = false;
+  rd.state = 'RESULT'; rd.reason = reason;
+  rd.endedAt = now();
+  const profit = rd.stats.revenue + rd.stats.relicGold - rd.bid;
+  const base = rd.bid || B.plotSizes[rd.card.size].price;          // 공짜 구획은 그 크기 시작가 기준으로 별
+  rd.stats.profit = profit;
+  rd.stats.stars = B.stars.filter((t) => profit / base >= t).length;
+  tutorialDone(6);
   save(); buildUI();
+}
+function nextAuction() {
+  const rd = S.round;
+  S.stats.rounds++; S.stats.profitTotal += rd.stats.profit; S.stats.bestVein = Math.max(S.stats.bestVein, rd.stats.maxVein);
+  S.auction = null;                                                // 라운드가 끝나면 바로 새 경매
+  startAuction();
 }
 
 // ---------------------------------------------------------------- 경매 진행: 플레이어 호가 → 길드 호가(연출) → 2라운드 → 낙찰
@@ -738,8 +757,12 @@ function buildUI() {
     const ch = 114;
     const cf = frame('wood', lw, ch); cf.y = 38; lc.addChild(cf);
     const cr = makeCrew(lw - 10, ch - 10); cr.position.set(5, 43); lc.addChild(cr);
-    const sf = frame('stone', lw, lh - 38 - ch - 2, 'panel'); sf.y = 38 + ch + 2; lc.addChild(sf);
-    const st = makeSettings(lw - 10, lh - 38 - ch - 12); st.position.set(5, sf.y + 5); lc.addChild(st);
+    const logH = Math.max(60, lh - 38 - ch - 2 - 70);
+    const lf = frame('stone', lw, logH, 'panel'); lf.y = 38 + ch + 2; lc.addChild(lf);
+    const lt = label('사건 기록', { small: true, color: COLOR.gold }); lt.position.set(6, lf.y + 4); lc.addChild(lt);
+    (eventLog.length ? eventLog : ['아직 없어요']).slice(0, Math.floor((logH - 20) / 12)).forEach((t, i) => { const l = label(t, { small: true, color: COLOR.stone }); l.position.set(8, lf.y + 18 + i * 12); lc.addChild(l); });
+    const sf = frame('stone', lw, lh - 38 - ch - 2 - logH - 2, 'panel'); sf.y = lf.y + logH + 2; lc.addChild(sf);
+    const st = makeSettings(lw - 10, lh - 38 - ch - logH - 14); st.position.set(5, sf.y + 5); lc.addChild(st);
     uiRoot.addChild(lc);
     const rc = new Container(); rc.position.set(u(right.x), u(right.y));
     rc.addChild(makeSell(u(right.w), u(right.h)));
@@ -748,6 +771,7 @@ function buildUI() {
   ui.overlayRect = null;
   const ov = makeOverlay();
   if (ov) uiRoot.addChild(ov);
+  const tut = makeTutorial(); if (tut) uiRoot.addChild(tut);
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
   refreshUI();
@@ -786,6 +810,7 @@ function makeOverlay() {
   if (st === 'AUCTION') return makeAuction(x, y, w, h);
   if (st === 'SURVEY') return makeSurveyBar(x, y, w);
   if (st === 'RESULT') return makeResult(x, y, w, h);
+  if (st === 'DIG' && confirmRetreat) { const box = new Container(); box.addChild(makeDigBar(x, y, w), makeRetreatSheet(x, y, w, h)); return box; }
   if (st === 'DIG') return makeDigBar(x, y, w);
   return null;
 }
@@ -876,12 +901,59 @@ function makeDigBar(x, y, w) {
   return c;
 }
 function makeResult(x, y, w, h) {
+  const rd = S.round, st = rd.stats;
   const c = new Container(); c.position.set(x, y);
   c.addChild(frame('paper', w, h, 'panel'));
   setOverlayRect(x, y, w, h);
-  const t = label('라운드 결과', { color: COLOR.paperInk, shadow: false }); t.position.set(8, 6); c.addChild(t);
-  const b = button('wood', 80, 20, '다음 경매', () => { S.stats.rounds++; startAuction(); });
-  b.position.set(w - 88, h - 28); c.addChild(b);
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const title = label(`${rd.card.name} — 결과`, ink); title.position.set(8, 6); c.addChild(title);
+  const why = label(rd.reason === 'done' ? '광맥을 전부 캤어요' : '철수했어요', { ...ink, small: true, color: 0x8a7a68 }); why.position.set(8, 20); c.addChild(why);
+  let yy = 36;
+  const line = (k, v, col = COLOR.paperInk) => {
+    const a = label(k, { ...ink, small: true }); a.position.set(10, yy); c.addChild(a);
+    const b = label(v, { ...ink, small: true, color: col }); b.position.set(w - 12 - Math.ceil(b.width), yy); c.addChild(b);
+    yy += 13;
+  };
+  line('낙찰가', `−${rd.bid}`, 0xb84a62);
+  line('매출(판매)', `+${st.revenue}`, 0x46702e);
+  if (st.relicGold) line(`유물 ${st.relics}개`, `+${st.relicGold}`, 0x46702e);
+  yy += 2;
+  const pl = label('순이익', ink); pl.position.set(10, yy + 4); c.addChild(pl);
+  const pv = label(`${st.profit >= 0 ? '+' : ''}${st.profit}`, { ...ink, color: st.profit >= 0 ? 0x46702e : 0xb84a62 }); pv.scale.set(2); pv.position.set(w - 12 - Math.ceil(pv.width), yy); c.addChild(pv);
+  yy += 30;
+  const stars = label('★'.repeat(st.stars) + '☆'.repeat(3 - st.stars), { color: 0xd39a3a, shadow: false }); stars.scale.set(1.5); stars.position.set(10, yy); c.addChild(stars);
+  yy += 24;
+  const mins = Math.max(1, Math.round((rd.endedAt - rd.startedAt) / 60));
+  line('최대 광맥', `${st.maxVein}칸${st.jackpots ? ' · 대박!' : ''}`);
+  line('걸린 시간', `${mins}분`);
+  const evs = st.events.length ? [...new Set(st.events)].map((e) => `${EVENT_NAME[e]}${st.events.filter((q) => q === e).length > 1 ? '×' + st.events.filter((q) => q === e).length : ''}`).join(' · ') : '없음';
+  line('사건', evs);
+  const left = whTotal();
+  if (left) line('창고에 남은 광석', `${left}개 · 팔면 이익`, 0x8a7a68);
+  // 할아범 한마디 (틀 안)
+  const say = st.stars >= 3 ? '허허, 이 늙은이보다 낫구먼! 대박이야!' : st.stars >= 1 ? '나쁘지 않아. 다음엔 시세를 좀 더 노려 보게.' : '흠… 땅값이 비쌌나? 힌트를 잘 보게나.';
+  const by = Math.min(h - 84, yy + 6);
+  const pf = portraitFrame(tex(NPC.halabeoji), 40, 'wood'); pf.position.set(8, by); c.addChild(pf);
+  const tx = label(say, { ...ink, small: true, wrap: w - 64 }); tx.position.set(54, by + 4); c.addChild(tx);
+  const b = button('wood', 80, 20, '다음 경매', nextAuction);
+  b.position.set(w - 88, h - 26); c.addChild(b);
+  const tot = label(`누적 ${S.stats.rounds + 1}라운드 · 순이익 ${S.stats.profitTotal + st.profit}`, { ...ink, small: true, color: 0x8a7a68 }); tot.position.set(8, h - 40); c.addChild(tot);
+  return c;
+}
+
+/** 철수 확인 시트 */
+function makeRetreatSheet(x, y, w, h) {
+  const c = new Container();
+  const ww = Math.min(w, 220), hh = 70;
+  c.position.set(x + Math.round((w - ww) / 2), y + Math.round((h - hh) / 2));
+  c.addChild(frame('paper', ww, hh, 'panel'));
+  setOverlayRect(c.x, c.y, ww, hh);
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const t = label('철수할까요?', ink); t.position.set(8, 6); c.addChild(t);
+  const n = oreLeft();
+  const m = label(n ? `남은 광맥 ${n}칸은 광부들이 계속 캐요` : '남은 광맥은 없어요', { ...ink, small: true, wrap: ww - 16 }); m.position.set(8, 22); c.addChild(m);
+  const yes = button('wood', 60, 18, '철수', () => endRound('retreat'), { small: true }); yes.position.set(ww - 68, hh - 24); c.addChild(yes);
+  const no = button('paper', 60, 18, '계속 캐기', () => { confirmRetreat = false; buildUI(); }, { small: true }); no.position.set(ww - 134, hh - 24); c.addChild(no);
   return c;
 }
 
@@ -952,7 +1024,6 @@ function makeSettings(w) {
     [() => `저사양 ${low ? '켬' : '끔'}`, () => setLow(!low)],
     [() => `소리 ${soundOn() ? '켬' : '끔'}`, () => { unlockAudio(); setSound(!soundOn()); S.settings.sound = soundOn(); save(); }],
     ['전체 화면', () => document.documentElement.requestFullscreen?.().catch(() => {})],
-    ['pxl 기준컷', () => document.getElementById('ref').classList.add('show')],
     ['처음부터', () => { if (confirm('저장을 지우고 처음부터 시작할까요?')) { saving = false; resetSave(); location.reload(); } }],
   ];
   const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 62))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
@@ -998,11 +1069,13 @@ function sell(key, frac) {
   const n = Math.ceil(stash[key] * frac);
   if (!n) return;
   stash[key] -= n;
+  tutorialDone(5);
   const gain = n * priceOf(key);
   sfx('stash');
   const r = ui.rows[key];
   const from = r ? r.btn.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
-  flyNumber('coin', from.x + 15 * L.uiS, from.y, gain, () => { S.gold += gain; if (S.round) S.round.stats.revenue += gain; refreshUI(); bumpCounter('coin'); });
+  S.gold += gain; if (S.round) S.round.stats.revenue += gain;
+  flyNumber('coin', from.x + 15 * L.uiS, from.y, gain, () => { refreshUI(); bumpCounter('coin'); });
   refreshUI();
 }
 
@@ -1017,8 +1090,8 @@ let inFlight = 0;                                         // 창고로 날아가
 function orePopup(kind, x, y, n) {
   sfx('ore');
   const [sx, sy] = toScreen(x, y);
-  inFlight += n;
-  flyNumber(kind, sx, sy, n, () => { inFlight -= n; stash[kind] += n; refreshUI(); bumpCounter('wh'); sfx('stash', true); });
+  stash[kind] += n;                                       // 숫자는 바로 반영(저장), 날아가는 건 그림만
+  flyNumber(kind, sx, sy, n, () => { refreshUI(); bumpCounter('wh'); sfx('stash', true); });
 }
 function flyNumber(kind, sx, sy, n, done) {
   const el = document.createElement('div');
@@ -1196,7 +1269,8 @@ function breakCell(gx, gy, from) {
     const gold = Math.round(B.relicGold[0] + Math.random() * (B.relicGold[1] - B.relicGold[0]));
     S.round.stats.relics++; S.round.stats.relicGold += gold; S.stats.relics.push({ day: S.day, gold });
     const [sx, sy] = toScreen(x0 + 8, y0 + 4);
-    flyNumber('coin', sx, sy, gold, () => { S.gold += gold; refreshUI(); bumpCounter('coin'); });
+    S.gold += gold;
+    flyNumber('coin', sx, sy, gold, () => { refreshUI(); bumpCounter('coin'); });
     toast(`유물 상자! 금화 ${gold}`, 'halabeoji'); sfx('bell');
   }
   onCellBroken?.(gx, gy, t);
@@ -1206,7 +1280,7 @@ function breakCell(gx, gy, from) {
 }
 // ---------------------------------------------------------------- 사건 (명세2 §7): 붕괴 · 지하수 · 가스 · 갱도 몬스터
 const EVENT_NAME = { collapse: '갱도 붕괴', water: '지하수', gas: '가스', monster: '갱도 몬스터', boom: '가스 폭발' };
-function logEvent(kind) { S.round.stats.events.push(kind); eventLog.unshift(`${clockText().split(' ')[1]} ${EVENT_NAME[kind]}`); eventLog.length = Math.min(eventLog.length, 8); }
+function logEvent(kind) { S.round.stats.events.push(kind); eventLog.unshift(`${clockText().split(' ')[1]} ${EVENT_NAME[kind]}`); eventLog.length = Math.min(eventLog.length, 8); if (!L.portrait) buildUI(); }
 const eventLog = [];
 let onCellBroken = (gx, gy, t) => {
   const rd = S.round;
@@ -1282,6 +1356,10 @@ function collapse() {
 function updateEvents(dt) {
   const rd = S.round;
   if (!rd || rd.state !== 'DIG') return;
+  if (!oreLeft() && rd.claimed.length && !piles.length && !cartLoad() && !crew.some((a) => a.carrying) && cart.mode === 'park') {
+    rd.doneT = (rd.doneT ?? 0) + dt;
+    if (rd.doneT > 1.5) { toast('광맥을 전부 캤어요!', 'momo'); endRound('done'); return; }
+  } else rd.doneT = 0;
   rd.eventT ??= B.eventGap[0] + Math.random() * (B.eventGap[1] - B.eventGap[0]);
   rd.eventMax ??= B.eventsPerRound[0] + Math.floor(Math.random() * (B.eventsPerRound[1] - B.eventsPerRound[0] + 1));
   rd.eventT -= dt;
@@ -1740,7 +1818,7 @@ function updateCrew(dt) {
   // 광맥 테두리 금색 깜빡 (캐는 중인 덩어리)
   overA.clear();
   if (W && S.round?.claimed?.length && Math.floor(time * 3) % 2 === 0) {
-    for (const id of S.round.claimed) for (const [x, y] of W.veins.list[id].cells) {
+    for (const id of S.round.claimed) for (const [x, y] of W.veins.list[id]?.cells ?? []) {
       if (!ORE_KEYS.has(W.g[y][x])) continue;
       overA.rect(GX + x * T, GY + y * T, T, T).stroke({ width: 1, color: 0xf5cf6a, alpha: 0.9 });
     }
@@ -1773,8 +1851,39 @@ function updateCrew(dt) {
 const pileSprites = [], slimes = [];
 
 // ---------------------------------------------------------------- 튜토리얼 훅 (7단계에서 채움)
-function tutorialDone(stepN) { tutorialHook?.(stepN); }
-let tutorialHook = null;
+const TUTORIAL = [
+  '경매에서 구획을 골라요. 힌트 아이콘을 보세요',
+  '두더지가 킁킁대는 곳 아래에 광맥이 있어요',
+  '손가락으로 갱도를 그려 보세요 (0줄이나 뚫린 칸에서 시작)',
+  '광맥에 닿으면 광부들이 알아서 캐요',
+  '창고가 차기 전에 [판매] 탭에서 팔아요. 시세는 계속 변해요',
+  '다 캤으면 [철수]. 순이익이 점수예요',
+];
+function tutorialDone(stepN) {
+  const t = S.tutorial;
+  if (t.step >= TUTORIAL.length || S.stats.rounds > 0) return;
+  if (t.step === stepN - 1) { t.step = stepN; save(); buildUI(); }
+}
+function makeTutorial() {
+  const t = S.tutorial;
+  if (t.step >= TUTORIAL.length || S.stats.rounds > 0) return null;
+  const st = state();
+  if (st === 'RESULT') return null;
+  if (st === 'SURVEY' && t.step < 1) t.step = 1;                  // 다시 열었을 때 단계 맞추기
+  if (st === 'DIG' && t.step < 2) t.step = 2;
+  const u = (v) => Math.round(v / L.uiS);
+  const v = L.vis, w = Math.min(u(v.x1 - v.x0) - 8, 260);
+  const c = new Container();
+  const msg = label(`${t.step + 1}/${TUTORIAL.length}  ${TUTORIAL[t.step]}`, { small: true, color: COLOR.paperInk, shadow: false, wrap: w - 50 });
+  const h = Math.max(40, Math.ceil(msg.height) + 12);
+  c.addChild(frame('paper', w, h, 'panel'));
+  const pf = portraitFrame(tex(NPC.momo), 34, 'wood'); pf.position.set(3, 3); c.addChild(pf);
+  msg.position.set(42, Math.round((h - msg.height) / 2)); c.addChild(msg);
+  // 경매·결과 카드와 겹치지 않게: 경매 땐 아래쪽, 그 밖엔 격자 위쪽
+  const top = st === 'AUCTION' ? u(v.y1) - h - 4 : u(v.y0) + 24;
+  c.position.set(u(v.x0) + Math.round((u(v.x1 - v.x0) - w) / 2), top);
+  return c;
+}
 
 // ================================================================ 입력
 // 경매·결과 카드와 패널은 UI가 받는다. 탐사 중 투시 랜턴 → 톡한 곳 3×3. 랜턴 끌기.
@@ -1950,7 +2059,7 @@ else {
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart,
+  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart, endRound, askRetreat, nextAuction, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
