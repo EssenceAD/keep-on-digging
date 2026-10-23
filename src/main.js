@@ -780,7 +780,7 @@ function buildUI() {
 function makeHud(w, h) {
   const c = new Container();
   c.addChild(frame('wood', w, h));
-  const wide = w >= 240;
+  const wide = w >= 320;
   const t1 = label('돌망치 상회', { color: COLOR.gold }); t1.position.set(7, 4);
   c.addChild(t1);
   const sub = S.round?.card?.name ?? '오늘의 경매';
@@ -980,7 +980,7 @@ function makeSell(w, h) {
     const bg = new Graphics(); r.addChild(bg);
     const ic = icon(tex(ICON[o.key])); ic.position.set(2, Math.round((13 - ic.height) / 2) + 1); r.addChild(ic);
     let x = 13;
-    const nmw = rowW > 150 ? 36 : 0;
+    const nmw = rowW > 140 ? 36 : 0;
     if (nmw) { const t = label(o.name, { color: COLOR.paperInk, shadow: false, small: true }); t.position.set(x, 2); r.addChild(t); x += nmw; }
     const qty = label('×0', { color: COLOR.paperInk, shadow: false, small: true }); qty.position.set(x, 2); r.addChild(qty); x += 26;
     const price = label('0', { color: COLOR.paperInk, shadow: false, small: true }); price.position.set(x, 2); r.addChild(price); x += 22;
@@ -1929,7 +1929,7 @@ const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23
 app.ticker.add((tk) => {
   const real = Math.min(tk.deltaMS / 1000, 0.05);
   fpsT += real; fpsN++;
-  if (fpsT >= 0.5) { if (ui.fps) ui.fps.text = `${VERSION} · ${Math.round(fpsN / fpsT)} fps · ${L.portrait ? '세로' : '가로'} · 칸 ${Math.round(L.cell)}px · ${state()}`; fpsT = 0; fpsN = 0; }
+  if (fpsT >= 0.5) { if (ui.fps) ui.fps.text = `${VERSION} · ${Math.round(fpsN / fpsT)} fps · 칸 ${Math.round(L.cell)}px`; fpsT = 0; fpsN = 0; }
 
   let dt = real;
   if (hitstop > 0) { hitstop -= real; dt = 0; }
