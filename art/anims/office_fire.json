@@ -1,0 +1,148 @@
+{
+ "frames": {
+  "office_fire_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  },
+  "office_fire_1": {
+   "frame": {
+    "x": 22,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  },
+  "office_fire_2": {
+   "frame": {
+    "x": 44,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  },
+  "office_fire_3": {
+   "frame": {
+    "x": 66,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  },
+  "office_fire_4": {
+   "frame": {
+    "x": 88,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  },
+  "office_fire_5": {
+   "frame": {
+    "x": 110,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 22,
+    "h": 23
+   },
+   "sourceSize": {
+    "w": 22,
+    "h": 23
+   },
+   "duration": 100
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "office_fire.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 132,
+   "h": 23
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "office_fire",
+    "from": 0,
+    "to": 5,
+    "direction": "forward"
+   }
+  ]
+ }
+}
