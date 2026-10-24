@@ -66,3 +66,7 @@ body {
 #kpanel .kitem b { display: block; } #kpanel .kitem small { display: block; color: #8a7a68; font-size: 13px; } #kpanel .kitem p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; } #kpanel .kitem ul { margin: 4px 0 0; padding-left: 18px; }
 #kpanel .kreply { color: #46702e; } #kpanel .kmsg { margin: 0; min-height: 1em; color: #b84a62; } #kpanel .kmuted { color: #8a7a68; margin: 0; } #kpanel a { color: #2a6ab0; text-decoration: underline; overflow-wrap: anywhere; }
 #kpanel label { display: flex; align-items: center; gap: 8px; } #kpanel input[type=range] { flex: 1; }
+
+/* V15 §4: 안내가 가리키는 DOM 버튼 */
+.kguide { outline: 3px solid #f5cf6a; outline-offset: 2px; animation: kguide 0.7s ease-in-out infinite alternate; }
+@keyframes kguide { from { outline-color: #f5cf6a; } to { outline-color: #fff6c8; transform: scale(1.04); } }

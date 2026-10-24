@@ -1,0 +1,31 @@
+{
+  "errors": [],
+  "stuck": [],
+  "log": [
+    "📸 01_intro.png",
+    "📸 02_eng5-0-yard.png",
+    "→ eng5/0/yard · 💰60 · Lv {\"pick\":1,\"lodge\":1,\"cart\":1,\"warehouse\":1,\"smelter\":0}",
+    "📸 03_eng5-1-yard.png",
+    "→ eng5/1/yard · 💰20 · Lv {\"pick\":2,\"lodge\":1,\"cart\":1,\"warehouse\":1,\"smelter\":0}",
+    "📸 04_eng5-2-yard.png",
+    "→ eng5/2/yard · 💰41 · Lv {\"pick\":2,\"lodge\":1,\"cart\":1,\"warehouse\":1,\"smelter\":0}",
+    "📸 05_eng5-3-yard.png",
+    "→ eng5/3/yard · 💰49 · Lv {\"pick\":4,\"lodge\":1,\"cart\":1,\"warehouse\":1,\"smelter\":0}",
+    "📸 06_eng5-4-yard.png",
+    "→ eng5/4/yard · 💰5 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 07_free-0-yard.png",
+    "→ /0/yard · 💰5 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 08_dig4-0-SURVEY.png",
+    "→ dig4/0/SURVEY · 💰96 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 09_dig4-1-DIG.png",
+    "→ dig4/1/DIG · 💰96 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 10_dig4-3-DIG.png",
+    "→ dig4/3/DIG · 💰96 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 11_dig4-3-RESULT.png",
+    "→ dig4/3/RESULT · 💰96 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 12_free-0-yard.png",
+    "→ /0/yard · 💰96 · Lv {\"pick\":4,\"lodge\":1,\"cart\":2,\"warehouse\":1,\"smelter\":0}",
+    "📸 13_done.png",
+    "✅ 끝: 안내 완료 · 갱도 2개 · 74초"
+  ]
+}

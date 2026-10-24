@@ -266,7 +266,7 @@ export const B = {
   // ---------------------------------------------------------------- 엔진 (명세6-1): 캐기 → 나르기 → 창고 3단 병목 · 무한 업글 · 방치
   //  비용(Lv) = base × mul^(Lv − start) · 효과는 선형 + milestones Lv에서 ×2 (곡괭이 속도 · 광차 적재)
   engine: {
-    startGold: 30,                                   // 새 게임 시작 금화 (엔진은 캐서 번 돈으로 크게)
+    startGold: 60,                                   // V15 §1: 첫 곡괭이(40)를 바로 살 수 있게                                   // 새 게임 시작 금화 (엔진은 캐서 번 돈으로 크게)
     firstMine: { name: '뒷산 1호', rows: 10, reserve: 4000, depth: 1.0, oreMix: { C: 0.75, s: 0.17, g: 0.06, j: 0.01, c: 0.01 } },
     oreRank: { C: 0, s: 1, g: 2, j: 3, c: 3 },        // 깊을수록(depth) 귀한 쪽 가중: 비율 × depth^rank
     milestones: [10, 25, 50, 100],
@@ -306,9 +306,10 @@ export const B = {
   unlocks: [
     { id: 1, cond: ['start', 0], opens: ['pick'], line: '탭해서 곡괭이부터 갈아요!' },
     { id: 2, cond: ['pickLv', 3], opens: ['cart'], line: '캐는 게 빨라지니 나르는 게 밀리네요' },
-    { id: 3, cond: ['whFull', 1], opens: ['warehouse', 'sellAll'], line: '창고가 꽉! 팔거나 넓히거나' },
+    { id: 3, cond: ['whFull', 1], opens: ['warehouse'], line: '창고가 꽉! 팔거나 넓히거나' },   // V15 §1: 판매는 처음부터 (여기선 창고 업글만)
     { id: 4, cond: ['sold', 500], opens: ['buyers'], line: '브로크 아저씨는 구리를 좋아해요' },
-    { id: 5, cond: ['rate', 0.5], opens: ['expedition'], line: '새 땅을 사서 갱도를 늘려봐요' },
+    { id: 5, cond: ['rate', 0.35],   // V15: 안내 5단계(곡괭이 4·광차 2) 끝나면 바로 원정
+      opens: ['expedition'], line: '새 땅을 사서 갱도를 늘려봐요' },
     { id: 6, cond: ['mines', 2], opens: ['lodge'], line: '갱도가 둘! 숙소를 넓혀 광부를 늘려요' },
     { id: 7, cond: ['sold', 3000], opens: ['smelter'], line: '괴로 만들면 1.6배!' },
     { id: 8, cond: ['expeditions', 2], opens: ['auction'], who: 'guilds', line: '길드들이 원정 땅에 관심을 보여요' },

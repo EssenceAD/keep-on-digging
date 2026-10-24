@@ -36,6 +36,14 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.9 (PATCH_V15 처음 10분)
+- §1 판매 처음부터(해금 #3은 창고 업글만) · startGold 60. §2 창고 카드 = 판매 화면(광종별 [팔기]·[절반]·[다 팔기]·상회 바꾸기, 열려 있는 동안 0.5초마다 다시 그림). sell()이 부지에서 판매 탭 줄 없이도 안전.
+- §3·§4 옛 튜토리얼 틀(어둡게·손가락·말풍선)을 일반화: S.tutorial.mode = eng5(부지 5단계) / dig4(첫 원정 시추 4단계). tutSteps()·guideOn(). 돈이 모자라면 손가락이 ✕ → 창고 → [다 팔기](DOM은 .kguide 반짝). 화면 밖 건물·입구는 부지를 끌어 가운데로. 해금 = showHint(아래 말풍선 3초 + 건물 손가락).
+- §5 첫 원정 = 지도 → 싼 땅 [사기] → dig4. 갱도 입구 → [새 원정] → [사기] 손가락(onboardWatch), 돈 모자라면 판매 먼저, 다른 창이 열려 있으면 ✕부터. 해금 #5 = 생산 0.35/초(안내 끝나면 바로).
+- §6 빈 터 짓기 가격 = upCost(잠기면 🔒). §7 [광산] 라운드 없으면 갱도 창 · 생산 1 미만 소수 둘째 · 돌아옴 카드 문구 · 갱도 창에서 순위(→ 조합 창)·십장(해금 #10 전) 뺌 · 엔진 돌면 광부가 4~8초씩 갱도 드나듦.
+- §8 광산 지상띠 yard5/surface/surface.png (y −72) · 하늘 sky.png.
+- §9 scripts/playtest_v15.cjs (Playwright · 시스템 Chrome · 빈 프로필): 손가락만 따라 클릭, 기다릴 땐 시간 빨리감기. PC 1280×800 122초 · 폰 390×844 74초 모두 막힘 0 · 오류 0. 스샷 docs/screens/v15_pc · v15_phone.
+
 ## v1.8.3 (PATCH_V14 §8)
 - 사람 = 예전 치비. CHIBI 이름(red/brown/blonde 애니 + npc_* 7장)은 anims/·sprites/ 대신 yard5/chibi/ 에서 같은 이름으로 읽음(animPath·sprPath). yard5/chars 안 읽음, y5Frames·faceTex·Y5_ACTOR 삭제. 꼬물·광차(critters)·갱도 타일(shaft)은 새 것 유지.
 - 초상·인수인계·부지 걷기·십장 = 예전 그림 방식(옆모습, 좌우 뒤집기). 숙소 신입은 예전처럼 brown/blonde 몸 + 빛깔(부지 걷는 자리는 몸 id#순번으로).
