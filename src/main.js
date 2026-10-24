@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.1.2';
+const VERSION = 'v1.2-1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -695,9 +695,9 @@ function idleStore(highlight) {
   }
   if (gain) { S.gold += gain; toast(`창고가 꽉 차서 넘친 건 팔았어요 +${gain}`, 'brok'); }
   sfx('stash');
-  if (highlight) { idleHiUntil = time + 6; if (L.portrait) { sheetTab = 'sell'; S.settings.sheetFolded = false; } }
+  if (highlight) { idleHiUntil = time + 6; sheetTab = 'sell'; if (!L.pc) S.settings.sheetFolded = false; }
   closeWelcome();
-  if (highlight && L.portrait) layout();
+  if (highlight) layout();
 }
 const dur = (sec) => { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h}시간 ${m % 60}분` : `${m}분`; };
 const agoText = (sec) => (sec < 3600 ? `${Math.max(1, Math.round(sec / 60))}분 전` : `${Math.round(sec / 3600)}시간 전`);
@@ -808,7 +808,7 @@ function makeGear(w, h) {
 }
 /** 막힌 갱도의 [장비] → 장비 탭 열기 */
 function openGear() {
-  if (L.portrait) { sheetTab = 'gear'; S.settings.sheetFolded = false; save(); layout(); }
+  setSheet(true, 'gear');
   sfx('ui_open');
 }
 function makeDaybook(w, h) {
@@ -866,8 +866,8 @@ const TUT_STEPS = [                                        // 명세5 §7: 18단
     done: () => S.round.claimed.includes(veinOf('C')) },
   { enter: () => { S.tutorial.mark = S.counters?.ores ?? 0; }, focus: () => unionRect(veinRect(veinOf('C')), actorRect(cartA)), hand: () => ({ kind: 'point', at: centerOf(actorRect(cartA)) }),
     done: () => left('C') === 0 && (S.counters?.ores ?? 0) - (S.tutorial.mark ?? 0) >= 5 },
-  { focus: () => (L.portrait ? boundsOf(ui.sellAnchor) : null), hand: () => (L.portrait ? { kind: 'tap', at: centerOf(boundsOf(ui.sellAnchor)) } : null),
-    done: () => !L.portrait || (sheetTab === 'sell' && !S.settings.sheetFolded) },
+  { focus: () => boundsOf(ui.sellAnchor), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.sellAnchor)) }),
+    done: () => sheetTab === 'sell' && sheetOpen() },
   { enter: () => { S.tutorial.mark = S.counters?.soldGold ?? 0; }, focus: () => boundsOf(ui.rows.C?.r), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.rows.C?.btn)) }),
     done: () => (S.counters?.soldGold ?? 0) > (S.tutorial.mark ?? 0) },
   { enter: () => { S.round.vibroLeft = Math.max(1, S.round.vibroLeft ?? 0); toast(TUT_CARTS, 'momo', 3); }, focus: () => boundsOf(ui.refs.vibro), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.vibro)) }), done: () => toolArmed === 'vibro' || S.round.stakes?.length > 0 },
@@ -876,8 +876,8 @@ const TUT_STEPS = [                                        // 명세5 §7: 18단
   { focus: () => (buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)), hand: () => ({ kind: 'tap', at: centerOf(buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
     done: () => S.tutorial.merchantGold || (S.tutorial.goldSold && !stash.g && left('g') === 0 && !carts.some((c) => c.cargo.g) && !piles.some((p) => p.type === 'g')) },
   { enter: () => { const c = gearCost(S, 'pick'); if (c != null && S.gold < c) { S.gold = c; refreshUI(); toast('그룬 할아범이 곡괭이 값을 보탰어요', 'halabeoji', 2.5); } },
-    focus: () => (L.portrait && (sheetTab !== 'gear' || S.settings.sheetFolded) ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
-    hand: () => ({ kind: 'tap', at: centerOf(L.portrait && (sheetTab !== 'gear' || S.settings.sheetFolded) ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
+    focus: () => (sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
+    hand: () => ({ kind: 'tap', at: centerOf(sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
     done: () => upLv(S, 'pick') >= 2 },
   { focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
   { focus: () => boundsOf(ui.refs.resultTalent), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.resultTalent)) }), done: () => talentView || talentSpent(S) > 0 },
@@ -976,11 +976,11 @@ function tutTick(dt) {
   }
   if (key) {
     const fc = focus ? (focus.y + focus.h / 2) * k : uH;
-    const top = Math.round((L.portrait ? L.panels.hud.h : 0) * k) + 4, bottom = Math.round((L.portrait ? L.panels.sheet.y : L.H) * k) - tutBubble.bh - 6;
+    const top = Math.round(L.vis.y0 * k) + 4, bottom = Math.round(L.vis.y1 * k) - tutBubble.bh - 6;
     const last = state() === 'RESULT';          // 결과 단계는 카드 아래 (v0.8 §4): 폰 = 아래 시트 위 · PC = 화면 아래 왼쪽
-    const y = last ? (L.portrait ? Math.round(L.panels.sheet.y * k) + 22 : Math.round(L.H * k) - tutBubble.bh - 6) : fc > uH * 0.45 ? top : Math.max(top, bottom);
+    const y = last ? bottom : fc > (L.vis.y0 + L.vis.y1) / 2 * k ? top : Math.max(top, bottom);
     const shake = tutShakeT > 0 ? Math.sin(tutShakeT * 50) * 3 : 0;
-    tutBubble.position.set(Math.round((last && !L.portrait ? L.vis.x0 * k + 4 : (uW - tutBubble.bw) / 2) + shake), y);
+    tutBubble.position.set(Math.round(((L.vis.x0 + L.vis.x1) / 2) * k - tutBubble.bw / 2 + shake), y);
     if (tutShakeT > 0) { tutShakeT -= dt; tutBubble.scale.set(1 + Math.max(0, tutShakeT) * 0.06); } else tutBubble.scale.set(1);
   }
 }
@@ -1377,13 +1377,13 @@ const isNight = () => { const hr = (S.tick / TICK_PER_DAY) * 24; return hr < 6 |
 /** 회사 화면 (PATCH_V10 §4): 위 HUD · 가운데 부지 장면(정수 배율, 화면 폭 전체) · 아래 건물 목록(접힘 기본, 펼치면 45%) */
 function makeCompany(x, y, w, h) {
   const c = new Container();
-  const uW = L.W / L.uiS, uH = L.H / L.uiS;
+  const uH = y + h;                                          // 아래 끝 (UI px)
   const k = yardScale(), sceneH = Math.ceil((YARD.scene.h * k) / L.uiS);
   const listH = Math.max(34, coListOpen && !placing ? Math.round(uH * 0.45) : 0, Math.floor(uH - y - sceneH));   // 위아래 남는 곳은 HUD·시트가 채움
   const areaH = uH - y - listH;
-  c.addChild(new Graphics().rect(0, y, uW, areaH).fill(0x0b0910));                       // 남는 곳은 어두운 테두리
-  const site = makeSite(uW, areaH); site.y = y; c.addChild(site);
-  ui.overlayRect = { x: 0, y: y * L.uiS, w: L.W, h: L.H - y * L.uiS };
+  c.addChild(new Graphics().rect(x, y, w, areaH).fill(0x0b0910));                       // 남는 곳은 어두운 테두리
+  const site = makeSite(w, areaH); site.position.set(x, y); c.addChild(site);
+  ui.overlayRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS };
   // 그림 위 띠: 사무소 Lv ([특성]·[광산]은 HUD)
   const bar = new Container(); bar.position.set(x + 2, y + 2); c.addChild(bar);
   const t = label(`사무소 Lv${S.company.coreLv} · 빈 터 ${openLots(S).length}/${YARD.lots.length}`, { small: true, color: COLOR.gold }); const tb0 = new Graphics().rect(0, 0, Math.ceil(t.width) + 8, 13).fill({ color: 0x0b0910, alpha: 0.55 }); bar.addChild(tb0, t); t.position.set(4, 1);
@@ -1430,7 +1430,7 @@ function glowTex() {
 }
 let siteDragged = false, yardPan = null;                    // 좌우 끌기 (기기 px, 처음 = 사무소 터 가운데)
 /** 장면 배율 (정수만): 폰도 최소 2× — 넘치는 폭은 좌우로 끌어 봄 */
-const yardScale = () => (L.colW >= L.W ? 2 : Math.max(1, Math.min(3, Math.floor(L.colW / YARD.scene.w), Math.floor((L.H - L.panels.hud.h - 34 * L.uiS) / YARD.scene.h))));   // 폰 2×(끌기) · PC는 기둥 폭에 맞는 정수, 3×까지
+const yardScale = () => (L.portrait ? 2 : Math.max(1, Math.min(3, Math.floor((L.full.x1 - L.full.x0) / YARD.scene.w), Math.floor((L.full.y1 - L.full.y0 - 34 * L.uiS) / YARD.scene.h))));   // 세로 폰 2×(끌기) · 가로·PC는 게임 영역에 맞는 정수, 3×까지
 const yardTex = (n) => { const t = loaded[A(`scenes/${n}.png`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
 /** 길(폴리라인) 위 점: d = 처음부터 거리 */
 const polyLen = (p) => p.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
@@ -1447,8 +1447,9 @@ function makeSite(sw, sh) {
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
   const sc = new Container(); view.addChild(sc);
   sc.scale.set(k / L.uiS);
-  const minX = Math.min(0, L.W - SW * k), centerX = Math.round((L.W - SW * k) / 2);
-  if (yardPan == null) { const ol = lotOf(S.company.buildings.office?.lot ?? 0); yardPan = Math.round(L.W / 2 - (ol.x + ol.w / 2) * k); }
+  const PW = sw * L.uiS;                                      // 장면 자리 폭 (기기 px 아닌 CSS px)
+  const minX = Math.min(0, PW - SW * k), centerX = Math.round((PW - SW * k) / 2);
+  if (yardPan == null) { const ol = lotOf(S.company.buildings.office?.lot ?? 0); yardPan = Math.round(PW / 2 - (ol.x + ol.w / 2) * k); }
   const clampPanX = (v) => (minX < 0 ? Math.max(minX, Math.min(0, v)) : centerX);
   yardPan = clampPanX(yardPan);
   const placeSc = () => sc.position.set(Math.round(yardPan) / L.uiS, 0);
@@ -1764,7 +1765,6 @@ function pickCard(card) {
   Object.assign(AU, { card, phase: 'bid', high: card.price, holder: null, me: null, endAt: null, react: 0, count: 0, out: [false, false, false], bids: [null, null, null] });
   AU.say = GUILD_LINES.map((l, i) => ({ text: l.enter, line: true, t: time + 0.15 + i * 0.45, intro: true }));   // 등장 한마디 (차례로)
   AU.caps = B.guilds.map((g) => guildCap(card, g));
-  if (L.portrait && S.settings.sheetFolded) { S.settings.sheetFolded = false; setTimeout(layout, 0); }
   setTimeout(() => { if (AU.card === card) toast('다른 두 구획은 길드들이 가져갔어요', null, 1); }, 1500);
   buildUI();
 }
@@ -2034,24 +2034,53 @@ const display = new Sprite();
 const uiRoot = new Container(), worldUI = new Container();
 app.stage.addChild(display, worldUI, uiRoot);
 
+/** PATCH_V12 §1: 화면 = HUD 띠 / 게임 / 시트 세 띠. 세로 폰 · 가로 폰·패드 · PC 한 규칙.
+ *  시트는 게임 위를 덮는다(펼쳐도 게임 크기는 그대로). 갱도 칸은 정수 배율(기기 px / 텍스처 px), 여백이 8% 넘으면 한 단계 키워 게임 쪽으로 양보(넘치면 끌어 봄). */
 function computeLayout() {
-  const Wd = window.innerWidth, H = window.innerHeight;
-  const dpr = R.resolution;
-  // 명세5 §9: 좌우 상시 패널 없음 — 폰은 화면 전체, 패드·PC는 가운데 세로 기둥(폰 비율). 위 HUD · 지상 띠 · 격자(세로로 끌어 봄) · 아래 시트
-  const colW = H >= Wd * 0.9 ? Wd : Math.min(Wd, Math.round(H * 0.8)), cx0 = Math.round((Wd - colW) / 2);   // v1.1.2: PC 기둥 = min(폭, 높이×0.8)
-  const portraitMode = true;
-  const uiS = Math.max(2, Math.min(3, Math.floor(colW / 195)));
-  const cell = colW / 12;
-  const hudH = 36 * uiS;
-  const sheetH = Math.round(S.settings.sheetFolded ? Math.max(H * 0.10, 26 * uiS) : Math.max(H * 0.32, 84 * uiS));
-  const panels = { hud: { x: cx0, y: 0, w: colW, h: hudH }, sheet: { x: cx0, y: H - sheetH, w: colW, h: sheetH } };
-  const vis = { x0: cx0, x1: cx0 + colW, y0: hudH, y1: H - sheetH, above: 3 };
+  const Wd = window.innerWidth, H = window.innerHeight, dpr = R.resolution;
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+  const mode = H >= Wd * 0.9 ? 'portrait' : Wd < 1100 || coarse ? 'landscape' : 'pc';
+  const folded = mode !== 'pc' && !!S.settings.sheetFolded;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  let uiS, hud, sheet, tabs, vis, full;
+  if (mode === 'portrait') {
+    uiS = clamp(Math.floor(Wd / 195), 2, 3);
+    const hudH = Math.max(Math.round(H * 0.07), 22 * uiS), tabH = Math.max(Math.round(H * 0.06), 20 * uiS), openY = Math.round(H * 0.6);
+    hud = { x: 0, y: 0, w: Wd, h: hudH };
+    tabs = { x: 0, y: H - tabH, w: Wd, h: tabH };
+    sheet = folded ? tabs : { x: 0, y: openY, w: Wd, h: H - openY };
+    vis = { x0: 0, x1: Wd, y0: hudH, y1: H - tabH, above: 3 };
+    full = { x0: 0, x1: Wd, y0: hudH, y1: H };
+  } else if (mode === 'landscape') {
+    uiS = clamp(Math.floor(H / 180), 2, 3);
+    const side = Math.max(Math.round(Wd * 0.12), 46 * uiS), openW = Math.min(Math.round(Wd * 0.5), Math.max(Math.round(Wd * 0.32), 180 * uiS));
+    hud = { x: 0, y: 0, w: side, h: H };
+    tabs = { x: Wd - side, y: 0, w: side, h: H };
+    sheet = folded ? tabs : { x: Wd - openW, y: 0, w: openW, h: H };
+    vis = { x0: side, x1: Wd - side, y0: 0, y1: H, above: 3 };
+    full = { x0: side, x1: Wd, y0: 0, y1: H };
+  } else {
+    uiS = clamp(Math.floor(H / 330), 2, 3);
+    const hudH = Math.max(Math.round(H * 0.06), 22 * uiS), sw = Math.max(Math.round(Wd * 0.24), 160 * uiS);
+    const gw = Math.min(Wd - sw, Math.round(H * 1.4)), gx = Math.round((Wd - sw - gw) / 2);
+    hud = { x: 0, y: 0, w: Wd - sw, h: hudH };
+    sheet = tabs = { x: Wd - sw, y: 0, w: sw, h: H };
+    vis = { x0: gx, x1: gx + gw, y0: hudH, y1: H, above: 3 };
+    full = { x0: 0, x1: Wd - sw, y0: hudH, y1: H };
+  }
+  // 정수 배율: 텍스처 1px(= 칸 32분의 1) = 기기 k px
+  const visW = vis.x1 - vis.x0, visH = vis.y1 - vis.y0;
+  const fit = Math.min((visW * dpr) / (12 * T * DENS), mode === 'portrait' ? Infinity : (visH * dpr) / ((16 + vis.above) * T * DENS));
+  let kk = Math.max(1, Math.floor(fit));
+  if (kk / fit < 0.92) kk += 1;                                     // 여백 > 8% → 한 단계 키움
+  const cell = (T * DENS * kk) / dpr;
+  const panels = { hud, sheet };
   const sc = cell / T;
-  const gridW = 12 * cell, gridH = GH * cell, visW = vis.x1 - vis.x0;
+  const gridW = 12 * cell, gridH = GH * cell;
   const gridLeft = vis.x0 + (visW - gridW) / 2;
   const gridTop = vis.y0 + vis.above * cell;                       // 지상 띠는 늘 보이고, 넘치는 격자는 세로로 끌어 본다
   const overX = Math.max(0, gridW - visW) / sc, overY = Math.max(0, gridTop + gridH + cell * 0.5 - vis.y1) / sc;
-  return { W: Wd, H, dpr, portrait: portraitMode, cell, sc, uiS, gridLeft, gridTop, panels, overX, overY, vis, colX: cx0, colW };
+  return { W: Wd, H, dpr, mode, portrait: mode === 'portrait', landscape: mode === 'landscape', pc: mode === 'pc', cell, sc, uiS, gridLeft, gridTop, panels, tabs, full, overX, overY, vis, colX: vis.x0, colW: visW };
 }
 
 function layout() {
@@ -2078,6 +2107,9 @@ function clampPan() {
   cam.panY = Math.max(-24, Math.min(L.overY + 24, cam.panY));
 }
 window.addEventListener('resize', () => setTimeout(layout, 60));
+window.addEventListener('orientationchange', () => setTimeout(layout, 120));   // §1: 회전하면 바로 다시 배치
+const sheetOpen = () => L.pc || !S.settings.sheetFolded;
+function setSheet(open, tabKey) { if (tabKey) sheetTab = tabKey; if (L.pc) { buildUI(); return; } S.settings.sheetFolded = !open; save(); layout(); }
 
 const toWorld = (sx, sy) => [((sx - display.x) / display.scale.x + cam.rx) / DENS, ((sy - display.y) / display.scale.y + cam.ry) / DENS];
 const toScreen = (x, y) => [display.x + (x * DENS - cam.rx) * display.scale.x, display.y + (y * DENS - cam.ry) * display.scale.y];
@@ -2088,6 +2120,54 @@ const inPanels = (sx, sy) => !!introView || tutBlocks(sx, sy) || inRect(ui.overl
 // ================================================================ UI (art/ui/ui.px.js 틀 · 인물은 틀 안에서만)
 let ui = {};
 let sheetTab = 'sell';
+const SHEET_TABS = [['sell', '판매'], ['gear', '장비'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
+/** 시트 (§1): 세로 폰 = 아래 탭 줄(접힘) / 아래 40% 덮개 · 가로 폰 = 오른쪽 탭 띠 / 오른쪽 32% 덮개 · PC = 오른쪽 24% 늘 열림. 반투명, 손잡이 끌기·게임 탭하면 접힘 */
+function makeSheet() {
+  const u = (v) => Math.round(v / L.uiS);
+  const r = L.panels.sheet, s = new Container(); s.position.set(u(r.x), u(r.y));
+  const sw = u(r.w), sh = u(r.h), open = sheetOpen();
+  if (!open && L.landscape) {                                       // 가로 접힘: 세로 탭 띠
+    s.addChild(frame('stone', sw, sh, 'panel'));
+    const bh = Math.min(26, Math.floor((sh - 8) / SHEET_TABS.length));
+    ui.tabs = SHEET_TABS.map(([key, name], i) => {
+      const b = button(key === sheetTab ? 'wood' : 'stone', sw - 8, bh - 3, name, () => { sfx('stash', true); setSheet(true, key); }, { small: true });
+      b.key = key; b.setOn = () => {}; b.position.set(4, 4 + i * bh); s.addChild(b); if (key === 'sell') ui.sellAnchor = b; return b;
+    });
+    return s;
+  }
+  const bg = new Graphics().rect(0, 0, sw, sh + 6).fill({ color: 0x1a1622, alpha: L.pc ? 0.96 : 0.9 }); s.addChild(bg, frame('stone', sw, sh + 6, 'panel')); s.children[1].alpha = 0.85;
+  const foldW = L.pc ? 0 : 22, tw = Math.floor((sw - 12 - foldW) / SHEET_TABS.length);
+  const body = new Container(); body.position.set(5, 19);
+  const bw = sw - 10, bh = sh - 23;
+  const show = (key) => {
+    sheetTab = key;
+    ui.tabs.forEach((t) => t.setOn(t.key === key));
+    body.removeChildren().forEach((c) => c.destroy({ children: true }));
+    ui.rows = {};
+    for (const k of ['crew', 'fps', 'buyerFace', 'buyerName', 'irows', 'smeltLine']) ui[k] = null;
+    body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'gear' ? makeGear(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : key === 'day' ? makeDaybook(bw, bh) : makeSettings(bw, bh));
+    refreshUI();
+  };
+  ui.tabs = SHEET_TABS.map(([key, name], i) => {
+    const t = tab(tw, name, () => { sfx('stash', true); if (!open) setSheet(true, key); else show(key); });
+    t.key = key; t.position.set(6 + i * tw, 4); s.addChild(t);
+    if (key === 'sell') ui.sellAnchor = t;
+    return t;
+  });
+  if (!L.pc) {
+    const fold = button('stone', 18, 14, open ? (L.landscape ? '▶' : '▼') : '▲', () => setSheet(!open), { small: true });
+    fold.position.set(sw - 24, 4); s.addChild(fold);
+    // 손잡이: 탭 줄을 끌어 접기/펼치기
+    const grip = new Graphics().rect(0, 0, sw - 30, 18).fill({ color: 0, alpha: 0.001 }); grip.eventMode = 'static'; s.addChildAt(grip, 2);
+    let g0 = null;
+    grip.on('pointerdown', (e) => { g0 = { x: e.global.x, y: e.global.y }; });
+    grip.on('pointerup', (e) => { if (!g0) return; const d = L.landscape ? e.global.x - g0.x : e.global.y - g0.y; g0 = null; if (d > 20 && open) setSheet(false); else if (d < -20 && !open) setSheet(true); });
+    grip.on('pointerupoutside', () => { g0 = null; });
+  }
+  s.addChild(body);
+  if (open) show(sheetTab); else ui.tabs.forEach((t) => t.setOn(t.key === sheetTab));
+  return s;
+}
 
 function buildUI() {
   if (!L) return;
@@ -2095,48 +2175,19 @@ function buildUI() {
   uiRoot.scale.set(L.uiS);
   ui = { counters: {}, rows: {}, refs: {}, overlayRect2: null, scrollKnob: null };
   const u = (v) => Math.round(v / L.uiS);             // CSS px → UI px
-  if (L.portrait) {
-    const hud = L.panels.hud, sheet = L.panels.sheet;
-    const hc = makeHud(u(hud.w), u(hud.h)); hc.x = u(hud.x); uiRoot.addChild(hc);
-    const s = new Container(); s.y = u(sheet.y); s.x = u(sheet.x);
-    s.visible = !(state() === 'AUCTION' && view !== 'company') || (auctionSettings && !AU.card);      // 명세5 §8: 경매 화면엔 시세·광부 패널 없음
-    const sw = u(sheet.w), sh = u(L.H) - u(sheet.y);
-    s.addChild(frame('stone', sw, sh + 6, 'panel'));
-    const tabs = [['sell', '판매'], ['gear', '장비'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
-    const tw = Math.floor((sw - 12 - 22) / tabs.length);
-    const body = new Container(); body.position.set(5, 19);
-    const bw = sw - 10, bh = sh - 23;
-    const show = (key) => {
-      sheetTab = key;
-      ui.tabs.forEach((t) => t.setOn(t.key === key));
-      body.removeChildren().forEach((c) => c.destroy({ children: true }));
-      ui.rows = {};
-      for (const k of ['crew', 'fps', 'buyerFace', 'buyerName', 'irows', 'smeltLine']) ui[k] = null;
-      body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'gear' ? makeGear(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : key === 'day' ? makeDaybook(bw, bh) : makeSettings(bw, bh));
-      refreshUI();
-    };
-    ui.tabs = tabs.map(([key, name], i) => {
-      const t = tab(tw, name, () => { sfx('stash', true); if (S.settings.sheetFolded) { S.settings.sheetFolded = false; sheetTab = key; save(); setTimeout(layout, 0); } else show(key); });
-      t.key = key; t.position.set(6 + i * tw, 4); s.addChild(t);
-      if (key === 'sell') ui.sellAnchor = t;
-      return t;
-    });
-    const fold = button('stone', 18, 14, S.settings.sheetFolded ? '▲' : '▼', () => { S.settings.sheetFolded = !S.settings.sheetFolded; save(); layout(); }, { small: true });
-    fold.position.set(sw - 24, 4); s.addChild(fold);
-    s.addChild(body);
-    uiRoot.addChild(s);
-    if (S.settings.sheetFolded) ui.tabs.forEach((t) => t.setOn(t.key === sheetTab));
-    else show(sheetTab);
-  }
+  { const hud = L.panels.hud; const hc = makeHud(u(hud.w), u(hud.h), L.landscape); hc.position.set(u(hud.x), u(hud.y)); uiRoot.addChild(hc); }
   ui.overlayRect = null;
   if (view === 'company') {
-    const r = { x: u(L.colX), y: u(L.panels.hud.h), w: u(L.colW), h: u(L.H) - u(L.panels.hud.h) };
+    const f = L.full, r = { x: u(f.x0), y: u(f.y0), w: u(f.x1 - f.x0), h: u(f.y1 - f.y0) };
     uiRoot.addChild(makeCompany(r.x, r.y, r.w, r.h));
   } else {
     ui.coTick = null;
     const ov = makeOverlay();
     if (ov) uiRoot.addChild(ov);
   }
+  const sheetHidden = view === 'company' || (state() === 'AUCTION' && !(auctionSettings && !AU.card));   // 명세5 §8: 경매·회사 화면엔 시트 없음
+  if (L.overY > 0 && view === 'mine' && ['SURVEY', 'DIG'].includes(state())) uiRoot.addChild(makeScrollBar());
+  if (!sheetHidden) uiRoot.addChild(makeSheet());
   if (welcome) uiRoot.addChild(makeWelcome());
   if (rankView) uiRoot.addChild(makeRank());
   if (cloudChoice) uiRoot.addChild(makeCloudChoice());
@@ -2144,38 +2195,44 @@ function buildUI() {
   if (talentView) uiRoot.addChild(makeTalentView());
   ui.tutLayer = new Container(); uiRoot.addChild(ui.tutLayer);
   if (dialog) uiRoot.addChild(makeDialog());
-  if (L.portrait && L.overY > 0 && view === 'mine' && ['SURVEY', 'DIG'].includes(state())) uiRoot.addChild(makeScrollBar());
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
   refreshUI();
 }
 
-function makeHud(w, h) {
+/** HUD 한 줄 (§1): 💰 금화 · 📦 창고 · 🕒 날짜 · [특성] [회사]. 가로 폰은 같은 것을 세로로 */
+function makeHud(w, h, vertical = false) {
   const c = new Container();
   c.addChild(frame('wood', w, h));
-  const wide = w >= 320;
-  const t1 = label(online() ? `${me.profile.nickname}의 상회` : '돌망치 상회', { color: COLOR.gold }); t1.position.set(7, 4);
-  c.addChild(t1);
-  const sub = S.round?.card ? `${S.round.card.floor === 2 ? '2층 ' : ''}${S.round.card.name}` : '오늘의 경매';
-  if (!wide) { const t2 = label(sub, { small: true, color: COLOR.dim }); t2.position.set(Math.round(t1.width) + 12, 6); if (t2.x + t2.width < w - 38) c.addChild(t2); else t2.destroy(); }
-  const cy = wide ? 19 : 18;                                  // 넓은 HUD(PC 왼쪽 패널)도 두 줄: 제목 / 금화·창고·시계
-  const cb = button(view === 'company' ? 'paper' : 'stone', 30, 13, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true });
-  cb.position.set(w - 34, 3); ui.refs.company = cb; if (S.tutorial.done && SHOW_COMPANY) c.addChild(cb); else cb.destroy();   // 튜토리얼 동안 · 부지 장면 오기 전까지 숨김
-  if (S.tutorial.done) {                                     // 명세5 §4: 특성 창은 HUD에서 바로
-    const tl = talentLeft(S), tb = button(tl > 0 ? 'wood' : 'stone', 34, 13, tl > 0 ? `특성${tl}` : '특성', openTalents, { small: true });
-    tb.position.set(w - (SHOW_COMPANY ? 72 : 38), 3); c.addChild(tb); ui.refs.talents = tb;
+  const btns = [];
+  if (S.tutorial.done) {
+    const tl = talentLeft(S);
+    btns.push(['talents', button(tl > 0 ? 'wood' : 'stone', 38, 15, tl > 0 ? `특성${tl}` : '특성', openTalents, { small: true })]);
+    if (SHOW_COMPANY) btns.push(['company', button(view === 'company' ? 'paper' : 'stone', 38, 15, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true })]);
   }
-  // 금화 · 창고 n/60 · 날짜/시각 (명세2 §10)
-  const items = [['coin', kit('coin'), w < 170 ? 40 : 48], ['wh', tex('icon_gold'), (w < 170 ? 46 : 56) + (whCap() >= 100 ? 10 : 0)], ['clock', null, 72]];
-  let xa = 7;
-  items.forEach(([key, tx, sw]) => {
-    const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' || w < 170 });
-    const x0 = xa; xa += sw;
-    i.position.set(x0, cy + Math.round((14 - (tx ? i.height : 0)) / 2));
-    n.position.set(x0 + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
-    c.addChild(i, n);
-    ui.counters[key] = n; if (key === 'clock') n.short = w < 170;
-  });
+  const items = [['coin', kit('coin')], ['wh', tex('icon_gold')], ['clock', null]];
+  if (!vertical) {
+    const cy = Math.round((h - 14) / 2);
+    let xa = 6;
+    const room = w - 6 - btns.length * 40;
+    items.forEach(([key, tx]) => {
+      const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' });
+      i.position.set(xa, cy + Math.round((14 - (tx ? i.height : 0)) / 2)); n.position.set(xa + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
+      c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
+      n.reserve = key === 'coin' ? 5 : key === 'wh' ? 7 : 0;               // 자리: 숫자가 바뀌어도 안 밀리게 (글자 수)
+      xa = n.x + Math.max(n.width, n.reserve * 6) + 8;
+      if (key === 'clock' && n.x + 44 > room) { n.visible = false; }
+    });
+    btns.forEach(([k, b], i) => { b.position.set(w - 2 - (btns.length - i) * 40, Math.round((h - 15) / 2)); c.addChild(b); ui.refs[k] = b; });
+  } else {
+    let ya = 6;
+    items.forEach(([key, tx]) => {
+      const i = tx ? icon(tx) : new Container(), n = label('0', { small: true });
+      i.position.set(5, ya + 1); n.position.set(5 + (tx ? i.width + 2 : 0), ya); c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
+      ya += 16;
+    });
+    btns.forEach(([k, b], i) => { b.position.set(Math.round((w - 38) / 2), h - 6 - (btns.length - i) * 19); c.addChild(b); ui.refs[k] = b; });
+  }
   return c;
 }
 
@@ -2184,7 +2241,7 @@ function makeOverlay() {
   const st = state();
   const u = (v) => Math.round(v / L.uiS);
   const v = L.vis, x = u(v.x0) + 4, y = u(v.y0) + 4, w = u(v.x1 - v.x0) - 8, h = u(v.y1 - v.y0) - 8;
-  if (st === 'AUCTION') return makeAuction(x, y, w, auctionSettings && !AU.card ? h : u(L.H) - y - 4);           // 경매: 시트 자리까지 다 씀
+  if (st === 'AUCTION') { const f = L.full; return auctionSettings && !AU.card ? makeAuction(x, y, w, h) : makeAuction(u(f.x0) + 4, u(f.y0) + 4, u(f.x1 - f.x0) - 8, u(f.y1 - f.y0) - 8); }   // 경매: 시트 자리까지 다 씀
   if (st === 'SURVEY') return makeSurveyBar(x, y, w);
   if (st === 'RESULT') return makeResult(x, y, w, h);
   if (st === 'DIG' && confirmRetreat) { const box = new Container(); box.addChild(makeDigBar(x, y, w), makeRetreatSheet(x, y, w, h)); return box; }
@@ -2744,8 +2801,8 @@ function toast(msg, who, secs) {
   t.addChild(tx);
   tx.position.set(8 + face + (who ? 4 : 0), Math.round((h - tx.height) / 2));
   const Wu = Math.round(L.W / L.uiS);
-  const bottom = L.portrait ? Math.round(L.panels.sheet.y / L.uiS) - 4 : Math.round(L.H / L.uiS) - 8;
-  t.position.set(Math.round((Wu - w) / 2), bottom - h);
+  const bottom = Math.round(L.vis.y1 / L.uiS) - 4;
+  t.position.set(Math.round(((L.vis.x0 + L.vis.x1) / 2) / L.uiS - w / 2), bottom - h);
   t.visible = true;
   toastT = secs ?? 3;
 }
@@ -3627,6 +3684,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (inPanels(e.clientX, e.clientY) || shaftHits.some((r) => inRect(r, e.clientX, e.clientY))) return;
+  if (!L.pc && !S.settings.sheetFolded && view === 'mine') { setSheet(false); return; }   // §1: 게임 탭하면 시트 접힘
   const [wx, wy] = toWorld(e.clientX, e.clientY);
   if (toolArmed && ['SURVEY', 'DIG'].includes(state())) { useToolAt(wx, wy); return; }
   const mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
