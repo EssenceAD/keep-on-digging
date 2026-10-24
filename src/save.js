@@ -17,7 +17,7 @@ export function newSave() {
     stats: { rounds: 0, profitTotal: 0, bestVein: 0, relics: [] },
     // 온보딩 (docs/ONBOARDING_1024.md): introSeen [0] 인수인계 · active/step [1] 튜토리얼 라운드 · done · auctionIntro [2] · tips [3] · tiles 칸 첫 등장
     tutorial: { step: 0, done: false, introSeen: false, active: false, auctionIntro: false, firstAuction: false, tips: {}, tiles: {} },
-    settings: { low: false, sound: true },
+    settings: { low: false, sound: true, sheetFolded: true },     // 명세5 §9: 아래 시트는 접힘 기본
     // 명세3 §8
     company: { coreLv: 1, buildings: {}, decos: [], harmoniesFound: [] },
     talents: { survey: 0, dig: 0, trade: 0, points: 0, spent: 0 },
