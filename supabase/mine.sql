@@ -1,0 +1,4 @@
+-- 명세3 §4 — Supabase MCP 로 적용함 (migration: mine_saves_and_rank). 체크인 saves · eval_scores 정책 복사.
+-- mine_saves(user_id pk → auth.users, version, data jsonb, updated_at): 본인만 select/insert/update
+-- mine_rank(user_id → profiles, week 'YYYY-M-D'(월요일 KST), profit, best_vein, relics, nickname): 누구나 읽기 · 쓰기는 submit_mine_rank() 로만
+--   submit_mine_rank: 이번 주/지난주만 · 범위 검사 · 각 값은 더 큰 쪽만 남김 · authenticated 만 실행

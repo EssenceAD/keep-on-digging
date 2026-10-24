@@ -13,7 +13,8 @@ import { sfx, setSound, soundOn, unlockAudio } from './sound.js';
 import { COLOR, bar, button, frame, icon, kit, label, loadUI, portraitFrame, setTextRes, tab } from './ui.js';
 import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
-import { loadSave, resetSave, writeSave } from './save.js';
+import { SAVE_VERSION, loadSave, migrate, resetSave, writeSave } from './save.js';
+import { BOARDS, initAuth, login, logout, me, online, pullSave, pushSave, recover, submitRank, topRank, weekKey } from './net.js';
 import { computeOffline } from './offline.js';
 import { BUILDINGS, DECOS, at as coAt, canUp, cols as coCols, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
@@ -576,7 +577,8 @@ function endRound(reason = 'retreat') {
   if (W) for (const row of W.g) for (const ch of row) if (ORE_KEYS.has(ch)) lo[ch]++;
   S.idle.leftover = lo;
   tutorialDone(6);
-  save(); buildUI();
+  recordWeek(rd);
+  save(); buildUI(); cloudSoon();
 }
 function nextAuction() {
   const rd = S.round;
@@ -597,13 +599,13 @@ function settleOffline(boot = false) {
   if (!r) return null;
   if (r.midRound) { if (!boot) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3); return r; }
   if (r.pendingTotal > 0 || r.missed.length) welcome = r;
-  save();
+  save(); cloudSoon();
   if (!boot) buildUI();
   return r;
 }
 const pendingOf = () => ORES.filter((o) => S.idle.pending[o.key] > 0);
 const idleValue = () => pendingOf().reduce((a, o) => a + S.idle.pending[o.key] * priceOf(o.key), 0);
-function closeWelcome() { welcome = null; save(); buildUI(); }
+function closeWelcome() { welcome = null; save(); buildUI(); cloudSoon(); }
 function idleSellAll(from) {
   const gain = idleValue();
   for (const o of ORES) S.idle.pending[o.key] = 0;
@@ -685,6 +687,129 @@ function makeWelcome() {
   return box;
 }
 
+// ================================================================ 계정 · 클라우드 저장 · 주간 랭킹 (명세3 §4 — 체크인 net/server.ts · sync.ts)
+let cloudReady = false, pushing = false, cloudT = 0, cloudChoice = null, rankView = null;
+async function pushNow() {
+  if (!online() || !cloudReady || pushing || !saving) return;
+  pushing = true;
+  try { syncRound(); S.savedAt = Date.now(); writeSave(S); await pushSave(S, SAVE_VERSION); } catch { /* 다음에 다시 */ } finally { pushing = false; }
+}
+const cloudSoon = () => { clearTimeout(cloudT); cloudT = setTimeout(pushNow, 1500); };
+setInterval(pushNow, 5 * 60 * 1000);
+window.addEventListener('pagehide', () => void pushNow());
+const progressOf = (d) => (d.company?.coreLv ?? 1) * 1000 + (d.stats?.rounds ?? 0);
+/** 로그인 직후: 클라우드가 더 진행됐으면 묻고, 아니면 이 기기 것을 올린다 (체크인 compareSaves) */
+async function afterLogin() {
+  S.account.userId = me.profile.id; S.account.nickname = me.profile.nickname;
+  try {
+    const sv = await pullSave();
+    const d = sv?.data;
+    if (d && typeof d.v === 'number' && d.v <= SAVE_VERSION) {
+      const same = d.gold === S.gold && d.day === S.day && d.stats?.rounds === S.stats.rounds;
+      if (!same && progressOf(d) > progressOf(S)) {
+        cloudChoice = { data: d, at: d.savedAt || Date.parse(sv.updated_at) };
+        buildUI(); return;
+      }
+    }
+  } catch { /* 서버가 안 되면 로컬로 계속 */ }
+  cloudReady = true; pushNow(); buildUI();
+  toast(`${me.profile.nickname} 님, 클라우드에 저장해요`, 'momo');
+}
+function useCloud() {
+  const d = migrate(cloudChoice.data);
+  d.idle.lastSeen = Date.now();
+  saving = false; writeSave(d); location.reload();
+}
+function keepLocal() { cloudChoice = null; cloudReady = true; pushNow(); buildUI(); toast('이 기기 것을 클라우드에 올렸어요', 'momo'); }
+async function doLogout() { await pushNow(); await logout(); cloudReady = false; S.account.userId = null; S.account.nickname = null; save(); buildUI(); toast('로그아웃했어요 (이 기기엔 그대로 남아요)'); }
+function makeCloudChoice() {
+  const d = cloudChoice.data, uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS), w = Math.min(uW - 12, 250);
+  const box = new Container();
+  const dim = new Graphics().rect(0, 0, uW, uH).fill({ color: 0x0a0812, alpha: 0.7 }); dim.eventMode = 'static'; box.addChild(dim);
+  const c = new Container(); box.addChild(c);
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const h = 150;
+  c.addChild(frame('paper', w, h, 'panel'));
+  const t = label('클라우드에 더 진행된 저장이 있어요', { ...ink, wrap: w - 16 }); t.position.set(8, 8); c.addChild(t);
+  const row = (y, name, x) => { const l = label(`${name}: 사무소 Lv${x.company?.coreLv ?? 1} · ${x.stats?.rounds ?? 0}라운드 · 금화 ${x.gold} · ${x.day}일차`, { ...ink, small: true, wrap: w - 16 }); l.position.set(8, y); c.addChild(l); };
+  row(40, '클라우드', d); row(66, '이 기기', S);
+  const a = button('wood', w - 16, 20, '클라우드 것 불러오기', useCloud); a.position.set(8, h - 52); c.addChild(a);
+  const b = button('paper', w - 16, 18, '이 기기 것 올리기 (클라우드 덮어씀)', keepLocal, { small: true }); b.position.set(8, h - 28); c.addChild(b);
+  c.position.set(Math.round((uW - w) / 2), Math.round((uH - h) / 2));
+  ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
+  return box;
+}
+/** 로그인 창 (글자 입력이라 DOM) — 아이디 + 비밀번호 · 비밀번호 찾기(복구 코드) */
+function openLoginForm() {
+  document.getElementById('login')?.remove();
+  const el = document.createElement('div'); el.id = 'login';
+  el.innerHTML = `<form>
+    <b>체크인 계정으로 로그인</b>
+    <small>「모험의 유산」 아이디·비밀번호 그대로예요. 가입은 모험의 유산에서.</small>
+    <input name="id" placeholder="아이디" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <input name="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
+    <div class="rec" hidden><input name="code" placeholder="복구 코드 (XXXX-XXXX-XXXX-XXXX)"><input name="npw" type="password" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password"></div>
+    <p class="msg"></p>
+    <div class="row"><button type="submit">로그인</button><button type="button" class="x">닫기</button></div>
+    <a href="#" class="find">비밀번호를 잊었어요</a>
+  </form>`;
+  document.body.appendChild(el);
+  const f = el.querySelector('form'), msg = el.querySelector('.msg'), rec = el.querySelector('.rec');
+  let mode = 'login';
+  el.querySelector('.x').onclick = () => el.remove();
+  el.querySelector('.find').onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'recover' : 'login'; rec.hidden = mode === 'login'; f.pw.hidden = mode !== 'login'; f.querySelector('[type=submit]').textContent = mode === 'login' ? '로그인' : '비밀번호 바꾸기'; msg.textContent = ''; };
+  f.onsubmit = async (e) => {
+    e.preventDefault(); msg.textContent = '…';
+    if (mode === 'recover') { const err = await recover(f.id.value, f.code.value, f.npw.value); msg.textContent = err ?? '바꿨어요! 새 비밀번호로 로그인하세요'; if (!err) el.querySelector('.find').click(); return; }
+    const err = await login(f.id.value, f.pw.value);
+    if (err) { msg.textContent = err; return; }
+    el.remove(); afterLogin();
+  };
+  setTimeout(() => f.id.focus(), 50);
+}
+// 주간 기록: 이번 주 순이익 합 · 최대 광맥 · 유물 → 서버(submit_mine_rank: 더 큰 값만 남김)
+function recordWeek(rd) {
+  const wk = weekKey();
+  if (S.rankWeek?.week !== wk) S.rankWeek = { week: wk, profit: 0, bestVein: 0, relics: 0 };
+  const w = S.rankWeek;
+  w.profit += rd.stats.profit; w.bestVein = Math.max(w.bestVein, rd.stats.maxVein); w.relics += rd.stats.relics;
+  if (online()) submitRank(wk, w.profit, w.bestVein, w.relics).catch(() => {});
+}
+async function openRank(board = 'profit') {
+  rankView = { board, loading: true, data: null };
+  buildUI();
+  try { rankView.data = await topRank(board, weekKey()); } catch { rankView.data = { rows: [], mine: null, total: 0, err: true }; }
+  if (rankView) { rankView.loading = false; buildUI(); }
+}
+function makeRank() {
+  const uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS), w = Math.min(uW - 12, 260), h = Math.min(uH - 40, 330);
+  const box = new Container();
+  const dim = new Graphics().rect(0, 0, uW, uH).fill({ color: 0x0a0812, alpha: 0.6 }); dim.eventMode = 'static'; dim.on('pointertap', () => { rankView = null; buildUI(); }); box.addChild(dim);
+  const c = new Container(); box.addChild(c);
+  c.addChild(frame('paper', w, h, 'panel'));
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const t = label(`주간 랭킹 ${weekKey().slice(5)}~`, ink); t.position.set(8, 6); c.addChild(t);
+  const x = button('paper', 36, 14, '닫기', () => { rankView = null; buildUI(); }, { small: true }); x.position.set(w - 42, 5); c.addChild(x);
+  const tw = Math.floor((w - 12) / 3);
+  Object.entries(BOARDS).forEach(([k, name], i) => { const tb = tab(tw, name, () => openRank(k)); tb.setOn(rankView.board === k); tb.position.set(6 + i * tw, 22); c.addChild(tb); });
+  let y = 42;
+  const d = rankView.data;
+  const line = (txt, col = COLOR.paperInk) => { const l = label(txt, { ...ink, small: true, color: col, wrap: w - 20 }); l.position.set(10, y); c.addChild(l); y += Math.max(12, Math.ceil(l.height) + 1); };
+  if (rankView.loading) line('불러오는 중…', 0x8a7a68);
+  else if (d.err) line('서버에 연결할 수 없어요', 0xb84a62);
+  else {
+    const unit = rankView.board === 'best_vein' ? '칸' : rankView.board === 'relics' ? '개' : '';
+    if (!d.rows.length) line('아직 이번 주 기록이 없어요', 0x8a7a68);
+    for (const r of d.rows.slice(0, Math.floor((h - 90) / 12))) line(`${String(r.rank).padStart(2, ' ')}. ${r.nickname}  ${r.score.toLocaleString()}${unit}`, r.user_id === me.profile?.id ? 0x46702e : COLOR.paperInk);
+    y = h - 52;
+    line(online() ? (d.mine ? `내 순위 ${d.mine.rank} / ${d.total} · ${d.mine.score.toLocaleString()}${unit}` : '내 기록은 라운드를 끝내면 올라가요') : '로그인하면 내 기록이 올라가요 ([설정] → 체크인 계정 로그인)', 0x8a5a24);
+    line('월요일 0시(한국)에 새로 시작 · 보상은 다음 단계', 0x8a7a68);
+  }
+  c.position.set(Math.round((uW - w) / 2), Math.round((uH - h) / 2));
+  ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
+  return box;
+}
+
 // ================================================================ 회사 화면 (명세3 §2): 부지 슬롯 + 건물 목록 시트
 let view = 'mine';                                       // 'mine' | 'company'
 let coPage = 'site', coTab = 'build', placing = null, coSel = null, coScroll = 0, coDragged = false;
@@ -738,7 +863,7 @@ function onSlot(x, y) {
   coSel = here && !(coSel?.x === x && coSel?.y === y) ? { x, y, kind: here.kind } : null;
   sfx('stash', true); buildUI();
 }
-function afterBuild(msg) { refreshCompany(); sfx('bell'); toast(msg); bumpCounter('coin'); save(); buildUI(); }
+function afterBuild(msg) { refreshCompany(); sfx('bell'); toast(msg); bumpCounter('coin'); save(); buildUI(); cloudSoon(); }
 const isNight = () => { const hr = (S.tick / TICK_PER_DAY) * 24; return hr < 6 || hr >= 19; };
 
 function makeCompany(x, y, w, h) {
@@ -952,7 +1077,7 @@ function learnTalent(tree) {
   S.talents[tree] = (S.talents[tree] ?? 0) + 1;
   refreshCompany(); sfx('bell');
   toast(`특성: ${B.talents[tree][S.talents[tree] - 1]}`, 'halabeoji');
-  save(); buildUI();
+  save(); buildUI(); cloudSoon();
 }
 function resetTalents() {
   const free = S.company.coreLv === 1 && !S.talents.freeResetUsed;
@@ -1228,6 +1353,8 @@ function buildUI() {
     if (tut) uiRoot.addChild(tut);
   }
   if (welcome) uiRoot.addChild(makeWelcome());
+  if (rankView) uiRoot.addChild(makeRank());
+  if (cloudChoice) uiRoot.addChild(makeCloudChoice());
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
   refreshUI();
@@ -1237,7 +1364,7 @@ function makeHud(w, h) {
   const c = new Container();
   c.addChild(frame('wood', w, h));
   const wide = w >= 320;
-  const t1 = label('돌망치 상회', { color: COLOR.gold }); t1.position.set(7, 4);
+  const t1 = label(online() ? `${me.profile.nickname}의 상회` : '돌망치 상회', { color: COLOR.gold }); t1.position.set(7, 4);
   c.addChild(t1);
   const sub = S.round?.card?.name ?? '오늘의 경매';
   if (!wide) { const t2 = label(sub, { small: true, color: COLOR.dim }); t2.position.set(Math.round(t1.width) + 12, 6); if (t2.x + t2.width < w - 38) c.addChild(t2); else t2.destroy(); }
@@ -1563,10 +1690,12 @@ function makeSettings(w) {
   const items = [
     [() => `저사양 ${low ? '켬' : '끔'}`, () => setLow(!low)],
     [() => `소리 ${soundOn() ? '켬' : '끔'}`, () => { unlockAudio(); setSound(!soundOn()); S.settings.sound = soundOn(); save(); }],
+    [() => (online() ? `로그아웃 (${me.profile.nickname})` : '체크인 계정 로그인'), () => (online() ? doLogout() : openLoginForm())],
+    ['랭킹', () => openRank()],
     ['전체 화면', () => document.documentElement.requestFullscreen?.().catch(() => {})],
     ['처음부터', () => { if (confirm('저장을 지우고 처음부터 시작할까요?')) { saving = false; resetSave(); location.reload(); } }],
   ];
-  const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 62))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
+  const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 70))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
   items.forEach(([text, fn], i) => {
     const b = button('stone', bw, bh, typeof text === 'function' ? text() : text, () => { fn(); if (typeof text === 'function') b.setText(text()); }, { small: true });
     b.position.set((i % cols) * (bw + 4), Math.floor(i / cols) * (bh + 4));
@@ -2657,11 +2786,12 @@ else {
   Object.assign(cartA.cargo, S.round.cartCargo ?? {}); Object.assign(cartB.cargo, S.round.cartCargo2 ?? {});
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }
+initAuth().then(() => { if (online()) afterLogin(); });
 if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3);
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, openCompany, closeCompany, refreshCompany, coAction, onSlot, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, openCompany, closeCompany, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
