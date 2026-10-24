@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.1.1';
+const VERSION = 'v1.1.2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -648,6 +648,17 @@ function nextAuction() {
 let welcome = null;                                     // 정산 요약 (카드가 떠 있는 동안)
 const idleHi = new Set(); let idleHiUntil = 0;          // [광종별로 고르기] → 판매 행 하이라이트
 const advanceMarket = (sec) => { S.marketT += sec; };
+// ---- v1.1.2: 인수인계·튜토리얼 동안 알림 보류 (「돌아오셨군요」·편지·과제) → 끝난 뒤 들어온 순서대로, 하나씩 3초 간격
+const held = []; let heldNext = 0;
+const tutBusy = () => !S.tutorial.done || !!S.tutorial.active || !!introView;
+function notify(fn, stale) { if (tutBusy() || held.length) held.push({ fn, stale }); else fn(); }
+setInterval(() => {
+  if (!held.length || tutBusy() || dialog || welcome || Date.now() < heldNext) return;
+  const it = held.shift();
+  if (it.stale?.()) return;                                  // 급등처럼 이미 지나간 건 버림
+  it.fn(); heldNext = Date.now() + 3200;
+}, 300);
+const surgeGone = (key) => () => !(market.surge && market.surge.key === key && mNow() < market.surge.end);
 function settleOffline(boot = false) {
   const r = computeOffline(S, {
     market, marketNow: mNow, advanceMarket,
@@ -655,7 +666,7 @@ function settleOffline(boot = false) {
   });
   if (!r) return null;
   if (r.midRound) { if (!boot) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3); return r; }
-  if (r.pendingTotal > 0 || r.missed.length) { welcome = r; setTimeout(() => { tip('welcome'); sfx('welcome'); }, 400); }
+  if (r.pendingTotal > 0 || r.missed.length) notify(() => { welcome = r; buildUI(); setTimeout(() => { tip('welcome'); sfx('welcome'); }, 400); });
   save(); cloudSoon();
   if (!boot) buildUI();
   return r;
@@ -747,13 +758,13 @@ function count(k, n = 1) {
   S.counters ??= {};
   S.counters[k] = (S.counters[k] ?? 0) + n;
   for (const t of checkDaybook(S)) {
-    setTimeout(() => { toast(`과제 완료! ${dayDef(t.id).text(t.n)} · 금화 +${t.reward}`, 'momo', 3); sfx('bell'); bumpCounter('coin'); refreshUI(); if (sheetTab === 'day') buildUI(); }, 300);
+    setTimeout(() => notify(() => { toast(`과제 완료! ${dayDef(t.id).text(t.n)} · 금화 +${t.reward}`, 'momo', 3); sfx('bell'); bumpCounter('coin'); refreshUI(); if (sheetTab === 'day') buildUI(); }), 300);
   }
 }
 /** 날이 바뀌면 새 과제 — 모모 편지 */
 function checkNewDay() {
   if (!S.tutorial.done) return;                               // 과제 편지는 튜토리얼 뒤부터
-  if (rollDaybook(S)) { setTimeout(() => toast('모모 편지: 오늘의 과제 3개가 왔어요! [과제]에서 봐요', 'momo', 4), 1500); save(); if (sheetTab === 'day') buildUI(); }
+  if (rollDaybook(S)) { setTimeout(() => notify(() => toast('모모 편지: 오늘의 과제 3개가 왔어요! [과제]에서 봐요', 'momo', 4)), 1500); save(); if (sheetTab === 'day') buildUI(); }
 }
 setTimeout(checkNewDay, 0);                              // 모듈이 다 읽힌 뒤
 setInterval(checkNewDay, 60 * 1000);
@@ -1419,7 +1430,7 @@ function glowTex() {
 }
 let siteDragged = false, yardPan = null;                    // 좌우 끌기 (기기 px, 처음 = 사무소 터 가운데)
 /** 장면 배율 (정수만): 폰도 최소 2× — 넘치는 폭은 좌우로 끌어 봄 */
-const yardScale = () => Math.max(2, Math.floor(Math.min(L.W / YARD.scene.w, (L.H - L.panels.hud.h - 34 * L.uiS) / YARD.scene.h)));
+const yardScale = () => (L.colW >= L.W ? 2 : Math.max(1, Math.min(3, Math.floor(L.colW / YARD.scene.w), Math.floor((L.H - L.panels.hud.h - 34 * L.uiS) / YARD.scene.h))));   // 폰 2×(끌기) · PC는 기둥 폭에 맞는 정수, 3×까지
 const yardTex = (n) => { const t = loaded[A(`scenes/${n}.png`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
 /** 길(폴리라인) 위 점: d = 처음부터 거리 */
 const polyLen = (p) => p.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
@@ -2027,7 +2038,7 @@ function computeLayout() {
   const Wd = window.innerWidth, H = window.innerHeight;
   const dpr = R.resolution;
   // 명세5 §9: 좌우 상시 패널 없음 — 폰은 화면 전체, 패드·PC는 가운데 세로 기둥(폰 비율). 위 HUD · 지상 띠 · 격자(세로로 끌어 봄) · 아래 시트
-  const colW = H >= Wd * 0.9 ? Wd : Math.min(Wd, Math.round(H * 0.62)), cx0 = Math.round((Wd - colW) / 2);
+  const colW = H >= Wd * 0.9 ? Wd : Math.min(Wd, Math.round(H * 0.8)), cx0 = Math.round((Wd - colW) / 2);   // v1.1.2: PC 기둥 = min(폭, 높이×0.8)
   const portraitMode = true;
   const uiS = Math.max(2, Math.min(3, Math.floor(colW / 195)));
   const cell = colW / 12;
@@ -2746,13 +2757,13 @@ document.getElementById('ref-office').src = A('scenes/office_night.png');
 const uiFx = [];
 market.onTick = () => { refreshUI(); };
 // 급등: 30초 전 모모 편지 → 그 광종 행이 UI 펄스 → 40초 동안 ×1.8
-market.onWarn = (key, warn = B.surgeWarn) => {
+market.onWarn = (key, warn = B.surgeWarn) => notify(() => {
   tip('surge'); sfx('letter');
   const o = ORES.find((q) => q.key === key), who = B.buyers[buyerOf(key)].name;
   toast(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! (${warn}초 뒤)`, 'momo', 5);
   sfx('bell');
-};
-market.onSurge = (key) => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${CF.surgeMul}! 40초 동안`, 'momo', 3); sfx('surge'); };
+}, () => !market.surge || mNow() >= market.surge.start);
+market.onSurge = (key) => notify(() => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${CF.surgeMul}! 40초 동안`, 'momo', 3); sfx('surge'); }, surgeGone(key));
 
 // 말풍선 그리기 (UI 층, 캐릭터 머리 위를 따라감)
 function drawEmotes(dt) {
@@ -3814,7 +3825,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get coListOpen() { return coListOpen; }, get yardPan() { return yardPan; }, set coListOpen(v) { coListOpen = v; }, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get coListOpen() { return coListOpen; }, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, set coListOpen(v) { coListOpen = v; }, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });

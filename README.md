@@ -36,6 +36,10 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.1.2
+- 인수인계·튜토리얼 동안 「돌아오셨군요」·모모 편지(급등·과제)·과제 완료 알림은 보류 → 끝난 뒤 들어온 순서대로 3초 간격. 이미 지나간 급등 알림은 버림.
+- PC 기둥 폭 = min(폭, 높이×0.8), 칸 = 폭/12. 부지는 그 폭에 들어가는 정수 배율(3×까지, 폰은 2×+끌기).
+
 ## v1.1 (PATCH_V10 §2~4 — 회사 부지 장면)
 - 형철 pxl 조립본 `art/yard/yard.px.js`(+ `tiles.px.js`)을 `npm run art`로 빌드 → `scenes/yard_day`·`yard_night` 한 장 위에 얹음. 격자 슬롯·옛 `art/yard.px.js` 삭제.
 - 건물은 `art/yard/yard_lots.json` 빈 터 10곳에만(처음 6곳, 사무소 Lv2~5마다 덤불 걷힌 터 1곳씩), 그림자 타원. 장식은 소품 자리 12곳. 어울림 = 같은 구역(위 줄/아래 줄).
