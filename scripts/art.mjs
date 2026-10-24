@@ -6,6 +6,7 @@
 //   art/chibi.px.js        §10 캐릭터(광부 3·두더지·NPC 4·광차) — GPT 치비를 png2pxl로 변환(sh scripts/chibi.sh) + 손 프레임
 //   art/fx.px.js           이펙트 시트 10종 (48×48 × 6~8f)
 //   art/chars.px.js        §9 광차 v2 (형철) — v0.5부터 게임 광차. 광부 v2는 안 씀
+//   art/buildings.px.js    명세3 §2-3 지상 부지 건물 9종 × Lv1/3/5 + 장식 6 (형철 초안)
 // pxl: crsolver/claude-pxl (MIT) — ~/.claude/skills/pxl-pixel-art 에 클론 (PXL 환경변수로 경로 바꿀 수 있음)
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -16,7 +17,7 @@ const pxl = process.env.PXL || join(homedir(), '.claude/skills/pxl-pixel-art/bin
 rmSync('art/out', { recursive: true, force: true });
 rmSync('art/office/out', { recursive: true, force: true });
 rmSync('art/ui/out', { recursive: true, force: true });
-for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/office/office.px.js', 'art/ui/ui.px.js'])
+for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/buildings.px.js', 'art/office/office.px.js', 'art/ui/ui.px.js'])
   execFileSync(process.execPath, [pxl, 'build', f], { stdio: ['ignore', 'ignore', 'inherit'] });
 
 rmSync('public/art', { recursive: true, force: true });
