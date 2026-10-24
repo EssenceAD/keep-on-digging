@@ -118,7 +118,7 @@ export async function topRank(col, week, n = 20) {
 }
 
 // ───────── 제보 편지 · 공지 · 운영자 제보함 (체크인 net/server.ts · net/direction.ts 와 같은 테이블·함수) ─────────
-// bug_letters: 채굴 제보는 app_version 'mine-vX' 로 구분. 답장은 내 편지 select 정책으로 직접 읽는다 (보낸 id 는 세이브에)
+// bug_letters: 채굴 제보는 app_version 'mine-vX' 로 구분. 답장은 my_letter_replies('mine') (체크인은 인자 없이 → 채굴 것 빠짐)
 /** 서버 함수 부르기: 성공 → data · 실패 → null (던지지 않음) */
 export async function rpc(fn, args = {}) {
   if (!sb) return null;
@@ -131,12 +131,10 @@ export async function sendLetter(body, appVersion) {
   const { data, error } = await sb.from('bug_letters').insert({ user_id: me.profile.id, body: body.slice(0, 1000), app_version: appVersion.slice(0, 32) }).select('id').single();
   return error ? { ok: false, why: 'fail' } : { ok: true, id: data?.id ?? null };
 }
-/** 내가 채굴에서 보낸 편지 중 답장 온 것 */
-export async function myMineReplies(ids) {
-  if (!sb || !me.profile || !ids.length) return [];
-  const { data } = await sb.from('bug_letters').select('id,body,reply,replied_at').in('id', ids).not('reply', 'is', null);
-  return data ?? [];
-}
+/** 아직 안 받은 채굴 제보 답장 (서버 my_letter_replies(p_app='mine') — supabase/mine_letters.sql) */
+export const myMineReplies = async () => (me.profile ? (await rpc('my_letter_replies', { p_app: 'mine' })) ?? [] : []);
+/** 받은 답장은 읽음으로 (내 편지만) */
+export const markRepliesRead = async (ids) => (ids.length && me.profile ? (await rpc('mark_replies_read', { p_ids: ids })) != null : false);
 /** 공지 (체크인과 같은 notices) */
 export async function listNotices() {
   if (!sb) return [];

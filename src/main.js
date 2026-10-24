@@ -14,7 +14,7 @@ import { COLOR, bar, button, fitText, frame, icon, kit, label, loadUI, portraitF
 import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
 import { SAVE_VERSION, loadSave, migrate, resetSave, writeSave } from './save.js';
-import { BOARDS, adminMineLetters, adminReply, initAuth, isAdmin, listNotices, login, logout, me, myMineReplies, online, pullSave, pushSave, recover, sendLetter, submitRank, topRank, weekKey } from './net.js';
+import { BOARDS, adminMineLetters, adminReply, initAuth, isAdmin, listNotices, login, logout, me, markRepliesRead, myMineReplies, online, pullSave, pushSave, recover, sendLetter, submitRank, topRank, weekKey } from './net.js';
 import { PATCH_NOTES } from './patchnotes.js';
 import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.2';
+const VERSION = 'v1.2.3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -1071,8 +1071,8 @@ function introNext(skip = false) {
   if (!skip && nowMs - v.tapAt < 150) return;                     // 탭 디바운스: 줄당 1회
   v.tapAt = nowMs;
   sfx('stash', true);
-  v.i = skip ? INTRO.length : v.i + 1;
-  if (v.i >= INTRO.length) {
+  v.i = skip ? INTRO_S.length : v.i + 1;
+  if (v.i >= INTRO_S.length) {
     introView = null; introTick = null; introLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     S.tutorial.introSeen = true; save();
     v.onDone?.(); buildUI();
@@ -1101,20 +1101,21 @@ function buildIntroLayer() {
   // 대사 틀 (UI 배율)
   const uW = Math.round(Wc / L.uiS), uH = Math.round(Hc / L.uiS);
   const ui0 = new Container(); ui0.scale.set(L.uiS); introLayer.addChild(ui0);
-  const w = Math.min(uW - 16, 300);
+  const w = Math.min(uW - 8, 340), ps = Math.max(20, Math.round(48 / L.uiS));   // ONBOARDING §2 말풍선: 초상 48px · 한 문장 · 최대 2줄
   const box = new Container(); ui0.addChild(box);
   const sk = button('stone', 50, 14, '건너뛰기', () => introNext(true), { small: true }); sk.position.set(uW - 56, 6); ui0.addChild(sk);
   let nx = null;
   introLayer.setLine = (i) => {
     box.removeChildren().forEach((c) => c.destroy({ children: true }));
-    const tx = label(INTRO[i], { color: COLOR.paperInk, shadow: false, wrap: w - 62 });
-    const h = Math.max(54, Math.ceil(tx.height) + 22);
+    const tx = label(INTRO_S[i], { small: true, color: COLOR.paperInk, shadow: false, wrap: w - ps - 44 });
+    if (tx.height > 26) { tx.style.wordWrap = false; fitText(tx, (w - ps - 44) * 2 - 10); tx.style.wordWrap = true; }
+    const h = Math.max(ps + 8, Math.ceil(tx.height) + 10);
     box.position.set(Math.round((uW - w) / 2), uH - h - 12);
     box.addChild(frame('paper', w, h, 'panel'));
-    const pf = portraitFrame(tex(NPC.halabeoji), 42, 'wood'); pf.position.set(6, 6); box.addChild(pf);
-    tx.position.set(56, 8); box.addChild(tx);
-    nx = label(i < INTRO.length - 1 ? '탭 ▶' : '시작 ▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 8 - Math.ceil(nx.width), h - 13); box.addChild(nx);
-    if (i === 1) v.slideT = 0;
+    const pf = portraitFrame(tex(NPC.halabeoji), ps, 'wood'); pf.position.set(4, Math.round((h - ps) / 2)); box.addChild(pf);
+    tx.position.set(ps + 12, Math.round((h - tx.height) / 2)); box.addChild(tx);
+    nx = label(i < INTRO_S.length - 1 ? '▶' : '시작 ▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 6 - Math.ceil(nx.width), h - 13); box.addChild(nx);
+    if (INTRO_S[i].includes('넘기겠네')) v.slideT = 0;                  // 열쇠·장부가 플레이어 쪽으로
   };
   introLayer.setLine(v.i);
   let tt = 0;
@@ -1132,7 +1133,8 @@ function buildIntroLayer() {
 }
 // ---- 대사 카드 (첫 경매 안내 · 상황별 1회 안내) — 탭으로 넘김, 강제 없음
 /** 대사는 한 장에 한 문장 (V12 §2) — 여러 문장이면 장을 나눔 */
-const oneSentence = (lines) => lines.flatMap((l) => l.split(/(?<=[.!?…])\s+/).filter(Boolean));
+const oneSentence = (lines) => lines.flatMap((l) => l.split(/(?<=[.!?])\s+/).filter(Boolean));   // 「…」 은 말 끊김이라 안 나눔
+const INTRO_S = oneSentence(INTRO);                                                               // 인수인계도 한 장에 한 문장
 function showDialog(d) { d = { ...d, lines: oneSentence(d.lines) }; if (dialog) dialogQueue.push(d); else { dialog = { i: 0, ...d }; buildUI(); } }
 function dialogNext() {
   if (!dialog) return;
@@ -2806,18 +2808,16 @@ function openInbox() {
     }));
   });
 }
-/** 접속할 때: 내 채굴 제보에 온 답장 → 모모 편지 (한 번만) */
+/** 접속할 때: 내 채굴 제보에 온 답장 → 모모 편지 → 읽음 (서버 my_letter_replies('mine') — 체크인은 채굴 답장을 안 가져감) */
 async function checkReplies() {
-  const L0 = (S.letters ??= { sent: [], seen: [] });
-  if (!online() || !L0.sent.length) return;
-  const rows = await myMineReplies(L0.sent);
+  if (!online()) return;
+  const rows = await myMineReplies();
+  if (!rows.length) return;
   for (const r of rows) {
-    if (L0.seen.includes(r.id) || !r.reply) continue;
-    L0.seen.push(r.id);
     mail(`「${String(r.body).slice(0, 40)}${String(r.body).length > 40 ? '…' : ''}」에 답장이 왔어요 — ${r.reply}`, '💌 제보 답장');
     notify(() => showDialog({ who: 'momo', lines: ['제보에 답장이 왔어요!', r.reply] }));
   }
-  save();
+  await markRepliesRead(rows.map((r) => r.id));
 }
 setInterval(() => { if (online()) checkReplies(); }, 10 * 60 * 1000);
 
