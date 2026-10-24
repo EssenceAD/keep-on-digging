@@ -12,19 +12,24 @@ import numpy as np
 KEYS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 ap = argparse.ArgumentParser()
 ap.add_argument("png"); ap.add_argument("out"); ap.add_argument("--tile-rows", type=int, default=4); ap.add_argument("--tile", type=int, default=16)
-ap.add_argument("--colors", type=int, default=60); ap.add_argument("--names")
+ap.add_argument("--colors", type=int, default=60); ap.add_argument("--names"); ap.add_argument("--pal-from", help="기존 pxl 파일의 use([...]) 팔레트를 그대로 사용"); ap.add_argument("--no-use", action="store_true", help="use() 줄 생략(include 로 팔레트 공유)"); ap.add_argument("--no-merge", action="store_true"); ap.add_argument("--band", type=int, default=40)
 a = ap.parse_args()
 
 im = Image.open(a.png).convert("RGB"); W, H = im.size; arr = np.array(im).astype(int)
 mag = ((arr[:, :, 0] > 190) & (arr[:, :, 2] > 190) & (arr[:, :, 1] < 110)) | ((arr[:, :, 0] > 130) & (arr[:, :, 2] > 120) & (arr[:, :, 1] < 100) & ((arr[:, :, 0] - arr[:, :, 1]) > 60))   # 마젠타 + 번짐 분홍
 # 격자선(마젠타가 섞인 분홍) 도 배경 취급: 타일 영역에서는 안쪽 픽셀로 대체
-T = a.tile; tile_h = a.tile_rows * T + 4
+T = a.tile; tile_h = a.tile_rows * T + 4 if a.tile_rows else 0
 # ---- 팔레트 양자화 (마젠타 제외)
-fg = arr[~mag]
-q = Image.fromarray(fg.reshape(1, -1, 3).astype("uint8")).quantize(colors=a.colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-palrgb = np.array(q.getpalette()[: 3 * a.colors]).reshape(-1, 3)
-used = sorted(set(np.array(q).flatten().tolist()))
-palrgb = palrgb[used]
+if a.pal_from:
+    import re
+    m = re.search(r"use\(\[(.*?)\]\)", open(a.pal_from, encoding="utf-8").read(), re.S)
+    palrgb = np.array([[int(h[i:i+2], 16) for i in (1, 3, 5)] for h in re.findall(r'"(#[0-9a-fA-F]{6})"', m.group(1))])
+else:
+    fg = arr[~mag]
+    q = Image.fromarray(fg.reshape(1, -1, 3).astype("uint8")).quantize(colors=a.colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    palrgb = np.array(q.getpalette()[: 3 * a.colors]).reshape(-1, 3)
+    used = sorted(set(np.array(q).flatten().tolist()))
+    palrgb = palrgb[used]
 def nearest(rgb):
     d = ((palrgb - rgb) ** 2).sum(1); return int(d.argmin())
 cache = {}
@@ -36,7 +41,7 @@ def key_at(x, y):
 
 out = []
 out.append("// 자동 생성: scripts/sheet2pxl.py ← " + a.png)
-out.append("use([" + ", ".join('"#%02x%02x%02x"' % tuple(c) for c in palrgb) + "])")
+if not a.no_use: out.append("use([" + ", ".join('"#%02x%02x%02x"' % tuple(c) for c in palrgb) + "])")
 # ---- 타일
 cols = W // T
 for r in range(a.tile_rows):
@@ -81,7 +86,7 @@ for y in range(tile_h, H):
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
         props.append((min(xs), min(ys), max(xs) + 1, max(ys) + 1))
 # 가까운 조각 합치기(같은 소품의 떨어진 부분) — 4px 이내 겹침
-merged = True
+merged = not a.no_merge
 while merged:
     merged = False
     for i in range(len(props)):
@@ -90,7 +95,7 @@ while merged:
             if a0 - 1 < c1 and a1 - 1 < c0 and b0 - 1 < d1 and b1 - 1 < d0:
                 props[i] = (min(a0, a1), min(b0, b1), max(c0, c1), max(d0, d1)); props.pop(j); merged = True; break
         if merged: break
-props.sort(key=lambda b: (b[1] // 40, b[0]))   # 줄 → 왼쪽부터
+props.sort(key=lambda b: (b[1] // a.band, b[0]))   # 줄 → 왼쪽부터
 names = [l.strip() for l in open(a.names, encoding="utf-8")] if a.names else []
 for i, (x0, y0, x1, y1) in enumerate(props):
     name = names[i] if i < len(names) and names[i] else f"p_{i}"

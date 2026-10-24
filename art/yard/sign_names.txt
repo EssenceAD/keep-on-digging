@@ -1,0 +1,10 @@
+sign_pick
+sign_anvil
+sign_gear
+sign_bed
+sign_crate
+sign_gem
+sign_mug
+sign_cart
+sign_bag
+sign_flask
