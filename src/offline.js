@@ -32,7 +32,7 @@ export function splitCells(leftover, n) {
 
 /**
  * 불러온 직후(또는 화면으로 돌아왔을 때) 한 번. S 를 고친다.
- * ctx: { market, gameNow(): 절대 게임 초, advanceClock(sec), miners, pickGrade, capHours, whRoom, rateMul }
+ * ctx: { market, marketNow(): 시세 시계(초), advanceMarket(sec), miners, pickGrade, capHours, whRoom, rateMul } — 게임 날짜는 안 건드림
  * 돌려줌: null(짧게 떠났음) | { midRound, away } | 요약
  */
 export function computeOffline(S, ctx, nowMs = Date.now()) {
@@ -42,13 +42,14 @@ export function computeOffline(S, ctx, nowMs = Date.now()) {
   I.lastSeen = nowMs;
   if (away < B.idle.minAwaySeconds) return null;
   const st = S.round?.state;
-  if (st === 'SURVEY' || st === 'DIG') return { midRound: true, away };   // 라운드는 멈춰 있음 (시계도 안 감)
+  if (st === 'SURVEY' || st === 'DIG') return { midRound: true, away };   // 라운드는 멈춰 있음 (게임 날짜도 안 감)
 
-  // 시세·시계 빨리감기 (최대 24시간)
+  // 시세 빨리감기 (최대 24시간) — 게임 날짜는 접속 중에만 흐른다
   const ff = Math.min(away, B.idle.marketMaxHours * 3600);
-  const from = ctx.gameNow();
-  ctx.advanceClock(ff);
-  const { before, missed } = ctx.market.fastForward(from, ctx.gameNow());
+  const from = ctx.marketNow();
+  ctx.advanceMarket(ff);
+  const to = ctx.marketNow();
+  const { before, missed } = ctx.market.fastForward(from, to);
 
   // 방치 채굴
   const rate = idleRate(ctx.miners, ctx.pickGrade, ctx.rateMul ?? 1);   // 칸/분
@@ -64,6 +65,6 @@ export function computeOffline(S, ctx, nowMs = Date.now()) {
   return {
     midRound: false, away, mined, pending: { ...I.pending }, pendingTotal: sum(I.pending),
     capped: why === 'time', whFull: why === 'wh', exhausted: sum(I.leftover) === 0 && leftTotal > 0,
-    leftover: sum(I.leftover), before, missed,
+    leftover: sum(I.leftover), before, missed, to,
   };
 }

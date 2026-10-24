@@ -12,7 +12,7 @@
 | 세로 폰 390×844 · 시추 | 세로 폰 · 돌아오셨군요 | 패드 820×1180 · 회사 | PC 1440×900 · 경매 |
 |---|---|---|---|
 | [![세로 폰](docs/screens/phone.png)](docs/screens/phone.png) | [![돌아오셨군요](docs/screens/welcome.png)](docs/screens/welcome.png) | [![패드](docs/screens/pad.png)](docs/screens/pad.png) | [![PC](docs/screens/pc.png)](docs/screens/pc.png) |
-| 칸 = 너비/12 · 위 HUD(금화·창고·날짜·[회사]) · 아래 시트 판매/광부/과제/설정 | 떠난 동안 캔 광석 · 지금 시세·떠난 뒤 % · 놓친 급등 | 부지 슬롯(사무소 Lv마다 +1열) · 건물 그림 Lv1/3/5 · 어울림 금선 · 아래 건물 목록 | 길드 대표 3명 + 대사 말풍선 · 낙찰 망치·도장 · 왼쪽 광부·과제·사건·설정 / 오른쪽 판매 |
+| 칸 = 너비/12 · 위 HUD(금화·창고·날짜·[회사]) · 아래 시트 판매/광부/과제/설정 | 떠난 동안 캔 광석 · 지금 시세·떠난 뒤 % · 놓친 급등 | 부지 한 칸 = 갱도 칸 ×2 · 잔디·흙길·울타리 · 넘치면 끌어서 봄 · 칸 선은 짓기·옮기기 중에만 · 밤엔 창문 빛 | 길드 대표 3명 + 대사 말풍선 · 낙찰 망치·도장 · 왼쪽 광부·과제·사건·설정 / 오른쪽 판매 |
 
 ## 한 라운드 (명세2 §2~§9)
 | 단계 | 하는 것 |
@@ -33,7 +33,7 @@
 |---|---|
 | 방치 | [철수]한 구획의 남은 광맥을 광부들이 현실 시간으로 캔다: 분당 광부 수 × 곡괭이 × 0.5칸. 상한 4h(숙소 Lv3 6h · Lv5 8h) · 창고 남은 칸 · 남은 광맥. 라운드 중에 닫으면 그 라운드는 멈춰 있음 |
 | 돌아오셨군요 | 1분↑ 떠났다 오면 카드: 캔 것 · 지금 시세 · 떠난 뒤 % · 예상 매출 · [지금 팔기] [창고에 두기] [골라 팔기 ▸](판매 행 하이라이트) · 놓친 급등 · [광고 2배](준비 중) |
-| 시세 | 결정론적 랜덤 워크(틱 번호·광종 해시) — 떠나 있던 동안 최대 24시간 빨리감기, 급등 계획도 날짜로 정해짐 |
+| 시세 | 결정론적 랜덤 워크(틱 번호·광종 해시). 시세 시계는 현실 시간이라 떠나 있던 동안 최대 24시간 빨리감기 · 게임 날짜는 접속 중에만 흐름 |
 | 회사 | HUD [회사] · 결과 [회사로]. 건물 9(사무소·창고·광차 차고·숙소·제련소·랜턴 공방·펌프실·포탑 공방·두더지 집) Lv1~5 즉시 · 다른 건물 Lv ≤ 사무소 · 장식 6 · 어울림 8(숨은 2, 체크인 harmony gap 규칙). 라운드 중엔 보기만 |
 | 효과 | 창고 60→500 · 광차 2대(차고 Lv3)·적재·속도 · 광부 3→6 · 제련(괴 ×1.6, 시세 변동 ½, 판매 탭 [괴]) · 투시 랜턴 횟수·5×5 · 펌프 값·자동 · 포탑(슬라임 1·박쥐 2) · 탐사 시간·킁킁 깊이·크기 점 · 사무소 Lv2 L 구획 · Lv3 폐광 |
 | 특성 | 회사 화면 [특성]: 탐사·채굴·장사 × 5단, 사무소 Lv당 1점 + ★3 10회마다 1점 · 초기화 500(사무소 Lv1 때 1회 무료) |
@@ -46,7 +46,7 @@
 ## 구조
 - `src/balance.js` 숫자(명세3: `idle` · `company` · `abandoned` · `daybook` · `talents`) · `src/save.js` 로컬 저장(v2 · migrate) · `src/offline.js` 방치 정산 · `src/company.js` 회사·어울림·특성 효과 · `src/daybook.js` 일일 과제 · `src/net.js` 계정·클라우드·랭킹 · `src/text.js` 대사 · `supabase/mine.sql` 테이블 메모 · `src/gen.js` 구획 생성(힌트 → 칸, 층·광맥·동굴·유물·지하수·가스) · `src/market.js` 시세 · `src/rng.js` 시드 난수
 - `src/main.js` 장면·상태 기계·경매·탐사·시추·광차·사건·결과·UI · `src/ui.js` UI 킷 런타임(9-slice) · `src/gl.js` 조명·후처리 · `src/sound.js` 효과음
-- 아트 (`npm run art`): `art/shaft.px.js` 타일·소품(형철 초안 + Code 추가: 고대석·지하수·가스·유물·동굴·사다리·빨간 X·슬라임) · `art/chibi.px.js` 캐릭터(+ 길드 대표 3) · `art/buildings_gpt.px.js` 회사 건물·장식(GPT 시트 `art/raw/mine_buildings_lv1.png` → `sh scripts/buildings.sh`, 지금 Lv1뿐 — Lv는 금 눈금) · `art/buildings.px.js` 폴백(형철 코드 그림) · `art/chars.px.js` 광차(형철, §9) · `art/fx.px.js` 이펙트 10종 · `art/mine.px.js` 지상·겹·아이콘·힌트 아이콘 · `art/ui/ui.px.js` UI 킷 · `art/office/office.px.js` 사무소
+- 아트 (`npm run art`): `art/shaft.px.js` 타일·소품(형철 초안 + Code 추가: 고대석·지하수·가스·유물·동굴·사다리·빨간 X·슬라임) · `art/chibi.px.js` 캐릭터(+ 길드 대표 3) · `art/buildings_gpt.px.js` 회사 건물·장식(GPT 시트 `art/raw/mine_buildings_lv1·3·5.png` → `sh scripts/buildings.sh` → 128×128, Lv2·4는 1·3 그림) · `art/yard.px.js` 부지 배경(잔디·흙길·울타리·하늘) · `art/buildings.px.js` 폴백(형철 코드 그림) · `art/chars.px.js` 광차(형철, §9) · `art/fx.px.js` 이펙트 10종 · `art/mine.px.js` 지상·겹·아이콘·힌트 아이콘 · `art/ui/ui.px.js` UI 킷 · `art/office/office.px.js` 사무소
 - 렌더: 알베도 + 노멀 → 조명 셰이더 → 발광·헤일로 → 후처리 → 확대 (화면 1px = 칸/32: 타일 2×2, 캐릭터·이펙트 1:1), 그 위에 UI
 
 ## 명령

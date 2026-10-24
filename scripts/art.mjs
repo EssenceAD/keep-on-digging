@@ -8,6 +8,7 @@
 //   art/chars.px.js        §9 광차 v2 (형철) — v0.5부터 게임 광차. 광부 v2는 안 씀
 //   art/buildings.px.js    명세3 §2-3 지상 부지 건물 9종 × Lv1/3/5 + 장식 6 (형철 초안 · 폴백)
 //   art/buildings_gpt.px.js 명세3 §2-3-1 GPT 건물 시트 → png2pxl (sh scripts/buildings.sh) — 게임은 이걸 먼저 씀
+//   art/yard.px.js         회사 부지 배경 (잔디·흙길·울타리·하늘)
 // pxl: crsolver/claude-pxl (MIT) — ~/.claude/skills/pxl-pixel-art 에 클론 (PXL 환경변수로 경로 바꿀 수 있음)
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -18,7 +19,7 @@ const pxl = process.env.PXL || join(homedir(), '.claude/skills/pxl-pixel-art/bin
 rmSync('art/out', { recursive: true, force: true });
 rmSync('art/office/out', { recursive: true, force: true });
 rmSync('art/ui/out', { recursive: true, force: true });
-for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/buildings.px.js', 'art/buildings_gpt.px.js', 'art/office/office.px.js', 'art/ui/ui.px.js'])
+for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/buildings.px.js', 'art/buildings_gpt.px.js', 'art/yard.px.js', 'art/office/office.px.js', 'art/ui/ui.px.js'])
   execFileSync(process.execPath, [pxl, 'build', f], { stdio: ['ignore', 'ignore', 'inherit'] });
 
 rmSync('public/art', { recursive: true, force: true });
