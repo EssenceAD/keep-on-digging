@@ -17,6 +17,7 @@ import { SAVE_VERSION, loadSave, migrate, resetSave, writeSave } from './save.js
 import { BOARDS, initAuth, login, logout, me, online, pullSave, pushSave, recover, submitRank, topRank, weekKey } from './net.js';
 import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
+import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
 import { BUILDINGS, DECOS, at as coAt, canUp, cols as coCols, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
 const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa09a };
@@ -463,7 +464,7 @@ function updateSmelt() {
   let changed = false;
   sm.jobs.sort((p, q) => p.doneAt - q.doneAt);
   while (sm.jobs.length && sm.jobs[0].doneAt <= nowMs) {        // 끝난 칸 → 괴, 그 자리에서 다음 광석 (끝난 시각부터)
-    const j = sm.jobs.shift(); S.ingots[j.key]++; changed = true;
+    const j = sm.jobs.shift(); S.ingots[j.key]++; changed = true; count('ingots');
     if (sm.queue.length) { sm.jobs.push({ key: sm.queue.shift(), doneAt: j.doneAt + dur }); sm.jobs.sort((p, q) => p.doneAt - q.doneAt); }
   }
   while (sm.jobs.length < CF.smeltSlots && sm.queue.length) { sm.jobs.push({ key: sm.queue.shift(), doneAt: nowMs + dur }); changed = true; }
@@ -477,7 +478,7 @@ function smeltOne(key, all = false) {
 }
 function sellIngots(key) {
   const n = S.ingots[key]; if (!n) return;
-  const gain = n * ingotPrice(key); S.ingots[key] = 0; S.gold += gain;
+  const gain = n * ingotPrice(key); S.ingots[key] = 0; S.gold += gain; count('soldGold', gain);
   const r = ui.irows?.[key], from = r ? r.sellB.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
   sfx('stash'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); });
   refreshUI();
@@ -580,6 +581,7 @@ function endRound(reason = 'retreat') {
   S.idle.leftover = lo;
   tutorialDone(6);
   recordWeek(rd);
+  count('rounds'); if (rd.stats.stars >= 2) count('star2');
   save(); buildUI(); cloudSoon();
 }
 function nextAuction() {
@@ -611,12 +613,14 @@ function closeWelcome() { welcome = null; save(); buildUI(); cloudSoon(); }
 function idleSellAll(from) {
   const gain = idleValue();
   for (const o of ORES) S.idle.pending[o.key] = 0;
+  count('idleClaims'); if (gain) count('soldGold', gain);
   if (gain) { S.gold += gain; S.stats.idleSold = (S.stats.idleSold ?? 0) + gain; sfx('stash'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); }); }
   closeWelcome();
 }
 /** 창고로. 넘치는 건 자동 판매 */
 function idleStore(highlight) {
   let gain = 0;
+  count('idleClaims');
   idleHi.clear();
   for (const o of ORES) {
     const p = S.idle.pending[o.key]; if (!p) continue;
@@ -687,6 +691,41 @@ function makeWelcome() {
   c.position.set(Math.round((uW - w) / 2), Math.max(4, Math.round((uH - y) / 2)));
   ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
   return box;
+}
+
+// ================================================================ 일일 과제 (명세3 §6 — 체크인 daybook.ts)
+function count(k, n = 1) {
+  S.counters ??= {};
+  S.counters[k] = (S.counters[k] ?? 0) + n;
+  for (const t of checkDaybook(S)) {
+    setTimeout(() => { toast(`과제 완료! ${dayDef(t.id).text(t.n)} · 금화 +${t.reward}`, 'momo', 3); sfx('bell'); bumpCounter('coin'); refreshUI(); if (sheetTab === 'day') buildUI(); }, 300);
+  }
+}
+/** 날이 바뀌면 새 과제 — 모모 편지 */
+function checkNewDay() {
+  if (rollDaybook(S)) { setTimeout(() => toast('모모 편지: 오늘의 과제 3개가 왔어요! [과제]에서 봐요', 'momo', 4), 1500); save(); if (sheetTab === 'day') buildUI(); }
+}
+setTimeout(checkNewDay, 0);                              // 모듈이 다 읽힌 뒤
+setInterval(checkNewDay, 60 * 1000);
+function makeDaybook(w, h) {
+  const c = new Container();
+  c.addChild(frame('paper', w, h, 'panel'));
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const t = label('오늘의 과제', { ...ink, color: 0x8a5a24 }); t.position.set(6, 4); c.addChild(t);
+  const rowH = Math.max(18, Math.min(30, Math.floor((h - 22) / 3)));
+  (S.daybook?.tasks ?? []).forEach((tk, i) => {
+    const d = dayDef(tk.id); if (!d) return;
+    const y = 20 + i * rowH, p = progress(S, tk);
+    const box = new Graphics().rect(6, y + 2, 9, 9).stroke({ width: 1, color: 0x8a6c52 });
+    if (tk.done) box.moveTo(7, y + 6).lineTo(10, y + 9).lineTo(15, y + 1).stroke({ width: 2, color: 0x46702e });
+    c.addChild(box);
+    const l = label(d.text(tk.n), { ...ink, small: true, color: tk.done ? 0x8a7a68 : COLOR.paperInk }); l.position.set(19, y + 1); c.addChild(l);
+    const r = label(tk.done ? `+${tk.reward} 받음` : `${Math.max(0, p)}/${tk.n} · +${tk.reward}`, { ...ink, small: true, color: tk.done ? 0x46702e : 0x8a7a68 });
+    if (rowH >= 24) r.position.set(19, y + 11); else r.position.set(w - 6 - Math.ceil(r.width), y + 1);
+    c.addChild(r);
+    if (rowH < 24 && l.x + l.width > r.x - 4) l.scale.set(Math.max(0.6, (r.x - 4 - l.x) / l.width));
+  });
+  return c;
 }
 
 // ================================================================ 계정 · 클라우드 저장 · 주간 랭킹 (명세3 §4 — 체크인 net/server.ts · sync.ts)
@@ -842,7 +881,7 @@ function coAction(kind) {
   if (kind === 'office' || (!isDeco && lvOf(S, kind) > 0)) {   // 올리기 (즉시)
     S.gold -= chk.cost;
     if (kind === 'office') S.company.coreLv++; else S.company.buildings[kind].lv++;
-    afterBuild(`${nameOf(kind)} Lv${lvOf(S, kind)}!`);
+    count('builds'); afterBuild(`${nameOf(kind)} Lv${lvOf(S, kind)}!`);
   } else { placing = { kind, cost: chk.cost, move: false }; coSel = null; toast('놓을 빈 자리를 톡!'); buildUI(); }
 }
 function onSlot(x, y) {
@@ -860,6 +899,7 @@ function onSlot(x, y) {
       else S.company.buildings[kind] = { lv: 1, x, y };
     }
     placing = null;
+    if (!move) count('builds');
     afterBuild(move ? `${nameOf(kind)} 옮겼어요` : `${nameOf(kind)} 지었어요!`);
     return;
   }
@@ -1131,6 +1171,7 @@ function playerFold() {
 }
 /** 낙찰 (플레이어): 망치 쾅 + 도장 · 길드 하나가 한마디 */
 function auctionWon() {
+  count('wins');
   AU.phase = 'won'; AU.timer = 2.0; AU.endAt = time;
   const i = Math.floor(Math.random() * 3);
   AU.say = AU.say.map((q) => (q ? { ...q, old: true } : q)); AU.say[i] = { text: pick(GUILD_LINES[i].lose), line: true, t: time + 0.5 };
@@ -1322,8 +1363,8 @@ function buildUI() {
     const s = new Container(); s.y = u(sheet.y);
     const sw = u(sheet.w), sh = u(L.H) - u(sheet.y);
     s.addChild(frame('stone', sw, sh + 6, 'panel'));
-    const tabs = [['sell', '판매'], ['miner', '광부'], ['set', '설정']];
-    const tw = Math.floor((sw - 12 - 22) / 3);
+    const tabs = [['sell', '판매'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
+    const tw = Math.floor((sw - 12 - 22) / 4);
     const body = new Container(); body.position.set(5, 19);
     const bw = sw - 10, bh = sh - 23;
     const show = (key) => {
@@ -1332,7 +1373,7 @@ function buildUI() {
       body.removeChildren().forEach((c) => c.destroy({ children: true }));
       ui.rows = {};
       for (const k of ['crew', 'fps', 'buyerFace', 'buyerName', 'irows', 'smeltLine']) ui[k] = null;
-      body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : makeSettings(bw, bh));
+      body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : key === 'day' ? makeDaybook(bw, bh) : makeSettings(bw, bh));
       refreshUI();
     };
     ui.tabs = tabs.map(([key, name], i) => {
@@ -1355,8 +1396,10 @@ function buildUI() {
     const ch = 114;
     const cf = frame('wood', lw, ch); cf.y = 38; lc.addChild(cf);
     const cr = makeCrew(lw - 10, ch - 10); cr.position.set(5, 43); lc.addChild(cr);
-    const logH = Math.max(60, lh - 38 - ch - 2 - 70);
-    const lf = frame('stone', lw, logH, 'panel'); lf.y = 38 + ch + 2; lc.addChild(lf);
+    const dh = 58;
+    const db = makeDaybook(lw, dh); db.y = 38 + ch + 2; lc.addChild(db);
+    const logH = Math.max(40, lh - 38 - ch - 2 - 70 - dh - 2);
+    const lf = frame('stone', lw, logH, 'panel'); lf.y = 38 + ch + 2 + dh + 2; lc.addChild(lf);
     const lt = label('사건 기록', { small: true, color: COLOR.gold }); lt.position.set(6, lf.y + 4); lc.addChild(lt);
     (eventLog.length ? eventLog : ['아직 없어요']).slice(0, Math.floor((logH - 20) / 12)).forEach((t, i) => { const l = label(t, { small: true, color: COLOR.stone }); l.position.set(8, lf.y + 18 + i * 12); lc.addChild(l); });
     const sf = frame('stone', lw, lh - 38 - ch - 2 - logH - 2, 'panel'); sf.y = lf.y + logH + 2; lc.addChild(sf);
@@ -1631,6 +1674,7 @@ function makeResult(x, y, w, h) {
   line('사건', evs);
   const left = whTotal();
   if (left) line('창고에 남은 광석', `${left}개 · 팔면 이익`, 0x8a7a68);
+  if (S.daybook?.tasks?.length) line('오늘 과제', `${S.daybook.tasks.filter((t) => t.done).length}/${S.daybook.tasks.length} ✓`, 0x46702e);
   // 할아범 한마디 (틀 안)
   const say = st.stars >= 3 ? '허허, 이 늙은이보다 낫구먼! 대박이야!' : st.stars >= 1 ? '나쁘지 않아. 다음엔 시세를 좀 더 노려 보게.' : '흠… 땅값이 비쌌나? 힌트를 잘 보게나.';
   const by = yy + 6, ps = Math.max(20, Math.min(40, h - 46 - by));   // 남은 자리만큼 (좁은 폰에서 줄과 안 겹침)
@@ -1639,7 +1683,7 @@ function makeResult(x, y, w, h) {
   const b = button('wood', 80, 20, '다음 경매', nextAuction);
   b.position.set(w - 88, h - 26); c.addChild(b);
   const co = button('paper', 56, 20, '회사로', openCompany); co.position.set(w - 148, h - 26); c.addChild(co);
-  const tot = label(`누적 ${S.stats.rounds + 1}라운드 · 순이익 ${S.stats.profitTotal + st.profit}`, { ...ink, small: true, color: 0x8a7a68 }); tot.position.set(8, h - 40); c.addChild(tot);
+  const tot = label(`누적 ${S.stats.rounds + 1}라운드 · 순이익 ${S.stats.profitTotal + st.profit}`, { ...ink, small: true, color: 0x8a7a68 }); tot.position.set(8, h - 40); if (by + Math.max(ps, Math.ceil(tx.height)) + 2 <= h - 40) c.addChild(tot); else tot.destroy();
   return c;
 }
 
@@ -1672,14 +1716,19 @@ function makeSell(w, h) {
   const sub = label(`${likes} +${Math.round(b.bonus * 100)}%`, { small: true, color: 0x8a7a68, shadow: false }); sub.position.set(fx0, face < 30 ? 13 : 18); c.addChild(sub);
   const sw = button('paper', 40, 16, '바꾸기', () => { S.settings.buyer = by === 'brok' ? 'merchant' : 'brok'; sfx('stash', true); save(); buildUI(); }, { small: true });
   sw.position.set(w - 44, 4); c.addChild(sw);
+  if (!CF.preview) {                                               // 광고 자리 (명세3 §7 — SDK 없음)
+    const wideAd = face >= 30;
+    const ad = button('stone', wideAd ? Math.min(110, w - fx0 - 6) : 38, wideAd ? 11 : 10, wideAd ? '광고 보고 시세 1분 미리보기' : '광고 1분', () => toast('곧 열려요'), { small: true });
+    ad.alpha = 0.65; ad.position.set(wideAd ? fx0 : w - 86, wideAd ? 28 : 2); c.addChild(ad);
+  }
   if (CF.smeltSlots) {
-    const tg = button(sellMode === 'ingot' ? 'wood' : 'paper', 30, 16, sellMode === 'ingot' ? '광석' : '괴', () => { sellMode = sellMode === 'ingot' ? 'ore' : 'ingot'; sfx('stash', true); buildUI(); }, { small: true });
+    const tg = button(sellMode === 'ingot' ? 'wood' : 'paper', 28, 16, sellMode === 'ingot' ? '광석' : '괴', () => { sellMode = sellMode === 'ingot' ? 'ore' : 'ingot'; sfx('stash', true); buildUI(); }, { small: true });
     tg.position.set(4, h - 18); c.addChild(tg);
   } else sellMode = 'ore';
   if (CF.freeze && sellMode === 'ore') {                         // 장사 특성 5: 하루 1회 시세 고정 60초
     const used = S.talents.freezeDay === S.day, live = market.frozen && now() < market.frozen.until;
-    const fz = button(live ? 'wood' : 'paper', 30, 15, live ? '고정중' : '고정', () => { if (used) return; market.freeze(now(), B.talents.freezeSeconds); S.talents.freezeDay = S.day; toast(`시세를 ${B.talents.freezeSeconds}초 고정했어요`, 'brok'); sfx('bell'); buildUI(); }, { small: true });
-    fz.setDisabled(used && !live); fz.position.set(CF.smeltSlots ? 38 : 4, h - 18); c.addChild(fz);
+    const fz = button(live ? 'wood' : 'paper', 28, 15, live ? '고정중' : '고정', () => { if (used) return; market.freeze(now(), B.talents.freezeSeconds); S.talents.freezeDay = S.day; toast(`시세를 ${B.talents.freezeSeconds}초 고정했어요`, 'brok'); sfx('bell'); buildUI(); }, { small: true });
+    fz.setDisabled(used && !live); fz.position.set(CF.smeltSlots ? 34 : 4, h - 18); c.addChild(fz);
   }
   if (sellMode === 'ingot') { makeIngotRows(c, w, h, Math.max(24, face) + 6); return c; }
   // 행
@@ -1828,6 +1877,8 @@ function sell(key, frac) {
   const from = r ? r.btn.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
   S.gold += gain; if (S.round) S.round.stats.revenue += gain;
   flyNumber('coin', from.x + 15 * L.uiS, from.y, gain, () => { refreshUI(); bumpCounter('coin'); });
+  if (market.surge?.key === key && now() >= market.surge.start && now() < market.surge.end) count('surgeSells');
+  count('soldGold', gain);
   refreshUI();
 }
 
@@ -1843,6 +1894,7 @@ function orePopup(kind, x, y, n) {
   sfx('ore');
   const [sx, sy] = toScreen(x, y);
   stash[kind] += n;                                       // 숫자는 바로 반영(저장), 날아가는 건 그림만
+  count('ores', n);
   flyNumber(kind, sx, sy, n, () => { refreshUI(); bumpCounter('wh'); sfx('stash', true); });
 }
 function flyNumber(kind, sx, sy, n, done) {
@@ -1990,13 +2042,13 @@ function claimVeinsNear(gx, gy) {
     if (id < 0 || !ORE_KEYS.has(W.g[y][x])) continue;
     const v = W.veins.list[id];
     if (S.round.claimed.includes(id)) continue;
-    S.round.claimed.push(id);
+    S.round.claimed.push(id); count('veins');
     const cells = v.cells.filter(([cx, cy]) => ORE_KEYS.has(W.g[cy][cx]))
       .sort((p, q) => Math.abs(p[0] - x) + Math.abs(p[1] - y) - Math.abs(q[0] - x) - Math.abs(q[1] - y));
     S.round.jobs.unshift(...cells.map(([cx, cy]) => ({ x: cx, y: cy, vein: id })));
     S.round.stats.maxVein = Math.max(S.round.stats.maxVein, v.size);
     if (v.size >= B.bigVein && !S.round.jackpotVeins?.includes(id)) {
-      (S.round.jackpotVeins ??= []).push(id); S.round.stats.jackpots++;
+      (S.round.jackpotVeins ??= []).push(id); S.round.stats.jackpots++; count('jackpots');
       bigVein(cellX(x), GY + y * T + 8);
     } else toast(`광맥 발견! ${ORES.find((o) => o.key === v.type)?.name ?? ''} ${v.size}칸 — 광부들이 다 캘게요`);
     tutorialDone(4);
@@ -2037,7 +2089,7 @@ function breakCell(gx, gy, from, job) {
   } else fx(t === 'd' ? 'fx_dirt' : 'fx_rock', x0 + 8, y0 + 8);
   if (t === 'R') {                                          // 유물 상자: 금화 + 도감
     const gold = Math.round(B.relicGold[0] + Math.random() * (B.relicGold[1] - B.relicGold[0]));
-    S.round.stats.relics++; S.round.stats.relicGold += gold; S.stats.relics.push({ day: S.day, gold });
+    S.round.stats.relics++; count('relics'); S.round.stats.relicGold += gold; S.stats.relics.push({ day: S.day, gold });
     const [sx, sy] = toScreen(x0 + 8, y0 + 4);
     S.gold += gold;
     flyNumber('coin', sx, sy, gold, () => { refreshUI(); bumpCounter('coin'); });
