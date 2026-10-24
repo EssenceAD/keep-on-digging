@@ -18,14 +18,14 @@ import { BOARDS, initAuth, login, logout, me, online, pullSave, pushSave, recove
 import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
 import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
-import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_GOLD_X, TUT_SHAFT_X, TUT_STOP_Y, TUT_TEXT } from './onboard.js';
+import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_GOLD_X, TUT_IDLE, TUT_SHAFT_X, TUT_STOP_Y, TUT_TEXT } from './onboard.js';
 import { BUILD_UP, UP, UP_KEYS, upCostOf as gearCost, upLv, upText, BUILDINGS, DECOS, YARD, autoPlace, bldMax, lotOf, upCost, lotUser, openLots, spotUser, canUp, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
 const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa09a };
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2-5';
+const VERSION = 'v1.2-6';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -926,36 +926,38 @@ const left = (type) => (W ? W.g.flat().filter((ch) => ch === type).length : 0);
 const revealCells = (cells) => { for (const [x, y] of cells) { seenCells.add(`${x},${y}`); refreshAround(x, y, 0); } S.round.seen = [...seenCells]; };
 const X = TUT_SHAFT_X;
 // ---- [1] 튜토리얼 12단계: 강조(focus) · 손가락(hand) · 완료(done) · 시작할 때(enter) · 경로 검사(path)
-const TUT_STEPS = [                                        // 명세5 §7: 18단계 — 탭 입구 · ◀ · 진동계 · 둘째 입구 · 장비 · 특성 1점
-  { focus: () => actorRect(mole), hand: () => ({ kind: 'point', at: centerOf(actorRect(mole)) }), done: () => S.tutorial.sniffed },
+const TUT_STEPS = [                                        // PATCH_V12 §6: 12단계 · 기다리는 단계(wait)는 8초면 모모 한 줄, auto 는 15초면 넘어감
+  { wait: true, auto: () => { S.tutorial.sniffed = true; }, focus: () => actorRect(mole), hand: () => ({ kind: 'point', at: centerOf(actorRect(mole)) }), done: () => S.tutorial.sniffed },
   { focus: () => boundsOf(ui.refs.surveyEnd), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.surveyEnd)) }), done: () => state() === 'DIG' },
   { shaftX: X, stopY: TUT_STOP_Y, focus: () => cellScreen(X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(X, -0.4) }), done: () => S.round.shafts?.some((q) => q.x === X) },
-  { focus: () => unionRect(actorRect(crew[0]), cellScreen(X, 0, 1, TUT_STOP_Y + 1)), hand: () => ({ kind: 'point', at: centerOf(actorRect(crew[0])) }), done: () => isDug(X, TUT_STOP_Y) },
-  { enter: () => revealCells(W.veins.list[veinOf('C')].cells), focus: () => unionRect(boundsOf(shaftBtns.left), veinRect(veinOf('C'))), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(shaftBtns.left)) }),
+  { wait: true, waitTurn: true, enter: () => revealCells(W.veins.list[veinOf('C')].cells),
+    focus: () => (S.round.shafts?.[0]?.dir === 'wait' ? unionRect(boundsOf(shaftBtns.left), veinRect(veinOf('C'))) : unionRect(actorRect(crew[0]), cellScreen(X, 0, 1, TUT_STOP_Y + 1))),
+    hand: () => (S.round.shafts?.[0]?.dir === 'wait' ? { kind: 'tap', at: centerOf(boundsOf(shaftBtns.left)) } : { kind: 'point', at: centerOf(actorRect(crew[0])) }),
     done: () => S.round.claimed.includes(veinOf('C')) },
-  { enter: () => { S.tutorial.mark = S.counters?.ores ?? 0; }, focus: () => unionRect(veinRect(veinOf('C')), actorRect(cartA)), hand: () => ({ kind: 'point', at: centerOf(actorRect(cartA)) }),
-    done: () => left('C') === 0 && (S.counters?.ores ?? 0) - (S.tutorial.mark ?? 0) >= 5 },
-  { focus: () => boundsOf(ui.sellAnchor), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.sellAnchor)) }),
-    done: () => sheetTab === 'sell' && sheetOpen() },
-  { enter: () => { S.tutorial.mark = S.counters?.soldGold ?? 0; }, focus: () => boundsOf(ui.rows.C?.r), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.rows.C?.btn)) }),
+  { wait: true, auto: () => {}, enter: () => { S.tutorial.mark = S.counters?.ores ?? 0; }, focus: () => unionRect(veinRect(veinOf('C')), actorRect(cartA)), hand: () => ({ kind: 'point', at: centerOf(actorRect(cartA)) }),
+    done: () => (S.counters?.ores ?? 0) - (S.tutorial.mark ?? 0) >= 1 },                       // 광석 1개 창고 도착이면 다음
+  { enter: () => { S.tutorial.mark = S.counters?.soldGold ?? 0; },
+    focus: () => (sheetTab !== 'sell' || !sheetOpen() ? boundsOf(ui.sellAnchor) : boundsOf(ui.rows.C?.r)), hand: () => ({ kind: 'tap', at: centerOf(sheetTab !== 'sell' || !sheetOpen() ? boundsOf(ui.sellAnchor) : boundsOf(ui.rows.C?.btn)) }),
     done: () => (S.counters?.soldGold ?? 0) > (S.tutorial.mark ?? 0) },
-  { enter: () => { S.round.vibroLeft = Math.max(1, S.round.vibroLeft ?? 0); toast(TUT_CARTS, 'momo', 3); }, focus: () => boundsOf(ui.refs.vibro), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.vibro)) }), done: () => toolArmed === 'vibro' || S.round.stakes?.length > 0 },
-  { vibroX: TUT_GOLD_X, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }), done: () => S.round.stakes?.some((q) => q.x === TUT_GOLD_X && !(q.at > 0)) },
-  { shaftX: TUT_GOLD_X, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }), done: () => S.round.claimed.includes(veinOf('g')) },
-  { focus: () => (buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)), hand: () => ({ kind: 'tap', at: centerOf(buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
-    done: () => S.tutorial.merchantGold || (S.tutorial.goldSold && !stash.g && left('g') === 0 && !carts.some((c) => c.cargo.g) && !piles.some((p) => p.type === 'g')) },
+  { vibroX: TUT_GOLD_X, enter: () => { S.round.vibroLeft = Math.max(1, S.round.vibroLeft ?? 0); if (!L.pc) { S.settings.sheetFolded = true; setTimeout(layout, 0); } },
+    focus: () => (toolArmed === 'vibro' ? cellScreen(TUT_GOLD_X, -1, 1, 2) : boundsOf(ui.refs.vibro)), hand: () => ({ kind: 'tap', at: toolArmed === 'vibro' ? cellCenter(TUT_GOLD_X, -0.4) : centerOf(boundsOf(ui.refs.vibro)) }),
+    done: () => S.round.stakes?.some((q) => q.x === TUT_GOLD_X && !(q.at > 0)) },
+  { shaftX: TUT_GOLD_X, wait: true, enter: () => { S.tutorial.mark = left('g'); }, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }),
+    done: () => left('g') < (S.tutorial.mark ?? 99) && (stash.g > 0 || carts.some((c) => c.cargo.g) || piles.some((p) => p.type === 'g')) },   // 금 1개만 캐면 판매로
+  { focus: () => (sheetTab !== 'sell' || !sheetOpen() ? boundsOf(ui.sellAnchor) : buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)),
+    hand: () => ({ kind: 'tap', at: centerOf(sheetTab !== 'sell' || !sheetOpen() ? boundsOf(ui.sellAnchor) : buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
+    done: () => S.tutorial.merchantGold || S.tutorial.goldSold },
   { enter: () => { const c = gearCost(S, 'pick'); if (c != null && S.gold < c) { S.gold = c; refreshUI(); toast('그룬 할아범이 곡괭이 값을 보탰어요', 'halabeoji', 2.5); } },
     focus: () => (upCard ? boundsOf(ui.refs.upCardBtn) : sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
     hand: () => ({ kind: 'tap', at: centerOf(upCard ? boundsOf(ui.refs.upCardBtn) : sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
     done: () => upLv(S, 'pick') >= 2 },
-  { focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
-  { focus: () => boundsOf(ui.refs.resultTalent), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.resultTalent)) }), done: () => talentView || talentSpent(S) > 0 },
-  { focus: () => boundsOf(ui.refs.talent_dig), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.talent_dig)) }), done: () => talentSpent(S) > 0 },
-  { focus: () => boundsOf(ui.refs.talentClose), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.talentClose)) }), done: () => !talentView },
-  { focus: () => boundsOf(ui.refs.next), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.next)) }), done: () => !S.tutorial.active },
+  { enter: () => { upCard = null; }, focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
+  { focus: () => boundsOf(tutResultTarget()), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(tutResultTarget())) }), done: () => !S.tutorial.active },   // 결과 → 특성 1점 → 닫기 → 다음 경매
 ];
 const tutStep = () => (tutOn() ? TUT_STEPS[S.tutorial.step] : null);
-let tutT = 0, tutShakeT = 0, tutNudged = false;
+/** 마지막 단계: [특성 찍기] → 칸 → [닫기] → [다음 경매] 순서로 손가락 */
+const tutResultTarget = () => (talentView ? (talentSpent(S) > 0 ? ui.refs.talentClose : ui.refs.talent_dig) : talentLeft(S) > 0 && talentSpent(S) === 0 ? ui.refs.resultTalent : ui.refs.next);
+let tutT = 0, tutShakeT = 0, tutNudged = false, tutIdleSaid = false;
 function startTutorialRound() {
   Object.assign(S.tutorial, { active: true, step: 0, sniffed: false, merchantGold: false, goldSold: false, mark: 0 });
   S.settings.buyer = 'brok'; S.settings.sheetFolded = true;
@@ -964,7 +966,7 @@ function startTutorialRound() {
   tutEnter();
 }
 function finishTutorial() { Object.assign(S.tutorial, { active: false, done: true, step: 0 }); save(); }
-function tutEnter() { tutT = 0; tutNudged = false; TUT_STEPS[S.tutorial.step]?.enter?.(); save(); buildUI(); }
+function tutEnter() { tutT = 0; tutNudged = false; tutIdleSaid = false; TUT_STEPS[S.tutorial.step]?.enter?.(); save(); buildUI(); }
 function tutShake() { tutShakeT = 0.5; toast(TUT_AGAIN, 'momo', 1); sfx('clink', true); }
 /** 튜토리얼 손가락·어둡게 밖에서 세계 입력 막기 */
 function tutBlocks(sx, sy) {
@@ -990,6 +992,8 @@ function tutTick(dt) {
     tutT += dt;
     if (st.done()) { S.tutorial.step++; if (S.tutorial.step >= TUT_STEPS.length) finishTutorial(); else tutEnter(); return; }
     if (tutT > TUT_NUDGE_SECONDS && !tutNudged) { tutNudged = true; tutShakeT = 0.6; }
+    if (st.wait && tutT > 8 && !tutIdleSaid) { tutIdleSaid = true; toast(TUT_IDLE, 'momo', 3); }   // 멍 → 설명
+    if (st.auto && tutT > 15) { st.auto(); if (!st.done()) { S.tutorial.step++; if (S.tutorial.step >= TUT_STEPS.length) finishTutorial(); else tutEnter(); return; } }
   }
   // 그릴 것: 튜토리얼 단계 또는 상황 안내 손가락(guideTarget)
   const focus = st && !introView && !dialog ? st.focus?.() : null;
@@ -2520,7 +2524,7 @@ function makeDigBar(x, y, w) {
   if (W?.water.some((r) => r.some(Boolean)) && !(S.round.pumpLeft > 0)) {
     const pmp = button('paper', 56, 16, CF.pumpCost ? `펌프 ${CF.pumpCost}` : '펌프', pump, { small: true }); pmp.position.set(w - 108, 0); c.addChild(pmp); bw = 108;
   }
-  if (!tutOn() || S.tutorial.step >= 8) { const tc = new Container(); const xl = toolButtons(tc, 0, 0, tutOn()); tc.x = -xl; c.addChild(tc); setToolRect(x, y, -xl, 16); }   // 시추 중에도 남은 도구 — 왼쪽 위 아이콘만 (V12 §3)
+  if (!tutOn() || S.tutorial.step >= 6) { const tc = new Container(); const xl = toolButtons(tc, 0, 0, tutOn()); tc.x = -xl; c.addChild(tc); setToolRect(x, y, -xl, 16); }   // 시추 중에도 남은 도구 — 왼쪽 위 아이콘만 (V12 §3)
   setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
 }
@@ -2921,7 +2925,7 @@ const nodeOf = (a) => a.node ?? 'S';
 
 // ---- 칸 파기 · 광맥 · 유물 (사건은 6단계)
 const canDig = (t) => (B.hardness[t] ?? 9) <= CF.pick;
-const digSeconds = (t) => (ORE_KEYS.has(t) ? B.digTime.ore : t === 'd' ? CF.dirt : (B.digTime[t] ?? 1)) / CF.pickSpeed / CF.digMul;
+const digSeconds = (t) => (ORE_KEYS.has(t) ? B.digTime.ore : t === 'd' ? CF.dirt : (B.digTime[t] ?? 1)) / CF.pickSpeed / CF.digMul / (tutOn() ? 2 : 1);
 let piles = [];                                           // 캔 광석 더미: { gx, gy, type, n } — 운반 광부가 나른다
 const marks = [];                                          // 빨간 X
 function markX(gx, gy) {
@@ -3165,6 +3169,7 @@ function openShaft(gx) {
 }
 /** 방향 버튼: ◀▶ = 그쪽으로 한 칸 (누를 때마다 한 칸 더) 뒤 다시 아래 · ▼ = 아래로 */
 function turnShaft(id, d) {
+  { const st = tutStep(), q = S.round?.shafts?.find((x) => x.id === id); if (st?.waitTurn && q && q.dir !== 'wait') { tutShake(); return; } }
   const rd = S.round, s = rd?.shafts?.find((q) => q.id === id); if (!s) return;
   if (d === 'down') { s.dir = 'down'; s.side = 0; }
   else { if (s.hy < 0 || (d === 'up' && s.hy <= 0)) return; s.side = s.dir === d ? s.side + 1 : 1; s.dir = d; }
