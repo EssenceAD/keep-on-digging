@@ -36,6 +36,10 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.8.3 (PATCH_V14 §8)
+- 사람 = 예전 치비. CHIBI 이름(red/brown/blonde 애니 + npc_* 7장)은 anims/·sprites/ 대신 yard5/chibi/ 에서 같은 이름으로 읽음(animPath·sprPath). yard5/chars 안 읽음, y5Frames·faceTex·Y5_ACTOR 삭제. 꼬물·광차(critters)·갱도 타일(shaft)은 새 것 유지.
+- 초상·인수인계·부지 걷기·십장 = 예전 그림 방식(옆모습, 좌우 뒤집기). 숙소 신입은 예전처럼 brown/blonde 몸 + 빛깔(부지 걷는 자리는 몸 id#순번으로).
+
 ## v1.8.2 (PATCH_V14 §1 다시)
 - 부지 배율 = 기기 px 정수(yardScaleDev): 세로 폰은 높이에 맞춤(좌우 끌기), 그 밖은 폭에 맞춤(넘치면 위아래 끌기). CSS 배율 = 정수 ÷ dpr이라 dpr 1.25 같은 화면에서도 소수 배율이 안 생김. 장면 위치도 기기 px로 맞춤(첫 프레임 alignSc). 이전엔 CSS px 기준 round → dpr이 정수가 아니면 1.07배 같은 배율.
 - 장면(960×540) 마스크로 밖에 그려지던 소품·나무 잘라냄. 남는 테두리 #2a594a 단색.

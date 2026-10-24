@@ -28,7 +28,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.8.2';
+const VERSION = 'v1.8.3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -118,11 +118,14 @@ const SPRITES = [...GPT_SPRITES, 'pickaxe', ...Object.values(BLD_ART).flatMap((b
   'cart_gold', 'cart_empty', 'npc_halabeoji', 'npc_momo', 'npc_brok', 'npc_merchant', 'npc_guild_abyss', 'npc_guild_tower', 'npc_guild_shield'];
 const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'ancient', 'pocket_water', 'pocket_gas', 'relic_chest'];
 const FX = ['fx_hit', 'fx_dirt', 'fx_rock', 'fx_vein', 'fx_vein_glow', 'fx_daebak', 'fx_gas', 'fx_water', 'fx_collapse', 'fx_cart', 'fx_pulse'];
+/** PATCH_V14 §8: 사람은 예전 치비 그림(팩 색 맞춘 사본 yard5/chibi) — 이름 그대로 */
+const CHIBI = new Set(['red_idle', 'red_walk', 'red_swing', 'brown_swing', 'brown_idle', 'brown_walk', 'blonde_idle', 'blonde_walk', 'npc_halabeoji', 'npc_momo', 'npc_brok', 'npc_merchant', 'npc_guild_abyss', 'npc_guild_tower', 'npc_guild_shield']);
+const animPath = (n) => (CHIBI.has(n) ? `yard5/chibi/${n}` : `anims/${n}`), sprPath = (n) => (CHIBI.has(n) ? `yard5/chibi/${n}` : `sprites/${n}`);
 const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'red_swing', 'brown_swing', 'brown_idle', 'brown_walk',
   'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', ...FX];
 const urls = [
-  ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
-  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
+  ...SPRITES.map((n) => A(`${sprPath(n)}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
+  ...ANIMS.flatMap((n) => [A(`${animPath(n)}.png`), A(`${animPath(n)}.json`)]), A('scenes/surface.png'),
 ];
 // 부지 v5 (PATCH_V14): public/art/yard5 — The Fan-tasy Tileset (Free) 기반
 // PATCH_V14 §7: 지역마다 바닥·소품·json = yard5/region{N}/ (지역 1은 yard5/). 사람·건물·갱도 타일은 yard5/ 공용
@@ -130,10 +133,8 @@ const regionDir = (idx) => (idx ? `yard5/region${idx + 1}/` : 'yard5/');
 let Y5DIR = regionDir(S.region?.idx ?? 0);
 let [Y5, Y5A] = await Promise.all([fetch(A(`${Y5DIR}yard_v5.json`)).then((r) => r.json()), fetch(A('yard5/bld/anchors.json')).then((r) => r.json())]);
 const regionArt = (j) => [...[0, 1, 2, 3].map((i) => `yard_ground_f${i}.png`), ...[...new Set(j.objects.map((o) => o.n))].map((n) => `props/${n}.png`), ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `props/campfire_f${i}.png`)];
-const Y5_PEOPLE = ['brick', 'tumba', 'elin', 'grun', 'dor', 'fin', 'marta', 'ugle'].map((n) => `miner_${n}`).concat(['halabeoji', 'momo', 'brok', 'merchant', 'guild_abyss', 'guild_tower', 'guild_shield'].map((n) => `npc_${n}`));
 const Y5_FILES = [
   ...Object.keys(Y5A).filter((n) => !/smoke|lot_site/.test(n)).map((n) => `bld/${n}.png`), 'bld/lot_site_a.png', 'bld/lot_site_b.png', 'bld/lot_site_locked.png', ...[0, 1, 2, 3, 4, 5].map((i) => `bld/smoke_f${i}.png`),
-  ...Y5_PEOPLE.flatMap((w) => [`chars/${w}_walk.png`, `chars/${w}_idle.png`]),
   ...['mole_idle', 'mole_walk', 'cart_empty', 'cart_ore', 'cart_gold', 'cart_glow', 'cart_roll', 'cart_roll_ore', 'cart_roll_gold', 'cart_roll_glow'].map((n) => `critters/${n}.png`)];
 urls.push(...Y5_FILES.map((f) => A(`yard5/${f}`)), ...regionArt(Y5).map((f) => A(`${Y5DIR}${f}`)));
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
@@ -151,16 +152,12 @@ const Y5_SHADE = { day: 0xffffff, dusk: 0xffc8a0, night: 0x8890c8 };
 /** V14 건물 그림: Lv1~2 → _1, Lv3~4 → _3, Lv5 → _5 */
 const Y5_BLD = { office: 'office', smelter: 'smelter', warehouse: 'warehouse', cartShed: 'cartshed', lodge: 'lodge', lanternShop: 'lanternshop', pumpRoom: 'pump', turretShop: 'turretshop', moleHouse: 'molehome' };
 const y5Step = (lv) => (lv >= 5 ? 5 : lv >= 3 ? 3 : 1);
-/** V14 광부 (가로 4프레임 × [오른, 왼, 뒤, 앞], 40×48, 발 (20,41)) — 게임 광부 id → 그림 */
-const Y5_MINER = { red: 'brick', brown: 'tumba', blonde: 'elin', grun: 'grun', dor: 'dor', fin: 'fin', marta: 'marta', ugle: 'ugle' };
-/** 초상 (V14 §3): 그 인물 _idle 앞모습 0프레임의 위 32px (상반신) */
-const faceTex = (who) => { const b = y5tex(`chars/${who}_idle.png`); if (!b) return null; const t = new Texture({ source: b.source, frame: new Rectangle(4, 3 * 48 + 2, 32, 30) }); t.fit = true; return t; };
-const TEX_V14 = { ...Object.fromEntries(Y5_PEOPLE.map((n) => [n, faceTex(n)])), cart_empty: y5tex('critters/cart_empty.png'), cart_gold: y5tex('critters/cart_gold.png') };
-const tex = (n) => TEX_V14[n] ?? loaded[A(`sprites/${n}.png`)];
+const TEX_V14 = { cart_empty: y5tex('critters/cart_empty.png'), cart_gold: y5tex('critters/cart_gold.png') };
+const tex = (n) => TEX_V14[n] ?? loaded[A(`${sprPath(n)}.png`)];
 const ntex = (n) => loaded[A(`sprites/${n}_n.png`)];
 /** 애니 프레임 텍스처 + 프레임별 길이(ms) */
 function frames(n) {
-  const base = loaded[A(`anims/${n}.png`)], json = loaded[A(`anims/${n}.json`)];
+  const base = loaded[A(`${animPath(n)}.png`)], json = loaded[A(`${animPath(n)}.json`)];
   const raw = json.data?.frames ?? json.frames;   // Pixi가 JSON을 스프라이트시트로 읽으면 .data에 원본이 있다
   const list = Array.isArray(raw) ? raw : Object.values(raw);
   const out = list.map((f) => new Texture({ source: base.source, frame: new Rectangle(f.frame.x, f.frame.y, f.frame.w, f.frame.h) }));
@@ -174,14 +171,12 @@ function y5Row(file, row, ms, fw = 40, fh = 48, ay = 41 / 48) {
   const out = [...Array(n)].map((_, i) => new Texture({ source: b.source, frame: new Rectangle(i * fw, row * fh, fw, fh) }));
   out.dur = out.map(() => ms); out.ay = ay; return out;
 }
-/** 게임 광부 id → V14 그림 (옛 red·brown·blonde + 숙소 신입 4) */
-const Y5_ACTOR = { red: 'miner_brick', brown: 'miner_tumba', blonde: 'miner_elin', dor: 'miner_dor', fin: 'miner_fin', marta: 'miner_marta', ugle: 'miner_ugle', grun: 'miner_grun' };
-for (const [id, nm] of Object.entries(Y5_ACTOR)) { F[`${id}_idle`] = y5Row(`chars/${nm}_idle.png`, 0, 250); F[`${id}_walk`] = y5Row(`chars/${nm}_walk.png`, 0, 125); F[`${id}_swing`] = y5Row(`chars/${nm}_walk.png`, 0, 90); }
 F.mole_sniff = y5Row('critters/mole_idle.png', 0, 250, 24, 18, 1); F.mole_walk = y5Row('critters/mole_walk.png', 0, 125, 24, 18, 1);
 F.cart_roll_empty = y5Row('critters/cart_roll.png', 0, 100, 28, 22, 1); F.cart_roll = y5Row('critters/cart_roll_ore.png', 0, 100, 28, 22, 1);
 F.cart_roll_glow = y5Row('critters/cart_roll_glow.png', 0, 100, 28, 22, 1); F.cart_roll_gold = y5Row('critters/cart_roll_gold.png', 0, 100, 28, 22, 1);
 const ICON = { g: 'icon_gold', c: 'icon_glow', s: 'icon_silver', C: 'icon_copper', j: 'icon_gem' };
-const NPC = { brok: 'npc_brok', merchant: 'npc_merchant', momo: 'npc_momo', halabeoji: 'npc_halabeoji', guild0: 'npc_guild_abyss', guild1: 'npc_guild_tower', guild2: 'npc_guild_shield', marta: 'miner_marta', dor: 'miner_dor', fin: 'miner_fin' };
+const NPC = { brok: 'npc_brok', merchant: 'npc_merchant', momo: 'npc_momo', halabeoji: 'npc_halabeoji', guild0: 'npc_guild_abyss', guild1: 'npc_guild_tower', guild2: 'npc_guild_shield', marta: 'fm_marta', dor: 'fm_dor', fin: 'fm_fin' };
+Object.assign(TEX_V14, { fm_marta: F.blonde_idle[0], fm_dor: F.brown_idle[0], fm_fin: F.blonde_idle[0] });   // 십장 초상 (§8: 예전 몸 그림)
 const HINT_ICON = { rock: 'hint_rock', water: 'hint_water', relic: 'hint_relic', glow: 'hint_glow' };
 const HINT_TEXT = { rock: '바위층', water: '지하수', relic: '유물 흔적', glow: '발광 이끼' };
 document.getElementById('loading')?.remove();
@@ -443,7 +438,7 @@ const lanternFlame = () => {
 };
 
 // ---------------------------------------------------------------- 캐릭터 · 광차 (치비 32×40 → 월드 16×20) + 긴 그림자
-const ANCHOR_X = {};                                       // V14: 새 그림은 가운데 기준
+const ANCHOR_X = { red_swing: 16 / 46, brown_swing: 16 / 46 };
 const actors = [];
 function actor(o) {
   const s = new Sprite(); s.anchor.set(0.5, 1);
@@ -485,8 +480,8 @@ function ensureCrew(walk = false) {
   while (crew.length < CF.miners) {
     const k = crew.length, rc = B.recruits[k - MINERS.length] ?? { name: `광부 ${k + 1}`, trait: ['hasty', 'calm', 'careful', 'diligent'][k % 4], body: k % 2 ? 'brown' : 'blonde', tint: 0xe0e0ff };
     const base = MINERS.find((m) => m.id === rc.body);
-    const rid = ['dor', 'fin', 'marta', 'ugle'][k - MINERS.length] ?? base.id;   // V14: 신입마다 자기 그림
-    const a = actor({ ...base, id: rid, name: rc.name, role: '운반', trait: rc.trait, who: '숙소에 새로 온 광부', anim: `${rid}_idle`, x: walk ? 2 : 100 + k * 12, y: SURFACE_Y + 0.5, hp: B.minerHp, state: 'idle', face: 1 });
+    const rid = base.id;                                          // §8: 예전처럼 몸(brown/blonde) + 빛깔
+    const a = actor({ ...base, id: rid, name: rc.name, role: '운반', trait: rc.trait, who: '숙소에 새로 온 광부', anim: `${rid}_idle`, x: walk ? 2 : 100 + k * 12, y: SURFACE_Y + 0.5, hp: B.minerHp, state: 'idle', face: 1, tint: rc.tint });
     applyTrait(a); crew.push(a);
     if (walk) { a.walkIn = 100 + k * 12; recruitCard(a); }
   }
@@ -1279,10 +1274,10 @@ function buildIntroLayer() {
     else { const [sx, sy] = Y5A.lot_site; const b = put(y5tex(`bld/${l.id % 2 ? 'lot_site_b' : 'lot_site_a'}.png`), l.cx - sx, l.by - sy + 64); if (b) b.zIndex = l.by - 20; }
   }
   const glowS = (x, y, r, col, a) => { const g = new Sprite(glowTex()); g.anchor.set(0.5); g.width = g.height = r * 2; g.position.set(x, y); g.tint = col; g.alpha = a; g.blendMode = 'add'; room.addChild(g); };
-  const person = (who, x, y, row) => { const sp = new Sprite(y5Frames(who, 'idle')[row][0]); sp.anchor.set(0.5, 41 / 48); sp.position.set(x, y); sp.tint = NIGHT; sp.zIndex = y; wd.addChild(sp); return sp; };
-  const old = person('npc_halabeoji', lot.cx - 16, lot.by + 14, 3), momo = person('npc_momo', lot.cx + 18, lot.by + 16, 3);
+  const person = (t, x, y) => { const sp = new Sprite(t); sp.anchor.set(0.5, 1); sp.position.set(x, y); sp.tint = NIGHT; sp.zIndex = y; wd.addChild(sp); return sp; };
+  const old = person(tex(NPC.halabeoji), lot.cx - 18, lot.by + 16), momo = person(tex(NPC.momo), lot.cx + 20, lot.by + 18);
   const MEY = Y5.spine.find((p) => p[0] >= lot.cx)?.[1] ?? lot.by + 58, ME_STOP = lot.cx + 40;
-  const me = person('brick', v.walked ? ME_STOP : X0 + VW + 24, MEY, 1);
+  const me = person(F.red_walk[0], v.walked ? ME_STOP : X0 + VW + 24, MEY); me.scale.x = -1;   // 왼쪽 보기
   for (const [lx, ly] of Y5.lamps) glowS(lx, ly, 18, 0xffd58a, 0.55);
   glowS(lot.cx, lot.by - 40, 50, 0xffc070, 0.25);                                 // 상회 창문 불빛
   const items = { x: 0 };                                                           // (옛 장부·열쇠 연출 자리)
@@ -1311,10 +1306,9 @@ function buildIntroLayer() {
     if (me.destroyed) return;
     tt += dt;
     if (!v.walked) {
-      me.x = Math.max(ME_STOP, me.x - dt * 40); me.texture = y5Frames('brick', 'walk')[1][Math.floor(tt * 8) % 4];
+      me.x = Math.max(ME_STOP, me.x - dt * 40); me.texture = F.red_walk[Math.floor(tt * 8) % F.red_walk.length];
       if (me.x <= ME_STOP) v.walked = true;
-    } else me.texture = y5Frames('brick', 'idle')[1][Math.floor(tt * 4) % 4];
-    old.texture = y5Frames('npc_halabeoji', 'idle')[3][Math.floor(tt * 4) % 4]; momo.texture = y5Frames('npc_momo', 'idle')[3][Math.floor(tt * 4 + 2) % 4];
+    } else me.texture = F.red_idle[Math.floor(tt * 2) % F.red_idle.length];
     if (v.slideT != null && !v.slid) { v.slideT += dt; items.x = v.slideT; if (v.slideT >= 0.4) v.slid = true; }
     if (nx && !nx.destroyed) nx.alpha = 0.5 + 0.5 * Math.sin(tt * 4);
   };
@@ -1743,12 +1737,6 @@ let siteDragged = false, yardPan = null, yardPanY = null;   // 끌기 (CSS px, �
 /** 부지 배율 (V14 §1): 기기 px 기준 정수만 — 세로 폰 = 높이에 맞춤(좌우 끌기) · 그 밖 = 폭에 맞춤. 돌려줌: CSS px 배율 (= 정수 ÷ dpr) */
 const yardScaleDev = (PW, PH) => { const d = L.dpr, [SW, SH] = Y5.size; return Math.max(1, Math.floor(L.portrait ? (PH * d) / SH : (PW * d) / SW)); };
 const yardScale = () => yardScaleDev((L.full.x1 - L.full.x0), (L.full.y1 - L.full.y0)) / L.dpr;
-const _y5Sheet = {};
-function y5Frames(who, act) {
-  const key = `${who}_${act}`; if (_y5Sheet[key]) return _y5Sheet[key];
-  const base = y5tex(`chars/${who.startsWith('npc_') ? who : `miner_${who}`}_${act}.png`);
-  return (_y5Sheet[key] = [0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((f) => new Texture({ source: base.source, frame: new Rectangle(f * 40, r * 48, 40, 48) }))));
-}
 /** 길 그래프 (spine + branches): 걷기는 길 중심선을 따라 */
 let _y5Graph = null;
 function y5Graph() {
@@ -1849,17 +1837,17 @@ function makeSite(sw, sh) {
   const whL = Y5.lots[S.company.buildings.warehouse?.lot ?? -1];
   const runA = [Y5.entrance[0] - 10, Y5.entrance[1] + 10], runB = whL && lotUser(S, whL.id) === 'warehouse' ? [whL.cx, whL.by + 8] : [Y5.campfire[0], Y5.campfire[1]];
   const spots = Y5.idleSpots;
-  const people = [...crew.slice(0, 6).map((m) => ({ id: m.id, tint: m.tint })), { id: 'grun' }];
+  const people = crew.slice(0, 6).map((m) => ({ id: m.id, tint: m.tint }));
   const walkers = people.map((m, i) => {
-    const who = Y5_MINER[m.id];
-    const sp = new Sprite(who ? y5Frames(who, 'idle')[3][0] : animOf(`${m.id}_idle`)[0]);
-    if (who) sp.anchor.set(20 / 40, 41 / 48); else { sp.anchor.set(0.5, 1); sp.scale.set(0.5); }
+    const who = null;                                                   // §8: 예전 치비 (옆모습)
+    const sp = new Sprite(animOf(`${m.id}_idle`)[0]);
+    sp.anchor.set(0.5, 1);
     sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; world.addChild(sp);
-    let w = yardWalkers.get(m.id);
+    const wkey = `${m.id}#${i}`; let w = yardWalkers.get(wkey);   // 신입은 몸 id가 같아서 순번까지
     if (!w || w.round !== inRound || !w.v5) {                              // 처음 · 라운드 들어가고 나올 때만 자리 다시
       const home = inRound && m.id !== 'grun' ? (i % 2 ? runA : runB) : spots[i % spots.length];
       w = { x: home[0], y: home[1], route: [], wait: inRound ? i * 1.5 : 3 + Math.random() * 15, spot: i % spots.length, round: inRound && m.id !== 'grun', leg: i % 2, dir: 3, v5: true };
-      yardWalkers.set(m.id, w);
+      yardWalkers.set(wkey, w);
     }
     return { sp, id: m.id, who, w, f: Math.random() * 4 };
   });
@@ -1873,12 +1861,10 @@ function makeSite(sw, sh) {
       if (d < 0.6) w.route.shift();
       else { const v = Math.min(d, 26 * dt); w.x += (dx / d) * v; w.y += (dy / d) * v; w.dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 1) : dy < 0 ? 2 : 3; }
       wk.f += dt * 8;
-      if (wk.who) wk.sp.texture = y5Frames(wk.who, 'walk')[w.dir][Math.floor(wk.f) % 4];
-      else { const fr = animOf(`${wk.id}_walk`); wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (w.dir < 2) wk.sp.scale.x = w.dir === 0 ? 0.5 : -0.5; }
+      { const fr = animOf(`${wk.id}_walk`); wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (w.dir < 2) wk.sp.scale.x = w.dir === 0 ? 1 : -1; }
     } else {                                                             // 멈춤 = idle
       wk.f += dt * 4;
-      if (wk.who) wk.sp.texture = y5Frames(wk.who, 'idle')[w.dir][Math.floor(wk.f) % 4];
-      else { const fr = animOf(`${wk.id}_idle`); wk.sp.texture = fr[Math.floor(wk.f / 2) % fr.length]; }
+      { const fr = animOf(`${wk.id}_idle`); wk.sp.texture = fr[Math.floor(wk.f / 2) % fr.length]; }
       if ((w.wait -= dt) <= 0) {
         let to;
         if (w.round) { w.leg = 1 - w.leg; const p = w.leg ? runA : runB; to = [p[0] + (Math.random() - 0.5) * 10, p[1] + (Math.random() - 0.5) * 4]; w.wait = 1 + Math.random() * 2; }   // 라운드 중: 입구 ↔ 창고
@@ -1905,7 +1891,7 @@ function makeSite(sw, sh) {
   // 십장 (6-3 §2): 일하는 자리에 서 있고 머리 위 작은 깃발 · 톡 → 십장 카드
   for (const [k, at] of [['marta', whDoor ? [whDoor[0] + 26, whDoor[1] + 4] : null], ['dor', bldSp.smelter ? [bldSp.smelter.x + bldSp.smelter.width - 14, bldSp.smelter.y + bldSp.smelter.height + 4] : null], ['fin', [Y5.entrance[0] - 50, Y5.entrance[1] + 22]]]) {
     if (!S.foremen?.[k]?.hired || !at) continue;
-    const fsp = new Sprite(y5Frames(k, 'idle')[3][0]); fsp.anchor.set(0.5, 41 / 48); fsp.position.set(at[0], at[1]); fsp.zIndex = at[1]; fsp.tint = S.foremen[k].on ? shade : 0x8a8a8a; world.addChild(fsp);
+    const fsp = new Sprite(TEX_V14[`fm_${k}`]); fsp.anchor.set(0.5, 1); fsp.position.set(at[0], at[1]); fsp.zIndex = at[1]; fsp.tint = S.foremen[k].on ? shade : 0x8a8a8a; world.addChild(fsp);
     const fl = new Graphics().rect(at[0] + 6, at[1] - 44, 1, 10).fill(0x4a3020).poly([at[0] + 7, at[1] - 44, at[0] + 14, at[1] - 41, at[0] + 7, at[1] - 38]).fill(S.foremen[k].on ? 0xf5cf6a : 0x8a7a68); fl.zIndex = at[1] + 0.1; world.addChild(fl);
     fsp.eventMode = 'static'; fsp.cursor = 'pointer'; fsp.on('pointertap', () => { if (!siteDragged) openForemen(); });
   }
@@ -2757,7 +2743,7 @@ function bidPeople(c, w, h, yy, ppl) {
   const btnH = 22, btnY = h - btnH - 6, priceY = btnY - 18;
   ppl = Math.max(40, ppl);
   const meS = Math.min(Math.floor(w * 0.3), ppl - 14, 64);
-  const mf = portraitFrame(faceTex('miner_brick'), meS, 'wood'); mf.position.set(8, yy + 2); c.addChild(mf);
+  const mf = portraitFrame(F.red_idle[0], meS, 'wood'); mf.position.set(8, yy + 2); c.addChild(mf);
   const badge = new Container(); const bl = label('나', { small: true, color: 0x5c3832, shadow: false }); const bbg = new Graphics().rect(0, 0, Math.ceil(bl.width) + 8, 11).fill(0xf5cf6a).stroke({ width: 1, color: 0x8a5a24 }); badge.addChild(bbg, bl); bl.position.set(4, 0);
   badge.position.set(8 + Math.round((meS - bbg.width) / 2), yy + 2 + meS - 6); c.addChild(badge);
   const mine = AU.holder === 'me';
@@ -3078,7 +3064,7 @@ function makeCrew(w, h) {
   const rowH = Math.max(18, Math.min(44, Math.floor(h / crew.length)));
   crew.forEach((m, i) => {
     const r = new Container(); r.y = i * rowH;
-    const pf = portraitFrame(faceTex(Y5_ACTOR[m.id] ?? 'miner_brick'), rowH - 2, 'wood'); r.addChild(pf);
+    const pf = portraitFrame(animOf(`${m.id}_idle`)[0], rowH - 2, 'wood'); r.addChild(pf);
     const compact = rowH < 28;                                // 광부가 많으면 한 줄 (이름 · 상태)
     const nm = label(m.name, { color: m.color, small: compact }); nm.position.set(rowH + 4, compact ? Math.round((rowH - 10) / 2) : 1); r.addChild(nm);
     if (!compact) { const tr = B.traits[m.trait]; const role = label(tr ? `${tr.name} · ${tr.text.split(" · ")[0]}` : m.role, { small: true, color: COLOR.dim }); role.position.set(rowH + 8 + Math.round(nm.width), 3); fitText(role, w - role.x); r.addChild(role); }
