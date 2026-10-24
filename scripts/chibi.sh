@@ -3,6 +3,7 @@
 # 실행: sh scripts/chibi.sh   (Windows: py, 그 밖: python3)
 PY=$(command -v py || command -v python3)
 P="$PY scripts/png2pxl.py --pal art/chibi.px.js --samples 3 --clean"
+P0="$PY scripts/png2pxl.py --pal art/chibi.px.js --samples 0 --clean"   # 길드 대표: 64×80 (v0.8 §5)
 mkdir -p art/conv
 $P art/raw/mine_miner_red_chibi.png      --cols 32 --rows 40                               --name _red_base      > art/conv/red.txt
 $P art/raw/mine_chibi_miners2_mole.png   --cols 32 --rows 40 --crop 0,0,647,809         --name _brown_base    > art/conv/brown.txt
@@ -13,6 +14,6 @@ $P art/raw/mine_chibi_npc3.png           --cols 32 --rows 40 --crop 647,0,647,80
 $P art/raw/mine_chibi_npc3.png           --cols 32 --rows 40 --crop 1294,0,648,809      --name npc_brok       > art/conv/brok.txt
 $P art/raw/mine_chibi_merchant_cart.png  --cols 32 --rows 40 --crop 0,0,793,992         --name npc_merchant   > art/conv/merchant.txt
 $P art/raw/mine_chibi_merchant_cart.png  --cols 32 --rows 24 --crop 796,360,784,588      --name _cart_base     > art/conv/cart.txt
-$P art/raw/mine_chibi_guilds.png        --cols 32 --rows 40 --crop 0,0,647,809         --name npc_guild_abyss  > art/conv/guild_abyss.txt
-$P art/raw/mine_chibi_guilds.png        --cols 32 --rows 40 --crop 647,0,647,809       --name npc_guild_tower  > art/conv/guild_tower.txt
-$P art/raw/mine_chibi_guilds.png        --cols 32 --rows 40 --crop 1294,0,648,809      --name npc_guild_shield > art/conv/guild_shield.txt
+$P0 art/raw/mine_chibi_guilds.png        --cols 64 --rows 80 --crop 0,0,647,809         --name npc_guild_abyss  > art/conv/guild_abyss.txt
+$P0 art/raw/mine_chibi_guilds.png        --cols 64 --rows 80 --crop 647,0,647,809       --name npc_guild_tower  > art/conv/guild_tower.txt
+$P0 art/raw/mine_chibi_guilds.png        --cols 64 --rows 80 --crop 1294,0,648,809      --name npc_guild_shield > art/conv/guild_shield.txt

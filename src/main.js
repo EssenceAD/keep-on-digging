@@ -9,7 +9,7 @@ import {
   TextureSource, TilingSprite,
 } from 'pixi.js';
 import { MAX_LIGHTS, makeLightPass, makePostPass } from './gl.js';
-import { sfx, setSound, soundOn, unlockAudio } from './sound.js';
+import { ambience, jackpotMusic, music, setVolumes, sfx, unlockAudio, volumes } from './sound.js';
 import { COLOR, bar, button, frame, icon, kit, label, loadUI, portraitFrame, setTextRes, tab } from './ui.js';
 import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v0.8';
+const VERSION = 'v0.9';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -84,7 +84,6 @@ const isSolid = (ch) => ch !== 'sky' && ch !== '.';
 // ---------------------------------------------------------------- 설정 · 저사양
 const qs = new URLSearchParams(location.search);
 let low = qs.has('low') ? qs.get('low') === '1' : !!S.settings.low;
-setSound(S.settings.sound !== false);
 const AMBIENT = Number(qs.get('ambient') || 0.4);
 const AMB_COLOR = [0.86, 0.82, 1.0];     // 회보라 앰비언트
 const TINT = [1.05, 0.98, 0.9];          // 뒷산 층 색온도 (갈색·노을)
@@ -117,10 +116,10 @@ const SPRITES = [...GPT_SPRITES, 'yard_grass', 'yard_path', 'yard_fence', 'yard_
 const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'ancient', 'pocket_water', 'pocket_gas', 'relic_chest'];
 const FX = ['fx_hit', 'fx_dirt', 'fx_rock', 'fx_vein', 'fx_vein_glow', 'fx_daebak', 'fx_gas', 'fx_water', 'fx_collapse', 'fx_cart', 'fx_pulse'];
 const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'red_swing', 'brown_swing', 'brown_idle', 'brown_walk',
-  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', ...FX];
+  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', 'office_fire', ...FX];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
-  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'),
+  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'), A('scenes/office_day.png'),
 ];
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
 const tex = (n) => loaded[A(`sprites/${n}.png`)];
@@ -333,7 +332,28 @@ function drawProps() {
 }
 
 /** 구획 세계를 (다시) 짓는다: 줄 수가 바뀌면 겹·조명 격자도 */
+// 벽 랜턴 (v0.8 §5 — v0.4 기준선의 빛 웅덩이): 뚫린 가로 갱도 천장에 5칸마다 하나씩 저절로 걸림 (최대 8)
+let wallLamps = [];
+function syncWallLamps() {
+  const want = [];
+  if (W && S.round) for (let y = 1; y < W.rows && want.length < 8; y++) for (let x = 0; x < GW && want.length < 8; x++) {
+    if (x % 5 !== 2 || !isDug(x, y) || isDug(x, y - 1)) continue;          // 천장이 있어야 걸 수 있다
+    if (!(isDug(x - 1, y) || isDug(x + 1, y))) continue;                    // 가로 갱도에만
+    want.push([x, y]);
+  }
+  const key = (l) => `${l.gx},${l.gy}`, keep = new Set(want.map(([x, y]) => `${x},${y}`));
+  for (const l of wallLamps) if (!keep.has(key(l))) { l.s.destroy(); l.br.destroy(); l.halo.destroy(); }
+  wallLamps = wallLamps.filter((l) => keep.has(key(l)));
+  for (const [x, y] of want) {
+    if (wallLamps.some((l) => l.gx === x && l.gy === y)) continue;
+    const px = GX + x * T + 8, py = GY + y * T + 1;
+    const br = new Graphics().moveTo(px - 6, py - 1).lineTo(px, py - 1).lineTo(px, py).stroke({ width: 1, color: 0x5c3832 }); lampsU.addChild(br);
+    const sp = new Sprite(F.lantern[0]); sp.anchor.set(0.5, 0); sp.position.set(px, py); lampsU.addChild(sp);
+    wallLamps.push({ gx: x, gy: y, s: sp, br, x: px + LANTERN_FLAME[0], y: py + LANTERN_FLAME[1], seed: x * 1.7 + y, halo: halo(0xffb060, 24, 0.5) });
+  }
+}
 function buildWorld() {
+  setTimeout(syncWallLamps, 0);                              // 구획이 바뀌면 벽 랜턴도 다시
   const rd = S.round;
   const rows = rd ? rd.grid.length : B.plotSizes.S.rows;
   W = {
@@ -458,6 +478,7 @@ function updateParticles(dt) {
 const stash = S.warehouse;
 const market = createMarket(S.prices ?? undefined);
 S.prices = market;
+setVolumes(S.settings.sound === false ? { bgm: 0, sfx: 0 } : { bgm: S.settings.bgmVol ?? 0.6, sfx: S.settings.sfxVol ?? 0.8 });
 // 시세 시계 (v0.6 패치 ④): 게임 날짜는 접속 중에만 흐르고, 시세는 현실 시간으로 — 떠나 있던 동안도 빨리감기
 S.marketT ??= now();
 const mNow = () => S.marketT;
@@ -493,7 +514,7 @@ function sellIngots(key) {
   const n = S.ingots[key]; if (!n) return;
   const gain = n * ingotPrice(key); S.ingots[key] = 0; S.gold += gain; count('soldGold', gain);
   const r = ui.irows?.[key], from = r ? r.sellB.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
-  sfx('stash'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); });
+  sfx('coin'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); });
   refreshUI();
 }
 let sellMode = 'ore';
@@ -502,6 +523,7 @@ const priceOf = (key) => Math.round(market.price(key, buyer(), mNow()) * CF.sell
 // ---------------------------------------------------------------- 주스
 let shake = 0, shakeAmp = 0, hitstop = 0, slowmo = 0, flash = 0, boom = null;
 function bigVein(x, y) {
+  sfx('jackpot'); jackpotMusic();
   setTimeout(() => tip('bigVein'), 1700);
   slowmo = 0.4; flash = 1; shake = 0.35; shakeAmp = 3;
   boom = { x, y, t: 1.6 };
@@ -526,6 +548,7 @@ const AU = { phase: 'pick', card: null, high: 0, holder: null, log: [], timer: 0
 function todayCards() {
   if (!S.auction || S.auction.day !== S.day) {
     S.auction = { day: S.day, cards: makeCards(newSeed(), CF.plotSizes, CF.hints, S.floorUnlocked >= 2) };
+    for (const c of S.auction.cards) c.price = Math.max(c.price, Math.round((cardValue(c).mid * B.auction.startShare) / 10) * 10);   // v0.8-b 시작가
     if (S.tutorial.done && !S.tutorial.firstAuction) {             // 온보딩 §3: 첫 경매의 구획 하나는 힌트 2 · 시작가 120 (사기 쉽게)
       S.tutorial.firstAuction = true;
       const c0 = S.auction.cards[0];
@@ -621,7 +644,7 @@ function settleOffline(boot = false) {
   });
   if (!r) return null;
   if (r.midRound) { if (!boot) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3); return r; }
-  if (r.pendingTotal > 0 || r.missed.length) { welcome = r; setTimeout(() => tip('welcome'), 400); }
+  if (r.pendingTotal > 0 || r.missed.length) { welcome = r; setTimeout(() => { tip('welcome'); sfx('welcome'); }, 400); }
   save(); cloudSoon();
   if (!boot) buildUI();
   return r;
@@ -633,7 +656,7 @@ function idleSellAll(from) {
   const gain = idleValue();
   for (const o of ORES) S.idle.pending[o.key] = 0;
   count('idleClaims'); if (gain) count('soldGold', gain);
-  if (gain) { S.gold += gain; S.stats.idleSold = (S.stats.idleSold ?? 0) + gain; sfx('stash'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); }); }
+  if (gain) { S.gold += gain; S.stats.idleSold = (S.stats.idleSold ?? 0) + gain; sfx('coin_big'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); }); }
   closeWelcome();
 }
 /** 창고로. 넘치는 건 자동 판매 */
@@ -891,59 +914,75 @@ function tutTick(dt) {
     if (tutShakeT > 0) { tutShakeT -= dt; tutBubble.scale.set(1 + Math.max(0, tutShakeT) * 0.06); } else tutBubble.scale.set(1);
   }
 }
-// ---- [0] 인수인계 장면 (§1): 사무소(office_night 를 낮 빛으로) · 할아범 · 붉은 수염이 걸어 들어옴 · 대사 4 · [건너뛰기]
-function showIntro(onDone) { introView = { i: 0, t: 0, onDone }; buildUI(); }
+// ---- [0] 인수인계 장면 (§1 · v0.9): 사무소 GPT 원본(office_day) · 할아범은 책상 뒤에 앉음 · 붉은 수염은 처음 한 번만 걸어 들어옴 · 대사 4 · [건너뛰기]
+// 장면은 uiRoot 밖 한 층에 한 번만 만든다 — 대사를 넘길 때는 대사 틀만 바꿈 (v0.9 §1: 넘길 때마다 처음부터 다시 걸어오던 버그). 화면 배율은 정수(기기 픽셀 기준), 남는 곳은 어두운 테두리
+const introLayer = new Container(); app.stage.addChild(introLayer);
+let introTick = null;
+function showIntro(onDone) { introView = { i: 0, onDone, walked: false, slid: false, tapAt: 0 }; buildUI(); buildIntroLayer(); }
 function introNext(skip = false) {
-  if (!introView) return;
+  const v = introView; if (!v) return;
+  const nowMs = performance.now();
+  if (!skip && nowMs - v.tapAt < 150) return;                     // 탭 디바운스: 줄당 1회
+  v.tapAt = nowMs;
   sfx('stash', true);
-  introView.i = skip ? INTRO.length : introView.i + 1; introView.t = 0;
-  if (introView.i >= INTRO.length) {
-    const f = introView.onDone; introView = null; ui.introTick = null;
+  v.i = skip ? INTRO.length : v.i + 1;
+  if (v.i >= INTRO.length) {
+    introView = null; introTick = null; introLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     S.tutorial.introSeen = true; save();
-    f?.(); buildUI();
-  } else buildUI();
+    v.onDone?.(); buildUI();
+  } else introLayer.setLine?.(v.i);
 }
-function makeIntro() {
-  const uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS);
-  const c = new Container(); c.eventMode = 'static'; c.hitArea = new Rectangle(0, 0, uW, uH);
-  c.on('pointertap', () => introNext());
-  c.addChild(new Graphics().rect(0, 0, uW, uH).fill(0x0b0910));
-  const bgT = loaded[A('scenes/office_night.png')];
-  const sc = Math.max(uW / bgT.width, uH / bgT.height);
-  const bg = new Sprite(bgT); bg.scale.set(sc); bg.position.set(Math.round((uW - bgT.width * sc) / 2), Math.round((uH - bgT.height * sc) / 2)); bg.tint = 0xfff0dc; c.addChild(bg);
-  const day = new Graphics().rect(0, 0, uW, uH).fill({ color: 0xfff4d8, alpha: 0.14 }); day.blendMode = 'add'; c.addChild(day);   // 창문은 낮 빛 (색만)
-  const floor = Math.round(uH * 0.68), fs = Math.max(1, Math.min(3, Math.round(uW / 120 * 2) / 2));
-  const old = new Sprite(tex(NPC.halabeoji)); old.anchor.set(0.5, 1); old.scale.set(fs); old.position.set(Math.round(uW * 0.27), floor); c.addChild(old);
-  const desk = new Graphics().rect(-26 * fs / 2, 0, 26 * fs, 10 * fs).fill(0x5c3832).rect(-26 * fs / 2, 0, 26 * fs, 2 * fs).fill(0x9d6c50);
-  desk.position.set(Math.round(uW * 0.27 + 10 * fs), floor - 12 * fs); c.addChild(desk);
-  const items = new Container(); items.addChild(new Graphics().rect(0, 0, 7 * fs, 5 * fs).fill(0x7a2e48).rect(fs, fs, 5 * fs, fs).fill(0xf4ecd2), new Graphics().rect(9 * fs, fs, 4 * fs, 2 * fs).fill(0xf5cf6a).rect(12 * fs, 0, 2 * fs, 4 * fs).fill(0xf5cf6a));
-  items.position.set(Math.round(uW * 0.27 + 2 * fs), floor - 17 * fs); c.addChild(items);
-  const me = new Sprite(F.red_walk[0]); me.anchor.set(0.5, 1); me.scale.set(-fs, fs); me.position.set(uW + 20, floor); c.addChild(me);
-  const v = introView;
-  // 대사 (종이 틀)
+function buildIntroLayer() {
+  introLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+  app.stage.addChild(introLayer);                                  // 늘 맨 위
+  const v = introView; if (!v) return;
+  const Wc = L.W, Hc = L.H, dpr = L.dpr;
+  const sDev = Math.max(1, Math.floor(Math.min((Wc * dpr) / 256, (Hc * dpr) / 224))), sc = sDev / dpr;   // 정수 배율 (4×·5× …)
+  const ox = Math.round(((Wc - 256 * sc) / 2) * dpr) / dpr, oy = Math.round(((Hc - 224 * sc) / 2 - (Hc > 224 * sc + 120 ? 40 : 0)) * dpr) / dpr;
+  const hit = new Graphics().rect(0, 0, Wc, Hc).fill(0x0b0910); hit.eventMode = 'static'; hit.on('pointertap', () => introNext()); introLayer.addChild(hit);
+  const room = new Container(); room.position.set(ox, oy); room.scale.set(sc); introLayer.addChild(room);
+  const bgT = loaded[A('scenes/office_day.png')];
+  room.addChild(new Sprite(bgT));
+  const fire = new Sprite(F.office_fire[0]); fire.position.set(177, 68); room.addChild(fire);
+  // 할아범: 책상 뒤 의자 — 다리는 책상 앞판이 가림 (원본에서 잘라 위에 덮는다)
+  const old = new Sprite(tex(NPC.halabeoji)); old.anchor.set(0.5, 1); old.position.set(124, 112); room.addChild(old);
+  const deskFront = new Sprite(new Texture({ source: bgT.source, frame: new Rectangle(82, 100, 88, 42) })); deskFront.position.set(82, 100); room.addChild(deskFront);
+  // 장부·열쇠 (2번째 줄에서 한 번 밀려옴, 2프레임)
+  const items = new Graphics().rect(0, 0, 7, 5).fill(0x7a2e48).rect(1, 1, 5, 1).fill(0xf4ecd2).rect(9, 1, 4, 2).fill(0xf5cf6a).rect(12, 0, 2, 4).fill(0xf5cf6a);
+  items.position.set(v.slid ? 150 : 128, 95); room.addChild(items);
+  // 붉은 수염: 장면에 처음 들어올 때만 걸어 들어오고, 그 뒤엔 제자리 숨쉬기
+  const me = new Sprite(F.red_walk[0]); me.anchor.set(0.5, 1); me.scale.set(-1, 1); me.position.set(v.walked ? 186 : 272, 150); room.addChild(me);
+  // 대사 틀 (UI 배율)
+  const uW = Math.round(Wc / L.uiS), uH = Math.round(Hc / L.uiS);
+  const ui0 = new Container(); ui0.scale.set(L.uiS); introLayer.addChild(ui0);
   const w = Math.min(uW - 16, 300);
-  const tx = label(INTRO[v.i], { color: COLOR.paperInk, shadow: false, wrap: w - 62 });
-  const h = Math.max(54, Math.ceil(tx.height) + 22);
-  const box = new Container(); box.position.set(Math.round((uW - w) / 2), uH - h - 12); c.addChild(box);
-  box.addChild(frame('paper', w, h, 'panel'));
-  const pf = portraitFrame(tex(NPC.halabeoji), 42, 'wood'); pf.position.set(6, 6); box.addChild(pf);
-  tx.position.set(56, 8); box.addChild(tx);
-  const nx = label(v.i < INTRO.length - 1 ? '탭 ▶' : '시작 ▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 8 - Math.ceil(nx.width), h - 13); box.addChild(nx);
-  const sk = button('stone', 50, 14, '건너뛰기', () => introNext(true), { small: true }); sk.position.set(uW - 56, 6); c.addChild(sk);
-  sk.on('pointertap', (e) => e.stopPropagation());
-  ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
+  const box = new Container(); ui0.addChild(box);
+  const sk = button('stone', 50, 14, '건너뛰기', () => introNext(true), { small: true }); sk.position.set(uW - 56, 6); ui0.addChild(sk);
+  let nx = null;
+  introLayer.setLine = (i) => {
+    box.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const tx = label(INTRO[i], { color: COLOR.paperInk, shadow: false, wrap: w - 62 });
+    const h = Math.max(54, Math.ceil(tx.height) + 22);
+    box.position.set(Math.round((uW - w) / 2), uH - h - 12);
+    box.addChild(frame('paper', w, h, 'panel'));
+    const pf = portraitFrame(tex(NPC.halabeoji), 42, 'wood'); pf.position.set(6, 6); box.addChild(pf);
+    tx.position.set(56, 8); box.addChild(tx);
+    nx = label(i < INTRO.length - 1 ? '탭 ▶' : '시작 ▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 8 - Math.ceil(nx.width), h - 13); box.addChild(nx);
+    if (i === 1) v.slideT = 0;
+  };
+  introLayer.setLine(v.i);
   let tt = 0;
-  ui.introTick = (dt) => {
+  introTick = (dt) => {
     if (me.destroyed) return;
     tt += dt;
-    const goal = uW * 0.75;
-    if (me.x > goal) { me.x = Math.max(goal, me.x - dt * 40 * fs); me.texture = F.red_walk[Math.floor(tt * 8) % F.red_walk.length]; }
-    else me.texture = F.red_idle[0];
-    if (v.i === 1) { const p = Math.min(1, tt / 0.8); items.x = Math.round(uW * 0.27 + 2 * fs + (p < 0.5 ? 0 : 1) * 14 * fs); }   // 2프레임: 열쇠·장부가 밀려옴
-    else if (v.i > 1) items.x = Math.round(uW * 0.27 + 16 * fs);
-    nx.alpha = 0.5 + 0.5 * Math.sin(tt * 4);
+    if (!v.walked) {
+      me.x = Math.max(186, me.x - dt * 40); me.texture = F.red_walk[Math.floor(tt * 8) % F.red_walk.length];
+      if (me.x <= 186) v.walked = true;
+    } else me.texture = F.red_idle[Math.floor(tt * 2) % F.red_idle.length];   // 숨쉬기 2f
+    if (v.slideT != null && !v.slid) { v.slideT += dt; items.x = v.slideT < 0.4 ? 139 : 150; if (v.slideT >= 0.4) v.slid = true; }
+    fire.texture = F.office_fire[Math.floor(tt * 10) % F.office_fire.length];
+    if (nx && !nx.destroyed) nx.alpha = 0.5 + 0.5 * Math.sin(tt * 4);
   };
-  return c;
 }
 // ---- 대사 카드 (첫 경매 안내 · 상황별 1회 안내) — 탭으로 넘김, 강제 없음
 function showDialog(d) { if (dialog) dialogQueue.push(d); else { dialog = { i: 0, ...d }; buildUI(); } }
@@ -1009,6 +1048,20 @@ function onboardWatch() {
   }
 }
 setInterval(onboardWatch, 400);
+/** 장면 ↔ 곡: 인수인계·설명서·튜토리얼 title · 회사 낮/밤 · 돌아오셨군요 밤 · 갱도 뒷산/폐광 · 경매 · 결과 (+ 앰비언스) */
+function musicTick() {
+  const st = state();
+  let m, a = null;
+  if (introView || manualView || tutOn()) m = 'title';
+  else if (welcome) { m = 'yard_night'; a = 'yard_night'; }
+  else if (view === 'company') { m = isNight() ? 'yard_night' : 'yard_day'; a = isNight() ? 'yard_night' : 'yard_day'; }
+  else if (st === 'AUCTION') m = 'auction';
+  else if (st === 'RESULT') m = 'result';
+  else { m = S.round?.card?.floor === 2 ? 'mine_2' : 'mine_1'; a = 'mine'; }
+  if (st === 'SURVEY' || st === 'DIG') a = 'mine';
+  music(m); ambience(a);
+}
+setInterval(musicTick, 300);
 /** 부팅: 처음이면 [0] → [1], 예전 세이브(v0.6 이전)면 [0]만 보고 넘어감, 다 했으면 첫 화면은 부지 */
 function bootOnboarding() {
   const T0 = S.tutorial;
@@ -1177,7 +1230,7 @@ let coPage = 'site', coTab = 'build', placing = null, coSel = null, coScroll = 0
 const roundBusy = () => ['SURVEY', 'DIG'].includes(state());
 const SHORT = { office: '사무', warehouse: '창고', cartShed: '차고', lodge: '숙소', smelter: '제련', lanternShop: '랜턴', pumpRoom: '펌프', turretShop: '포탑', moleHouse: '두더', campfire: '불', flag: '깃발', well: '우물', flowers: '꽃', scales: '저울', railDeco: '레일' };
 const BCOL = { office: 0x8a5a24, warehouse: 0x6e5440, cartShed: 0x5a5770, lodge: 0x7d5040, smelter: 0x3e3848, lanternShop: 0x46702e, pumpRoom: 0x3d5a9a, turretShop: 0x5a3a4a, moleHouse: 0x8a6c52 };
-function openCompany() { coPan = { x: 0, y: -1e9 }; view = 'company'; placing = null; coSel = null; sfx('stash', true); buildUI(); }
+function openCompany() { coPan = { x: 0, y: -1e9 }; view = 'company'; placing = null; coSel = null; sfx('ui_open'); buildUI(); }
 function closeCompany() { view = 'mine'; placing = null; coSel = null; buildUI(); }
 /** 건물·장식이 바뀌면: 숫자 다시 · 광부 늘리기 · 새 어울림 */
 function refreshCompany() {
@@ -1227,7 +1280,7 @@ function onSlot(x, y) {
   coSel = here && !(coSel?.x === x && coSel?.y === y) ? { x, y, kind: here.kind } : null;
   sfx('stash', true); buildUI();
 }
-function afterBuild(msg) { refreshCompany(); sfx('bell'); toast(msg); bumpCounter('coin'); save(); buildUI(); cloudSoon(); }
+function afterBuild(msg) { refreshCompany(); sfx(/Lv/.test(msg) ? 'upgrade' : 'build'); toast(msg); bumpCounter('coin'); save(); buildUI(); cloudSoon(); }
 const isNight = () => { const hr = (S.tick / TICK_PER_DAY) * 24; return hr < 6 || hr >= 19; };
 
 function makeCompany(x, y, w, h) {
@@ -1495,7 +1548,7 @@ function learnTalent(tree) {
   if (talentLeft(S) <= 0) { toast('포인트가 없어요. 사무소를 올리거나 ★3을 모아요'); return; }
   if ((S.talents[tree] ?? 0) >= 5) return;
   S.talents[tree] = (S.talents[tree] ?? 0) + 1;
-  refreshCompany(); sfx('bell');
+  refreshCompany(); sfx('talent');
   toast(`특성: ${B.talents[tree][S.talents[tree] - 1]}`, 'halabeoji');
   save(); buildUI(); cloudSoon();
 }
@@ -1541,7 +1594,7 @@ function playerRaise() {
   if (price > S.gold) { toast('금화가 모자라요'); return; }
   AU.high = price; AU.holder = 'me'; AU.me = price; AU.react = B.auction.guildReact; AU.count = 0;
   AU.say = AU.say.map((t) => (t ? { ...t, old: true, intro: false } : t));
-  sfx('stash', true);
+  sfx('bid');
   buildUI();
 }
 /** 길드가 따라온다: 한도 안이면 한 곳이 +10% (공격적인 순서로), 한도를 넘은 곳은 포기 */
@@ -1550,11 +1603,11 @@ function guildRespond() {
   let raised = false;
   for (const i of [0, 2, 1]) {
     if (AU.out[i]) continue;
-    if (next > AU.caps[i]) { AU.out[i] = true; AU.say[i] = { text: pick(GUILD_LINES[i].pass), pass: true, t: time }; sfx('clink', true); continue; }
+    if (next > AU.caps[i]) { AU.out[i] = true; AU.say[i] = { text: pick(GUILD_LINES[i].pass), pass: true, t: time }; sfx('pass', true); continue; }
     if (raised) continue;
     raised = true;
     AU.high = next; AU.holder = i; AU.bids[i] = next;
-    AU.say[i] = { text: fill(pick(GUILD_LINES[i].raise), { g: next }), price: next, pass: false, t: time }; sfx('ore');
+    AU.say[i] = { text: fill(pick(GUILD_LINES[i].raise), { g: next }), price: next, pass: false, t: time }; sfx('bid');
   }
   if (!raised) { AU.phase = 'count'; AU.count = B.auction.hammerSeconds; }   // 아무도 안 따라옴 → 3·2·1
   buildUI();
@@ -1574,7 +1627,7 @@ function auctionWon() {
   const i = Math.floor(Math.random() * 3);
   AU.say = AU.say.map((q) => (q ? { ...q, old: true } : q)); AU.say[i] = { text: pick(GUILD_LINES[i].lose), line: true, t: time + 0.5 };
   toast(fill(AUCTIONEER.won, { p: AU.high }), 'halabeoji', 2.5);
-  sfx('break'); shake = 0.25; shakeAmp = 2;
+  sfx('gavel'); setTimeout(() => sfx('stamp'), 220); shake = 0.25; shakeAmp = 2;
   buildUI();
 }
 /** 유찰 (길드가 가져감) → 공짜 자투리 구획 */
@@ -1584,7 +1637,7 @@ function auctionLost() {
   AU.say = AU.say.map((q) => (q ? { ...q, old: true } : q));
   if (w != null) AU.say[w] = { text: pick(GUILD_LINES[w].win), line: true, t: time + 0.4 };
   toast(AUCTIONEER.lost, 'halabeoji', 3);
-  if (w != null) { sfx('break'); shake = 0.2; shakeAmp = 1.5; }
+  if (w != null) { sfx('gavel'); setTimeout(() => sfx('stamp'), 220); shake = 0.2; shakeAmp = 1.5; }
   buildUI();
 }
 let countShown = -1;
@@ -1593,7 +1646,7 @@ function updateAuction(dt) {
   else if (AU.phase === 'count') {
     AU.count -= dt;
     const n = Math.ceil((AU.count / B.auction.hammerSeconds) * 3);   // 3·2·1
-    if (n !== countShown) { countShown = n; if (n > 0) sfx('clink', true); buildUI(); }
+    if (n !== countShown) { countShown = n; if (n > 0) sfx('ui_tap'); buildUI(); }
     if (AU.count <= 0) auctionWon();
   } else if (AU.phase === 'won' || AU.phase === 'lost') {
     AU.timer -= dt;
@@ -1631,7 +1684,7 @@ function updateMole(dt) {
     if (S.tutorial.sniffed) { mole.sniffing = false; return; }
     if (mole.tw == null) {
       const d = tx - mole.x; mole.face = Math.sign(d) || 1; mole.x += Math.sign(d) * Math.min(Math.abs(d), B.moleSpeed * dt);
-      if (Math.abs(d) < 0.5) { mole.tw = 3; mole.face = -1; emote(mole, '킁킁', 3); sfx('ore', true); }
+      if (Math.abs(d) < 0.5) { mole.tw = 3; mole.face = -1; emote(mole, '킁킁', 3); sfx('mole_sniff'); }
     } else { mole.tw -= dt; mole.sniffing = true; if (mole.tw <= 0) { S.tutorial.sniffed = true; mole.tw = null; mole.sniffing = false; save(); } }
     return;
   }
@@ -1646,7 +1699,7 @@ function updateMole(dt) {
     if (after !== before && after >= 0 && after < GW) {
       const size = veinBelow(after);
       const vt = CF.oreColor ? veinTypeBelow(after) : null;
-      if (size) { mole.wait = 0.6 + size * 0.12; mole.x = GX + after * T + 8; sfx('ore', true); emote(mole, (vt ? ORES.find((o) => o.key === vt).name + ' ' : '') + (CF.sniffSize ? `킁킁 ${'•'.repeat(size >= B.bigVein ? 3 : size >= 6 ? 2 : 1)}` : '킁킁'), 0.6 + size * 0.12, vt ? ORE_COLOR[vt] : undefined); }
+      if (size) { mole.wait = 0.6 + size * 0.12; mole.x = GX + after * T + 8; sfx('mole_sniff', true); emote(mole, (vt ? ORES.find((o) => o.key === vt).name + ' ' : '') + (CF.sniffSize ? `킁킁 ${'•'.repeat(size >= B.bigVein ? 3 : size >= 6 ? 2 : 1)}` : '킁킁'), 0.6 + size * 0.12, vt ? ORE_COLOR[vt] : undefined); }
     }
     if (Math.abs(d) < 0.5) mole.goal = undefined;
   } else {
@@ -1663,7 +1716,7 @@ function xrayAt(wx, wy) {
     if (x < 0 || x >= GW || y < 0 || y >= GH) continue;
     xray.set(`${x},${y}`, time + B.xraySeconds); refreshAround(x, y, 0);
   }
-  S.round.xrayLeft--; xrayArmed = false; sfx('bell');
+  S.round.xrayLeft--; xrayArmed = false; sfx('ui_open');
   setTimeout(() => { for (let y = gy - rr; y <= gy + rr; y++) for (let x = gx - rr; x <= gx + rr; x++) if (x >= 0 && x < GW && y >= 0 && y < GH) refreshAround(x, y, 0); }, B.xraySeconds * 1000 + 50);
   buildUI();
   return true;
@@ -1692,9 +1745,9 @@ function computeLayout() {
   let cell, uiS, panels, vis;
   if (!portraitMode) {
     // 패드·PC 가로 (v0.8): 칸 = min(높이/18, 너비/12) — 지상 1.6칸(창고 문까지) + 격자 16줄이 한 화면 (스크롤 없음). 좌우 패널은 남는 폭
-    uiS = 2;
-    cell = Math.min(H / 18, (Wd - 2 * 240) / 12);
-    const side = Math.max(240, Math.min(360, Math.floor((Wd - 12 * cell) / 2)));
+    uiS = Wd >= 1900 ? 2 : 1.5;                                   // v0.8 §5: 패널이 좁아진 만큼 UI 배율을 낮춰 같은 배치가 들어가게
+    cell = Math.min(H / 18, (Wd - 2 * Math.max(220, Math.min(300, Math.floor(Wd * 0.175)))) / 12);
+    const side = Math.max(220, Math.min(300, Math.floor(Wd * 0.175)));   // v0.8 §5: 좌우 패널 합 ≤ 화면 폭 35% — 갱도가 주인공
     if (cell < 20) portraitMode = true;
     else {
       const pad = 2 * uiS;
@@ -1739,6 +1792,7 @@ function layout() {
   clampPan();
   setTextRes(L.uiS * L.dpr);
   buildUI();
+  if (introView) buildIntroLayer();
 }
 function clampPan() {
   cam.panX = Math.max(-L.overX / 2 - 8, Math.min(L.overX / 2 + 8, cam.panX));
@@ -1749,7 +1803,7 @@ window.addEventListener('resize', () => setTimeout(layout, 60));
 const toWorld = (sx, sy) => [((sx - display.x) / display.scale.x + cam.rx) / DENS, ((sy - display.y) / display.scale.y + cam.ry) / DENS];
 const toScreen = (x, y) => [display.x + (x * DENS - cam.rx) * display.scale.x, display.y + (y * DENS - cam.ry) * display.scale.y];
 const inRect = (r, sx, sy) => r && sx >= r.x && sx < r.x + r.w && sy >= r.y && sy < r.y + r.h;
-const inPanels = (sx, sy) => tutBlocks(sx, sy) || inRect(ui.overlayRect2, sx, sy) || Object.values(L.panels).some((p) => sx >= p.x && sx < p.x + p.w && sy >= p.y && sy < p.y + p.h)
+const inPanels = (sx, sy) => !!introView || tutBlocks(sx, sy) || inRect(ui.overlayRect2, sx, sy) || Object.values(L.panels).some((p) => sx >= p.x && sx < p.x + p.w && sy >= p.y && sy < p.y + p.h)
   || (ui.overlayRect && sx >= ui.overlayRect.x && sx < ui.overlayRect.x + ui.overlayRect.w && sy >= ui.overlayRect.y && sy < ui.overlayRect.y + ui.overlayRect.h);
 
 // ================================================================ UI (art/ui/ui.px.js 틀 · 인물은 틀 안에서만)
@@ -1803,7 +1857,7 @@ function buildUI() {
     const cr = makeCrew(lw - 10, ch - 10); cr.position.set(5, 43); lc.addChild(cr);
     const dh = 78;
     const db = makeDaybook(lw, dh); db.y = 38 + ch + 2; lc.addChild(db);
-    const logH = Math.max(40, lh - 38 - ch - 2 - 104 - dh - 2);
+    const logH = Math.max(30, lh - 38 - ch - 2 - 136 - dh - 2);
     const lf = frame('stone', lw, logH, 'panel'); lf.y = 38 + ch + 2 + dh + 2; lc.addChild(lf);
     const lt = label('사건 기록', { small: true, color: COLOR.gold }); lt.position.set(6, lf.y + 4); lc.addChild(lt);
     (eventLog.length ? eventLog : ['아직 없어요']).slice(0, Math.floor((logH - 20) / 12)).forEach((t, i) => { const l = label(t, { small: true, color: COLOR.stone }); l.position.set(8, lf.y + 18 + i * 12); lc.addChild(l); });
@@ -1829,7 +1883,6 @@ function buildUI() {
   if (manualView) uiRoot.addChild(makeManual());
   ui.tutLayer = new Container(); uiRoot.addChild(ui.tutLayer);
   if (dialog) uiRoot.addChild(makeDialog());
-  if (introView) uiRoot.addChild(makeIntro());
   if (L.portrait && L.overY > 0 && view === 'mine' && ['SURVEY', 'DIG'].includes(state())) uiRoot.addChild(makeScrollBar());
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
@@ -1905,10 +1958,10 @@ function makeAuction(x, y, w, h) {
   B.guilds.forEach((g, i) => {
     const gc = guildCard(i, gw, AU.holder === i); gc.position.set(8 + i * (gw + 4), gy); c.addChild(gc);
     const say = AU.say[i], age = say ? time - say.t : 99;
-    const fig = new Sprite(tex(GUILD_SPR[i])); fig.anchor.set(0.5, 1); fig.scale.set(fs);
+    const fig = new Sprite(tex(GUILD_SPR[i])); fig.anchor.set(0.5, 1); const gs = (fs * 40) / fig.texture.height; fig.scale.set(gs);   // 64×80 원본을 40칸 높이로
     let fx0 = 0, fy0 = 0;
     if (say && !say.pass && !say.line && age >= 0 && age < 0.5) { fx0 = Math.round(Math.sin(age * 70) * 1.5); fy0 = -Math.round(Math.abs(Math.sin(age * 12)) * 3); }
-    if (say?.pass && age >= 0 && age < 0.5 && Math.floor(age / 0.12) % 2 === 1) fig.scale.x = -fs;
+    if (say?.pass && age >= 0 && age < 0.5 && Math.floor(age / 0.12) % 2 === 1) fig.scale.x = -gs;
     if (AU.out[i] && !(say?.pass && age < 0.5)) fig.tint = 0x8a8a8a;
     const winBounce = AU.phase === 'lost' && AU.holder === i ? -Math.round(Math.abs(Math.sin((time - AU.endAt) * 8)) * 3) : 0;
     fig.position.set(Math.round(cx(i) + fx0), gy + 12 + fy0 + winBounce);
@@ -2245,7 +2298,6 @@ function makeSettings(w) {
   const c = new Container();
   const items = [
     [() => `저사양 ${low ? '켬' : '끔'}`, () => setLow(!low)],
-    [() => `소리 ${soundOn() ? '켬' : '끔'}`, () => { unlockAudio(); setSound(!soundOn()); S.settings.sound = soundOn(); save(); }],
     [() => (online() ? '로그아웃' : '로그인'), () => (online() ? doLogout() : openLoginForm())],
     ['랭킹', () => openRank()],
     ['전체 화면', () => document.documentElement.requestFullscreen?.().catch(() => {})],
@@ -2253,13 +2305,32 @@ function makeSettings(w) {
     ['튜토리얼 다시', replayTutorial],
     ['처음부터', () => { if (confirm('저장을 지우고 처음부터 시작할까요?')) { saving = false; resetSave(); location.reload(); } }],
   ].filter((it, i) => S.tutorial.done || i === 0);
+  // 음악 · 효과음 슬라이더 (끌거나 톡)
+  let sy0 = 0;
+  for (const [key, name] of [['bgm', '음악'], ['sfx', '효과음']]) {
+    const row = new Container(); row.y = sy0; c.addChild(row);
+    const l = label(name, { small: true, color: COLOR.paper }); l.position.set(0, 2); row.addChild(l);
+    const x0 = 40, bwid = Math.max(40, w - x0 - 30);
+    const bar = new Graphics(); row.addChild(bar);
+    const pct = label('', { small: true, color: COLOR.dim }); pct.position.set(x0 + bwid + 4, 2); row.addChild(pct);
+    const draw = () => { const v = volumes()[key]; bar.clear().rect(x0, 5, bwid, 4).fill(0x3a2a22).rect(x0, 5, bwid * v, 4).fill(0xd39a3a).rect(x0 + bwid * v - 2, 2, 4, 10).fill(0xf5cf6a); pct.text = `${Math.round(v * 100)}`; };
+    draw();
+    const hitA = new Graphics().rect(x0 - 4, 0, bwid + 8, 14).fill({ color: 0, alpha: 0.001 }); row.addChild(hitA);
+    hitA.eventMode = 'static'; hitA.cursor = 'pointer';
+    let dragging = false;
+    const setAt = (e) => { const p = row.toLocal(e.global); const v = Math.max(0, Math.min(1, (p.x - x0) / bwid)); setVolumes({ [key]: Math.round(v * 20) / 20 }); S.settings[key === 'bgm' ? 'bgmVol' : 'sfxVol'] = volumes()[key]; S.settings.sound = true; draw(); };
+    hitA.on('pointerdown', (e) => { unlockAudio(); dragging = true; setAt(e); });
+    hitA.on('globalpointermove', (e) => { if (dragging) setAt(e); });
+    hitA.on('pointerup', () => { dragging = false; save(); if (key === 'sfx') sfx('ui_tap'); }); hitA.on('pointerupoutside', () => { dragging = false; save(); });
+    sy0 += 16;
+  }
   const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 70))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
   items.forEach(([text, fn], i) => {
     const b = button('stone', bw, bh, typeof text === 'function' ? text() : text, () => { fn(); if (typeof text === 'function') b.setText(text()); }, { small: true });
-    b.position.set((i % cols) * (bw + 4), Math.floor(i / cols) * (bh + 4));
+    b.position.set((i % cols) * (bw + 4), sy0 + Math.floor(i / cols) * (bh + 4));
     c.addChild(b);
   });
-  const fps = label('', { small: true, color: 0x9cc45a }); fps.position.set(0, Math.ceil(items.length / cols) * (bh + 4) + 2);
+  const fps = label('', { small: true, color: 0x9cc45a }); fps.position.set(0, sy0 + Math.ceil(items.length / cols) * (bh + 4) + 2);
   c.addChild(fps); ui.fps = fps;
   return c;
 }
@@ -2311,7 +2382,7 @@ function sell(key, frac) {
   if (!n) return;
   stash[key] -= n;
   const gain = n * priceOf(key);
-  sfx('stash');
+  sfx('coin');
   const r = ui.rows[key];
   const from = r ? r.btn.getGlobalPosition() : { x: L.W / 2, y: L.H / 2 };
   S.gold += gain; if (S.round) S.round.stats.revenue += gain;
@@ -2331,7 +2402,7 @@ function bumpCounter(key) {
 }
 let inFlight = 0;                                         // 창고로 날아가는 중인 광석 (용량 계산에 포함)
 function orePopup(kind, x, y, n) {
-  sfx('ore');
+  sfx('cart_dump', true);
   const [sx, sy] = toScreen(x, y);
   stash[kind] += n;                                       // 숫자는 바로 반영(저장), 날아가는 건 그림만
   count('ores', n);
@@ -2389,12 +2460,12 @@ const uiFx = [];
 market.onTick = () => { refreshUI(); };
 // 급등: 30초 전 모모 편지 → 그 광종 행이 UI 펄스 → 40초 동안 ×1.8
 market.onWarn = (key, warn = B.surgeWarn) => {
-  tip('surge');
+  tip('surge'); sfx('letter');
   const o = ORES.find((q) => q.key === key), who = B.buyers[buyerOf(key)].name;
   toast(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! (${warn}초 뒤)`, 'momo', 5);
   sfx('bell');
 };
-market.onSurge = (key) => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${B.surgeMul}! 40초 동안`, 'momo', 3); sfx('stash'); };
+market.onSurge = (key) => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${B.surgeMul}! 40초 동안`, 'momo', 3); sfx('surge'); };
 
 // 말풍선 그리기 (UI 층, 캐릭터 머리 위를 따라감)
 function drawEmotes(dt) {
@@ -2491,7 +2562,7 @@ function claimVeinsNear(gx, gy) {
     if (v.size >= B.bigVein && !S.round.jackpotVeins?.includes(id)) {
       (S.round.jackpotVeins ??= []).push(id); S.round.stats.jackpots++; count('jackpots');
       bigVein(cellX(x), GY + y * T + 8);
-    } else toast(`광맥 발견! ${ORES.find((o) => o.key === v.type)?.name ?? ''} ${v.size}칸 — 광부들이 다 캘게요`);
+    } else sfx('vein_found'), toast(`광맥 발견! ${ORES.find((o) => o.key === v.type)?.name ?? ''} ${v.size}칸 — 광부들이 다 캘게요`);
     if (CF.chainVein) revealNearVeins(v, id);
   }
 }
@@ -2508,7 +2579,7 @@ function revealNearVeins(v, id) {
 }
 function breakCell(gx, gy, from, job) {
   const t = W.g[gy][gx];
-  setTimeout(() => tileTips(gx, gy), 0);
+  setTimeout(() => { tileTips(gx, gy); syncWallLamps(); }, 0);
   W.g[gy][gx] = '.';
   W.rail[gy][gx] = true;                                   // 뚫린 길엔 레일이 깔림
   if (job?.ladder) {                                       // 플레이어가 세로로 그린 경로 → 사다리 (이 칸 + 경로 앞 칸)
@@ -2519,7 +2590,7 @@ function breakCell(gx, gy, from, job) {
     if (from != null && from !== 'S' && cxy(from)[0] === gx) { const [fx, fy] = cxy(from); W.climb[fy][fx] = W.climb[fy][fx] || !W.ladder[fy][fx]; }
   }
   const x0 = GX + gx * T, y0 = GY + gy * T;
-  sfx('break', true);
+  sfx(t === 'd' ? 'pick_dirt' : ORE_KEYS.has(t) ? 'pick_ore' : 'pick_rock', true);
   const cols = DEBRIS[t] ?? DEBRIS.d;
   for (let i = 0; i < 8; i++)
     particle(dustA, { x: x0 + Math.random() * T, y: y0 + Math.random() * T, vx: (Math.random() - 0.5) * 70, vy: -20 - Math.random() * 60, life: 0.6 + Math.random() * 0.4, color: cols[i % cols.length], solid: true, fade: false, size: Math.random() < 0.4 ? 1 : 0.5 });
@@ -2535,7 +2606,7 @@ function breakCell(gx, gy, from, job) {
     const [sx, sy] = toScreen(x0 + 8, y0 + 4);
     S.gold += gold;
     flyNumber('coin', sx, sy, gold, () => { refreshUI(); bumpCounter('coin'); });
-    toast(`유물 상자! 금화 ${gold}`, 'halabeoji'); sfx('bell');
+    toast(`유물 상자! 금화 ${gold}`, 'halabeoji'); sfx('coin_big');
   }
   onCellBroken?.(gx, gy, t);
   refreshAround(gx, gy, 1); drawEdges(); drawSolid(); drawProps();
@@ -2561,7 +2632,7 @@ let onCellBroken = (gx, gy, t) => {
     }
     fx('fx_water', cellX(gx), GY + gy * T + 8);
     if (t === 'flow') return;
-    sfx('break'); logEvent('water');
+    sfx('water'); logEvent('water');
     toast(`지하수가 터졌어요! 물 칸은 걸음이 느려지고 광차가 못 지나가요 — ${CF.autoPump ? '펌프실이 곧 퍼내요' : `[펌프 ${CF.pumpCost}]`}`, 'momo', 4); tip('water');
     if (CF.autoPump && !(rd.pumpLeft > 0)) setTimeout(() => { if (S.round === rd && !(rd.pumpLeft > 0)) pump(true); }, 1500);
     buildUI();
@@ -2570,13 +2641,13 @@ let onCellBroken = (gx, gy, t) => {
     rd.gasLeft = B.gasSeconds; rd.gasCell = [gx, gy];
     fx('fx_gas', cellX(gx), GY + gy * T + 8); logEvent('gas');
     for (const a of crew) emote(a, '콜록콜록', 2);
-    toast(`가스가 새어 나와요! ${B.gasSeconds}초 쉬어 가요 (랜턴 불꽃은 멀리…)`, 'momo', 4); tip('gas');
+    sfx('gas'); toast(`가스가 새어 나와요! ${B.gasSeconds}초 쉬어 가요 (랜턴 불꽃은 멀리…)`, 'momo', 4); tip('gas');
   }
   if (t === 'o' && rd.card.floor === 2 && Math.random() < B.abandoned.batChance) {   // 폐광: 박쥐떼 — 가까운 광부 기절 (포탑 2등급↑이면 쏨)
     const A = B.abandoned;
     logEvent('bats');
     for (let i = 0; i < 14; i++) particle(sparksU, { x: cellX(gx), y: GY + gy * T + 8, vx: (Math.random() - 0.5) * 120, vy: -20 - Math.random() * 60, life: 0.9 + Math.random() * 0.5, color: 0x2a2634, g: -10, size: 1 });
-    sfx('clink');
+    sfx('bat');
     if (CF.turret >= A.batGrade) toast('박쥐떼! 광차 포탑이 쫓아냈어요', 'momo', 2);
     else {
       let n = 0;
@@ -2595,20 +2666,20 @@ let onCellBroken = (gx, gy, t) => {
       mo.until = time + 1.2; mo.shot = true;
       setTimeout(() => { fx('fx_hit', cellX(gx), GY + gy * T + 8); fx('fx_pulse', cellX(gx), GY + gy * T + 8); sfx('break'); }, 600);
       toast('슬라임이 나왔지만 광차 포탑이 쐈어요!', 'momo', 2);
-    } else toast('동굴에서 슬라임이 나왔어요! 광차가 지나가지 못해요', 'momo', 3);
+    } else { sfx('slime'); toast('동굴에서 슬라임이 나왔어요! 광차가 지나가지 못해요', 'momo', 3); }
   }
 };
 function pump(auto = false) {
   const cost = auto ? 0 : CF.pumpCost;
   if (S.gold < cost) { toast('금화가 모자라요'); return; }
-  S.gold -= cost; refreshUI(); sfx('stash');
+  S.gold -= cost; refreshUI(); sfx('pump');
   S.round.pumpLeft = B.pumpSeconds; toast(`${auto ? '펌프실 자동 펌프' : '펌프'} 가동! ${B.pumpSeconds}초 뒤 물이 빠져요`);
   buildUI();
 }
 function explode(gx, gy) {                                   // 랜턴 불꽃 + 가스 = 폭발: 3×3 흙·바위가 뚫림 + 근처 광부 체력 −1
   const rd = S.round;
   rd.gasLeft = 0; rd.gasCell = null; logEvent('boom');
-  flash = 0.8; shake = 0.5; shakeAmp = 4; sfx('bell'); sfx('break');
+  flash = 0.8; shake = 0.5; shakeAmp = 4; sfx('boom');
   fx('fx_daebak', cellX(gx), GY + gy * T + 8); fx('fx_collapse', cellX(gx), GY + gy * T + 8);
   const r = B.explosionRadius;
   for (let y = gy - r; y <= gy + r; y++) for (let x = gx - r; x <= gx + r; x++) {
@@ -2634,7 +2705,7 @@ function collapse() {
   for (let k = 0; k < len; k++) refreshAround(x0 + k, y0, 1);
   drawEdges(); drawSolid(); drawProps(); syncRound();
   fx('fx_collapse', cellX(x0) + (len - 1) * T / 2, GY + y0 * T + 6);
-  shake = 0.3; shakeAmp = 2; sfx('break');
+  shake = 0.3; shakeAmp = 2; sfx('collapse');
   logEvent('collapse');
   toast('갱도 천장이 무너졌어요! 다시 그리면 돼요 (흙 0.6초)', 'halabeoji', 3); tip('collapse');
   return true;
@@ -2800,7 +2871,7 @@ function updateDigger(a, dt) {
       const t = W.g[y][x];
       fx('fx_hit', cellX(x) - a.face * 6, GY + y * T + 8);
       for (let i = 0; i < 3; i++) particle(dustA, { x: cellX(x) - a.face * 6, y: GY + y * T + 8, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.5, color: (DEBRIS[t] ?? DEBRIS.d)[i % 2], solid: true, fade: false, size: 0.5 });
-      sfx('hit', true);
+      sfx(t === 'd' ? 'pick_dirt' : ORE_KEYS.has(t) ? 'pick_ore' : 'pick_rock', true);
     }
     a.lastFrame = a.p.i;
     const need = digSeconds(W.g[y][x]);
@@ -2976,7 +3047,7 @@ function updateCart(dt) {
     cart.y += cart.fallV * dt;
     if (cart.y >= cartY(cart.fallTo)) {
       cart.y = cartY(cart.fallTo); cart.node = idx(cxy(cart.node)[0], cart.fallTo); cart.mode = 'park';
-      fx('fx_collapse', cart.x, cart.y - 6); sfx('break'); shake = 0.2; shakeAmp = 2;
+      fx('fx_collapse', cart.x, cart.y - 6); sfx('land'); shake = 0.2; shakeAmp = 2;
       for (const k of Object.keys(cart.cargo)) {
         const spill = Math.floor(cart.cargo[k] * B.cartSpill);
         if (spill) { cart.cargo[k] -= spill; piles.push({ gx: cxy(cart.node)[0], gy: cart.fallTo, type: k, n: spill }); }
@@ -3064,7 +3135,7 @@ function checkFall(a) {
   let land = gy;
   while (land + 1 < W.rows && isDug(gx, land + 1) && !holdAt(gx, land + 1)) land++;
   if (land + 1 < W.rows && isDug(gx, land + 1) && holdAt(gx, land + 1)) land++;
-  a.fall = { from: gy, to: land, pause: B.fallPause, v: 0 }; if (land - gy >= 1) tip('fall');
+  a.fall = { from: gy, to: land, pause: B.fallPause, v: 0 }; if (land - gy >= 1) { tip('fall'); sfx('fall', true); }
   a.path = []; if (a.job) a.job = null;
   a.state = 'fall';
 }
@@ -3078,7 +3149,7 @@ function updateFall(a, dt) {
     a.y = target; a.node = idx(cxy(a.node)[0], f.to);
     const h = f.to - f.from;
     a.fall = null;
-    fx('fx_dirt', a.x, a.y - 4); sfx('break', true);
+    fx('fx_dirt', a.x, a.y - 4); sfx(h >= B.stunAt ? 'stun' : 'land', true);
     emote(a, '으악!', 1.2);
     shake = Math.max(shake, 0.12); shakeAmp = Math.max(shakeAmp, 1);
     if (a.carrying) { const p = piles.find((q) => q.gx === cxy(a.node)[0] && q.gy === f.to && q.type === a.carrying.type); if (p) p.n += a.carrying.n; else piles.push({ gx: cxy(a.node)[0], gy: f.to, type: a.carrying.type, n: a.carrying.n }); a.carrying = null; }
@@ -3256,7 +3327,7 @@ app.ticker.add((tk) => {
     k.g.clear().rect(k.x, k.y0 + frac * (k.h - kh), 4, kh).fill({ color: 0xf5cf6a, alpha: 0.8 });
   }
   ui.coTick?.(real);
-  ui.introTick?.(real);
+  introTick?.(real);
   tutTick(real);
   if (ui.readyBtn && !ui.readyBtn.destroyed) ui.readyBtn.alpha = 0.75 + 0.25 * Math.sin(time * 5);
   if (fpsN % 15 === 0) { updateSmelt(); if (ui.smeltLine && S.smelt.jobs.length) refreshUI(); }
@@ -3312,6 +3383,8 @@ app.ticker.add((tk) => {
   addLight(lfx, lfy, 10, LANTERN_R * (1 + 0.03 * lf), [1.0, 0.72, 0.46], LANTERN_POWER * (1 + 0.06 * lf));
   if (red.y > GY) addLight(head[0] + 8, head[1] + 4, 6, 40, [1.0, 0.94, 0.68], 1.1);
   if (blonde.y > GY) addLight(blondeLamp[0], blondeLamp[1], 6, 44, [1.0, 0.8, 0.5], 0.8 * (1 + 0.05 * flick(time, 4)));
+  for (const w of wallLamps) { w.s.texture = F.lantern[Math.floor(time * 5 + w.seed) % F.lantern.length]; const f = flick(time, w.seed); w.halo.position.set(w.x, w.y); w.halo.alpha = w.halo.baseAlpha * (1 + 0.15 * f); }
+  for (const w of [...wallLamps].sort((p, q) => Math.hypot(p.x - lfx, p.y - lfy) - Math.hypot(q.x - lfx, q.y - lfy)).slice(0, Math.max(0, MAX_LIGHTS - lights.length - 2))) { const f = flick(time, w.seed); addLight(w.x, w.y, 8, 80 * (1 + 0.03 * f), [1.0, 0.78, 0.52], 1.25 * (1 + 0.06 * f)); }   // 가까운 벽 랜턴 (발광·폭발 자리 2개는 남김)
   const gn = glowTiles.length;
   if (gn) addLight(gxs / gn, gys / gn, -8, 40 + gn * 5, [0.42, 0.88, 0.85], 0.95 + 0.25 * Math.sin(time * 2.2));
   if (boom) {
@@ -3388,7 +3461,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
