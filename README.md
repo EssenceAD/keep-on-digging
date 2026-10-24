@@ -36,6 +36,9 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.3 (PATCH_V13 — 부지 퀄리티)
+1~6. 장면 3종(06–16 낮 · 16–20 해질녘 · 20–06 밤, `yardPhase`) · 터 9곳(옛 4번 삭제, 저장된 lot 5–9 → 4–8, 옛 4의 건물은 빈 터로 — `company.lotsV=3`) · 빈 터 = `lot_site_a/b`, 잠긴 터 = `lot_site_locked(_b)` at (lot.x-4, lot.y-20) · 건물 그림자 68×12 α.35 at (cx, by-3) · 간판 판자 `sign_<key>` at (cx-15, by-38) · `yard_front` 앞 수풀(건물·캐릭터 위, 글로우 아래). 해질녘·밤 색조는 목표 합성처럼 건물 색을 거의 살림. 옛 덤불 덮개 코드 삭제. 스샷: docs/screens/v13_day·dusk·night.png
+
 ## v1.2.7
 - 매 프레임 루프를 부분별로 감쌈(safe): 한 곳이 오류를 내도 나머지·그리기는 계속 (PixiJS는 리스너가 던지면 다음 프레임을 안 잡아 화면이 멈춤). Pixi render·window error·promise도 잡음.
 - 오류는 최근 5건을 localStorage `kod.errors`에 남기고, [제보]를 보낼 때 「[오류 버전 상태] 메시지 @ 위치」로 함께 보냄(보내면 비움). 문제가 생기면 모모 토스트 한 번(30초에 한 번).

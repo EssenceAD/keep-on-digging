@@ -38,7 +38,9 @@ mkdirSync('public/art/scenes', { recursive: true });
 for (const [from, name] of [['art/out/scenes', 'surface'], ['art/out/scenes', 'shaft_night'], ['art/office/out/scenes', 'office_night'], ['art/office/out/scenes', 'office_day']])
   if (existsSync(`${from}/${name}.png`)) cpSync(`${from}/${name}.png`, `public/art/scenes/${name}.png`);
 // 부지 장면 (PATCH_V10): 낮·밤 첫 프레임 + 잠긴 터를 덮는 덤불
-for (const n of ['yard_day', 'yard_night']) cpSync(`art/yard/out/scenes/${n}.png`, `public/art/scenes/${n}.png`);
+for (const n of ['yard_day', 'yard_dusk', 'yard_night']) cpSync(`art/yard/out/scenes/${n}.png`, `public/art/scenes/${n}.png`);
+// PATCH_V13: 공사터 · 간판 판자 · 앞 수풀 · 숲 채우기
+for (const n of ['lot_site_a', 'lot_site_b', 'lot_site_locked', 'lot_site_locked_b', 'yard_front', 'forest_fill', ...['pick', 'anvil', 'gear', 'bed', 'crate', 'gem', 'mug', 'cart', 'bag', 'flask'].map((k) => `sign_${k}`)]) cpSync(`art/yard/out/sprites/${n}.png`, `public/art/sprites/${n}.png`);
 for (const n of ['bush_white', 'bush_pink', 'bush_orange']) cpSync(`art/yard/out/sprites/${n}.png`, `public/art/sprites/yd_${n}.png`);
 for (const f of readdirSync('art/yard/out/sprites')) if (f.startsWith('g64_')) cpSync(`art/yard/out/sprites/${f}`, `public/art/sprites/${f}`);
 for (const n of ['yard_ripple', 'yard_fire']) for (const ext of ['png', 'json']) cpSync(`art/yard/out/anims/${n}.${ext}`, `public/art/anims/${n}.${ext}`);

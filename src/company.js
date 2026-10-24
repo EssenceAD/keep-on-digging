@@ -15,6 +15,8 @@ export function ensureCompany(S) {
   const co = S.company;
   co.coreLv ??= 1; co.buildings ??= {}; co.decos ??= []; co.harmoniesFound ??= [];
   ensureUpgrades(S);
+  // PATCH_V13 §3-2: 터 10곳 → 9곳 (입구와 겹치던 옛 4번 삭제, id 다시 매김) — 옛 5–9 → 4–8, 옛 4에 지은 건물은 빈 터로
+  if ((co.lotsV ?? 0) < 3) { for (const b of Object.values(co.buildings)) if (b && b.lot != null) b.lot = b.lot === 4 ? null : b.lot > 4 ? b.lot - 1 : b.lot; co.lotsV = 3; }
   // 격자 슬롯(x,y) → 빈 터(lot) · 소품 자리(spot)로 옮김 (PATCH_V10 §2)
   for (const b of Object.values(co.buildings)) if (b && b.lot == null) { delete b.x; delete b.y; }
   co.buildings.office ??= {}; co.buildings.office.lot ??= YARD.lots.find((l) => l.default === 'office')?.id ?? 0;

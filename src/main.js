@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.7';
+const VERSION = 'v1.3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -109,7 +109,7 @@ const DECO_ANIM = new Set(['deco_fire', 'deco_flag']);
 const GPT_STEPS = [1, 3, 5];
 const GPT_SPRITES = [...Object.values(BLD_ART).flatMap((b) => GPT_STEPS.map((l) => `g_${b}_${l}`)), ...Object.values(DECO_ART).map((d) => `g_${d}`)];
 const YARD_SPRITES = [...Object.values(BLD_ART).flatMap((b) => GPT_STEPS.map((l) => `g64_${b}_${l}`)), ...Object.values(DECO_ART).map((d) => `g64_${d}`)];   // 부지 장면 1× (64×64 · scripts/buildings64.sh)
-const SPRITES = [...GPT_SPRITES, ...YARD_SPRITES, 'yd_bush_white', 'yd_bush_pink', 'yd_bush_orange', ...Object.values(BLD_ART).flatMap((b) => [1, 3, 5].map((l) => `${b}_${l}`)), ...Object.values(DECO_ART).filter((d) => !DECO_ANIM.has(d)), 'dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'gem',
+const SPRITES = [...GPT_SPRITES, ...YARD_SPRITES, 'lot_site_a', 'lot_site_b', 'lot_site_locked', 'lot_site_locked_b', 'yard_front', 'forest_fill', ...['pick', 'anvil', 'gear', 'bed', 'crate', 'gem', 'mug', 'cart', 'bag', 'flask'].map((k) => `sign_${k}`), ...Object.values(BLD_ART).flatMap((b) => [1, 3, 5].map((l) => `${b}_${l}`)), ...Object.values(DECO_ART).filter((d) => !DECO_ANIM.has(d)), 'dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'gem',
   'ancient', 'pocket_water', 'pocket_gas', 'relic_chest', 'cave', 'ladder', 'mark_x', 'ore_bits', 'star',
   'tunnel', 'tunnel_beam', 'rail', 'side_far', 'side_mid', 'side_fg',
   'sky_far', 'deep_far', 'deep_mid', 'deep_fg', 'bubble_dig', 'bubble_walk', 'bubble_rest',
@@ -121,7 +121,7 @@ const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'r
   'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', 'office_fire', 'yard_ripple', 'yard_fire', ...FX];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
-  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'), A('scenes/office_day.png'), A('scenes/yard_day.png'), A('scenes/yard_night.png'),
+  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'), A('scenes/office_day.png'), A('scenes/yard_day.png'), A('scenes/yard_dusk.png'), A('scenes/yard_night.png'),
 ];
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
 const tex = (n) => loaded[A(`sprites/${n}.png`)];
@@ -1465,6 +1465,11 @@ function onSpot(i) {
 }
 function afterBuild(msg) { refreshCompany(); sfx(/Lv/.test(msg) ? 'upgrade' : 'build'); toast(msg); bumpCounter('coin'); save(); buildUI(); cloudSoon(); }
 const isNight = () => { const hr = (S.tick / TICK_PER_DAY) * 24; return hr < 6 || hr >= 19; };
+/** 부지 장면 시간대 (PATCH_V13 §3-1): 06–16 낮 · 16–20 해질녘 · 20–06 밤 */
+const yardPhase = () => { const hr = (S.tick / TICK_PER_DAY) * 24; return hr >= 6 && hr < 16 ? 'day' : hr >= 16 && hr < 20 ? 'dusk' : 'night'; };
+const YARD_SHADE = { day: 0xffffff, dusk: 0xffe0c8, night: 0xd8d8f0 };   // 목표 합성(docs/ref/yard_v3_*)처럼 건물 색은 거의 그대로
+/** 간판 판자 (§3-5): 건물 → 심볼 */
+const SIGN_OF = { office: 'bag', lodge: 'bed', smelter: 'anvil', warehouse: 'crate', lanternShop: 'pick', cartShed: 'cart', moleHouse: 'gem', pumpRoom: 'flask', turretShop: 'gear' };
 
 /** 회사 화면 (V12 §4): 부지 장면(세로 3× · 가로·PC 2~3×, 끌어서 봄) + 아래 아이콘 격자. 건물·빈 터를 톡하면 카드 1장 */
 function makeCompany(x, y, w, h) {
@@ -1548,7 +1553,7 @@ function polyAt(p, d) {
 /** 부지 장면 (PATCH_V10 §2~4): art/yard/yard.px.js 낮·밤 그림 1장 위에 건물(빈 터) · 장식(소품 자리) · 길 따라 걷는 광부 · 레일 광차 · 두더지
  *  배율은 정수만 (화면 폭·높이에 들어가는 가장 큰 정수, 최소 1 — 남는 곳은 어두운 테두리, 넘치면 가운데 기준으로 잘림) */
 function makeSite(sw, sh) {
-  const c = new Container(), night = isNight(), SW = YARD.scene.w, SH = YARD.scene.h;
+  const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', SW = YARD.scene.w, SH = YARD.scene.h;
   const k = yardScale();                                    // 기기 px 배율 (정수)
   const view = new Container(); c.addChild(view);
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
@@ -1572,19 +1577,12 @@ function makeSite(sw, sh) {
     const end = () => { d0 = null; setTimeout(() => { siteDragged = false; }, 0); };
     c.on('pointerup', end); c.on('pointerupoutside', end);
   }
-  const bg = new Sprite(yardTex(night ? 'yard_night' : 'yard_day')); sc.addChild(bg);
+  const bg = new Sprite(yardTex(`yard_${phase}`)); sc.addChild(bg);
   bg.eventMode = 'static'; bg.on('pointertap', () => { if (siteDragged) return; if (upCard && !placing) { upCard = null; buildUI(); } });
-  const ripple = new Sprite(F.yard_ripple[0]); ripple.tint = night ? 0x9090c8 : 0xffffff; sc.addChild(ripple);                 // yard.px.js _ripple 자리 (0,0)
+  const ripple = new Sprite(F.yard_ripple[0]); ripple.tint = night ? 0x9090c8 : dusk ? 0xe0b8a0 : 0xffffff; sc.addChild(ripple);                 // yard.px.js _ripple 자리 (0,0)
   const fireBg = new Sprite(F.yard_fire[0]); fireBg.position.set(230, 184); sc.addChild(fireBg);                                 // _fire 자리 (그림 속 모닥불)
   const open = new Set(openLots(S).map((l) => l.id)), pl = placed(S);
-  const shade = night ? 0xb8b8e0 : 0xffffff;
-  // 잠긴 터: 덤불로 덮음 (사무소 Lv마다 하나씩 걷힘)
-  for (const l of YARD.lots) if (!open.has(l.id)) {
-    ['yd_bush_white', 'yd_bush_orange', 'yd_bush_pink', 'yd_bush_white'].forEach((n, i) => {
-      const b = new Sprite(tex(n)); if (!b.texture) return; b.anchor.set(0.5, 1); b.tint = shade;
-      b.position.set(Math.round(l.x + 6 + (i * (l.w - 12)) / 3), Math.round(l.y + l.h - (i % 2 ? 4 : 0))); sc.addChild(b);
-    });
-  }
+  const shade = YARD_SHADE[phase];
   // 어울림 잇는 선
   const anchorOf = (p) => { if (p.deco) { const [dx, dy] = YARD.decoSpots[p.spot]; return [dx + 8, dy + 10]; } const l = lotOf(p.lot); return [l.x + l.w / 2, l.y + l.h - 4]; };
   const links = new Graphics();
@@ -1607,18 +1605,26 @@ function makeSite(sw, sh) {
     if (p.deco) { const [dx, dy] = YARD.decoSpots[p.spot]; things.push({ p, y: dy + 16, x: dx + 8 }); }
     else { const l = lotOf(p.lot); things.push({ p, y: l.y + l.h, x: l.x + l.w / 2, l }); }
   }
+  for (const l of YARD.lots) if (!lotUser(S, l.id)) things.push({ site: true, l, y: l.y + l.h });   // §3-3 빈 터 = 공사 예정지 (잠긴 터는 잡초 터)
   things.sort((a, b) => a.y - b.y);
   const glows = new Container(), animated = [], smoke = [];
   const glow = (x, y, r, color, a) => { const g = new Sprite(glowTex()); g.anchor.set(0.5); g.width = g.height = r * 2; g.position.set(x, y); g.tint = color; g.alpha = a; g.blendMode = 'add'; glows.addChild(g); };
   for (const th of things) {
+    if (th.site) {                                               // 공사터 a/b · 잠긴 터 — (lot.x-4, lot.y-20), 짓는 순간 사라짐
+      const l = th.l, n = open.has(l.id) ? (l.id % 2 ? 'lot_site_b' : 'lot_site_a') : (l.id % 2 ? 'lot_site_locked_b' : 'lot_site_locked');
+      const sp = new Sprite(tex(n)); sp.position.set(l.x + YARD.site.dx, l.y + YARD.site.dy); sp.tint = shade; sc.addChild(sp);
+      continue;
+    }
     const { p } = th, sel = (upCard?.kind === 'bld' || upCard?.kind === 'deco') && upCard.key === p.kind;
     if (!p.deco) {
-      const l = th.l;
+      const l = th.l, cx = Math.round(l.x + l.w / 2);
       const by = l.y + Math.round(l.h / 2) + 4;                    // 바닥 = 터 가운데 (형철 ③: 64×64 원본 1×, 축소 없음)
-      sc.addChild(new Graphics().ellipse(l.x + l.w / 2, by - 2, 28, 5).fill({ color: 0x1a1220, alpha: 0.35 }));   // 그림자
-      const art = yardArt(p.kind, lvOf(S, p.kind)); art.position.set(Math.round(l.x + l.w / 2), by); art.tint = shade; sc.addChild(art);
+      sc.addChild(new Graphics().ellipse(cx, by - 3, 34, 6).fill({ color: 0x1a1220, alpha: 0.35 }));   // §3-4 그림자 68×12
+      const art = yardArt(p.kind, lvOf(S, p.kind)); art.position.set(cx, by); art.tint = shade; sc.addChild(art);
+      const sg = SIGN_OF[p.kind] && tex(`sign_${SIGN_OF[p.kind]}`);   // §3-5 간판 판자: 건물 그림의 글자 간판을 덮음
+      if (sg) { const s1 = new Sprite(sg); s1.position.set(cx + YARD.signAt.dx, by + YARD.signAt.dy); s1.tint = shade; sc.addChild(s1); }
       if (art.anim) animated.push(art);
-      if (night) for (const [fx, fy] of [[0.35, 0.62], [0.65, 0.62]]) glow(l.x + l.w / 2 + (fx - 0.5) * art.width, by - art.height * (1 - fy), 9, 0xffd58a, 0.6);   // 창문 빛
+      if (night || dusk) for (const [fx, fy] of [[0.35, 0.62], [0.65, 0.62]]) glow(l.x + l.w / 2 + (fx - 0.5) * art.width, by - art.height * (1 - fy), 9, 0xffd58a, 0.6);   // 창문 빛
       if (p.kind === 'smelter') smoke.push([l.x + l.w / 2 + 6, by - art.height + 2]);
       if (sel) sc.addChild(new Graphics().roundRect(l.x + l.w / 2 - art.width / 2 - 2, by - art.height - 2, art.width + 4, art.height + 4, 4).stroke({ width: 1, color: 0xf5cf6a }));
     } else {
@@ -1629,9 +1635,8 @@ function makeSite(sw, sh) {
       if (sel) sc.addChild(new Graphics().circle(dx + 8, dy + 8, 11).stroke({ width: 1, color: 0xf5cf6a }));
     }
   }
-  if (night) glow(YARD.campfire[0], YARD.campfire[1] - 6, 26, 0xffb27a, 0.5);
-  const lampGlows = night ? YARD.lamps.map(([lx, ly], i) => { glow(lx, ly, 10, 0xffd58a, 0.5); const g = glows.children[glows.children.length - 1]; g.seed = i * 1.7; return g; }) : [];
-  sc.addChild(glows);
+  if (night || dusk) glow(YARD.campfire[0], YARD.campfire[1] - 6, 26, 0xffb27a, night ? 0.5 : 0.3);
+  const lampGlows = night || dusk ? YARD.lamps.map(([lx, ly], i) => { glow(lx, ly, 10, 0xffd58a, 0.5); const g = glows.children[glows.children.length - 1]; g.seed = i * 1.7; return g; }) : [];
   // 탭 자리 (그림 위 투명 판)
   for (const l of YARD.lots) { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(l.x - 8, l.y - 40, l.w + 16, l.h + 42); hit.on('pointertap', () => onLot(l.id)); sc.addChild(hit); }
   YARD.decoSpots.forEach(([dx, dy], i) => { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(dx - 2, dy - 4, 20, 22); hit.on('pointertap', () => onSpot(i)); sc.addChild(hit); });
@@ -1649,10 +1654,12 @@ function makeSite(sw, sh) {
   const cartS = new Sprite(F.cart_roll_empty[0]); cartS.anchor.set(0.5, 1); cartS.scale.set(0.5); cartS.tint = shade; chars.addChild(cartS);
   const rail = YARD.rails; let cx = rail.x0 + 20, cdir = 1, cwait = 0;
   const puffs = new Graphics(); sc.addChild(puffs);
+  { const fr = new Sprite(tex('yard_front')); fr.tint = shade; sc.addChild(fr); }   // §3-6 앞 수풀 — 건물·캐릭터 위
+  sc.addChild(glows);
   let tt = 0;
   ui.coTick = (dt) => {
     tt += dt; drawMarks(tt);
-    if (isNight() !== night) { ui.coTick = null; setTimeout(buildUI, 0); return; }      // 낮 ↔ 밤 바뀌면 장면 다시
+    if (yardPhase() !== phase) { ui.coTick = null; setTimeout(buildUI, 0); return; }      // 낮 → 해질녘 → 밤 바뀌면 장면 다시
     if (!ripple.destroyed) { ripple.texture = F.yard_ripple[Math.floor(tt * 3) % F.yard_ripple.length]; fireBg.texture = F.yard_fire[Math.floor(tt * 8) % F.yard_fire.length]; }
     for (const g of lampGlows) { const f = 0.55 * Math.sin(tt * 6.3 + g.seed) + 0.3 * Math.sin(tt * 18.8 + g.seed * 2); g.alpha = 0.45 + 0.12 * f; g.width = g.height = 20 * (1 + 0.06 * f); }
     for (const wk of walkers) {
@@ -4083,7 +4090,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, set yardHour(h) { S.tick = (h / 24) * TICK_PER_DAY; }, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
