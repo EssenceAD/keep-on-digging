@@ -5,70 +5,69 @@
 
 ## 1. BGM — 곡별 카드 (위에서부터 하나씩. 각 카드가 Suno 입력 전부)
 
-방향(11:52 확정): **밝고 신나는데 카페에서 24시간 틀어놔도 안 질리는** 곡. 체크인(오르골·아코디언)과 겹치지 않게 채굴은 **만돌린·덜시머·우쿨렐레·나무 타악·휘파람** 쪽. 느리게 뽑히면 BPM 숫자를 +5 올려 다시.
+**기준 = 형철이 고른 타이틀 트랙**(`bgm_title` 확정본: 아코디언 + 나일론 기타, 따뜻하고 부드러움, 체감 약 90 BPM). 2~8번은 전부 **이 곡의 가족** — 같은 악기(아코디언·나일론 기타)를 중심에 두고 장면에 따라 **타악기만 조금 더하거나 빼는** 식. 밝고 신나는 쪽으로 억지로 안 민다.
+
+> 팁: Suno에서 타이틀 트랙으로 **Persona**를 만들어(트랙 ··· → Create Persona) 2~8번에 그 Persona를 걸면 음색이 자동으로 이어진다. 그러면 아래 Style Influence는 60으로 낮춰도 됨.
 
 ---
-### 1. bgm_title — 타이틀 · 인수인계 장면 · 설명서
-- Style: `bright cozy folk, mandolin and ukulele strumming, light wooden percussion, whistling melody, 100 bpm, sunny morning at a small mining company, cheerful and relaxed, cafe background music, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, music box, epic orchestral, edm drop, synth`
-- Vocal Gender: 선택 안 함 · Duration: **2:00** · Max Mode: On · Weirdness: **30%** · Style Influence: **75%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 첫 10초 안에 멜로디가 "꽂히면" 탈락. 흥얼거리고 싶은데 기억은 안 나는 쪽.
-- 파일명 `bgm_title`
+### 1. bgm_title — 타이틀 · 인수인계 장면 · 설명서  ✅ 확정
+- Style(확정본): `warm folk lullaby, solo accordion and nylon guitar, slow 70 bpm, cozy fireplace, dwarven tavern at night, instrumental, gentle, no drums`
+- 파일명 `bgm_title` — 받은 WAV/MP3 그대로 `art/raw/audio/bgm/`.
 
 ---
 ### 2. bgm_yard_day — 회사 화면(낮)
-- Style: `upbeat dwarven village workday, mandolin, hammered dulcimer, hand claps and wooden percussion, light bass, 108 bpm, busy but happy, loopable cafe folk, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, music box, epic orchestral, edm drop, synth, slow`
-- Vocal Gender: 선택 안 함 · Duration: **2:30** · Max Mode: On · Weirdness: **35%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 2분 30초 동안 분위기가 안 바뀌는 것(중간에 조용해지거나 빌드업 생기면 탈락 — 루프 끊김).
+- Style: `warm folk, accordion and nylon guitar, soft brushed percussion and light hand claps, 92 bpm, sunny morning at a small dwarven mining company, gentle walking pulse, cozy and relaxed, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, epic orchestral, edm drop, synth, fast`
+- Vocal Gender: 선택 안 함 · Duration: **2:30** · Max Mode: On · Weirdness: **30%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: On
+- 고르는 기준: 타이틀에 **브러시 타악만 얹은 느낌**. 2분 30초 동안 밀도가 안 변하는 것.
 - 파일명 `bgm_yard_day`
 
 ---
 ### 3. bgm_yard_night — 회사 화면(밤) · 돌아오셨군요 카드
-- Style: `night shift work song, bright but relaxed, steady stomping rhythm, hammered dulcimer and plucked bass, hummed melody no words, anvil hit on the beat, campfire crackle, 96 bpm, tired but cheerful miners heading home, instrumental folk`
-- Exclude styles: `lyrics, singing words, choir, accordion, music box, lullaby, sad, epic orchestral, edm`
-- Vocal Gender: **Male**(허밍용) · Duration: **2:30** · Max Mode: On · Weirdness: **40%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: **On**(켠 채로 — 허밍만 나옴. 가사 붙으면 그 트랙 버림)
-- 고르는 기준: 낮 곡보다 한 톤 낮되 **느리지 않을 것**. 발 맞춰 걷는 느낌.
+- Style: `warm night folk, accordion and nylon guitar, slow steady foot-tap rhythm on wooden percussion, low plucked bass, soft hummed melody without words, campfire crackle, 86 bpm, miners resting after work, gentle work song, instrumental`
+- Exclude styles: `lyrics, singing words, choir, music box, lullaby, sad, epic orchestral, edm, synth`
+- Vocal Gender: **Male**(허밍용) · Duration: **2:30** · Max Mode: On · Weirdness: **35%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: **On**(켠 채로 — 허밍만. 가사 붙으면 버림)
+- 고르는 기준: 타이틀보다 **살짝 낮고, 발 박자가 들리는 것**. 체크인 밤 곡(오르골)과 다르려면 허밍·발 박자가 핵심.
 - 파일명 `bgm_yard_night`
 
 ---
 ### 4. bgm_mine_1 — 갱도 · 뒷산
-- Style: `cheerful underground work rhythm, pickaxe hits on the beat, mandolin riff, hammered dulcimer, wooden percussion, light cave echo, 100 bpm, playful digging, loopable, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, dark, horror, drone, epic orchestral, edm, synth`
+- Style: `underground folk, accordion and nylon guitar played softly, sparse wooden percussion on the beat like distant pickaxes, light cave echo, 88 bpm, warm and hypnotic, loopable, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, dark, horror, drone, epic orchestral, edm, synth`
 - Vocal Gender: 선택 안 함 · Duration: **3:00** · Max Mode: On · Weirdness: **35%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 가장 오래 듣는 곡. 3분 내내 같은 밀도. 곡괭이 소리가 리듬에 들어가면 좋지만 너무 튀면 효과음과 겹침 → 은은한 것.
+- 고르는 기준: 제일 오래 듣는 곡. **타이틀을 동굴에서 치는 느낌**. 3분 내내 같은 밀도, 빌드업 없음.
 - 파일명 `bgm_mine_1`
 
 ---
 ### 5. bgm_mine_2 — 갱도 · 폐광(2층)
-- Style: `mysterious but upbeat underground folk, hammered dulcimer and pizzicato strings, soft wooden percussion, teal cave shimmer, occasional distant bat flutter, 96 bpm, curious adventure, loopable, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, horror, scary, drone, epic orchestral, edm, synth`
-- Vocal Gender: 선택 안 함 · Duration: **3:00** · Max Mode: On · Weirdness: **45%** · Style Influence: **65%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 뒷산보다 "낯선" 느낌이되 무섭지 않게. 단조여도 템포는 유지.
+- Style: `mysterious warm folk, accordion and nylon guitar in a minor key, soft pizzicato, sparse wooden percussion, cave shimmer, 86 bpm, curious but not scary, loopable, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, horror, scary, drone, epic orchestral, edm, synth`
+- Vocal Gender: 선택 안 함 · Duration: **3:00** · Max Mode: On · Weirdness: **40%** · Style Influence: **65%** · Variety: Normal · Personalize: Off · Instrumental: On
+- 고르는 기준: 4번과 같은 악기, **단조로만** 바뀐 것. 무서우면 탈락.
 - 파일명 `bgm_mine_2`
 
 ---
 ### 6. bgm_auction — 경매
-- Style: `lively market auction tune, fast mandolin and fiddle, stomping and clapping rhythm, playful competition, tavern energy, 118 bpm, bright and fun, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, slow, epic orchestral, edm, synth`
-- Vocal Gender: 선택 안 함 · Duration: **2:00** · Max Mode: On · Weirdness: **35%** · Style Influence: **75%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 경매는 1~2분이라 조금 꽂혀도 됨. 긴장감보다 **장난스러움**.
+- Style: `lively tavern folk, accordion lead and nylon guitar strumming, foot stomps and claps, playful bargaining mood, 104 bpm, bright, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, slow, epic orchestral, edm, synth`
+- Vocal Gender: 선택 안 함 · Duration: **2:00** · Max Mode: On · Weirdness: **30%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: On
+- 고르는 기준: 가족 중 제일 빠른 곡이지만 **같은 아코디언 음색**. 1~2분이라 조금 꽂혀도 됨.
 - 파일명 `bgm_auction`
 
 ---
 ### 7. bgm_result — 결과 카드
-- Style: `short cheerful folk ending, mandolin flourish then relaxed strumming, hand claps, whistling, 104 bpm, satisfied end of a good workday, 60 seconds, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, sad, epic orchestral, edm, synth`
-- Vocal Gender: 선택 안 함 · Duration: **1:00** · Max Mode: On · Weirdness: **30%** · Style Influence: **75%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 앞 5초가 "짠!" 하고, 나머지는 편안히. 끝이 자연스럽게 멈추는 것.
+- Style: `short warm folk ending, accordion flourish then relaxed nylon guitar, soft claps, 90 bpm, satisfied end of a good workday, 60 seconds, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, sad, epic orchestral, edm, synth`
+- Vocal Gender: 선택 안 함 · Duration: **1:00** · Max Mode: On · Weirdness: **30%** · Style Influence: **70%** · Variety: Normal · Personalize: Off · Instrumental: On
+- 고르는 기준: 앞 5초 "짠", 나머지는 타이틀로 돌아가는 느낌. 끝이 자연스럽게 멈추는 것.
 - 파일명 `bgm_result`
 
 ---
 ### 8. bgm_jackpot — 대박 연출 (스팅)
-- Style: `gold rush celebration sting, bells and mandolin burst, fast clapping, joyful, 130 bpm, 20 seconds, instrumental, no vocals`
-- Exclude styles: `vocals, singing, choir, accordion, epic orchestral, edm, synth, slow`
-- Vocal Gender: 선택 안 함 · Duration: **0:30** · Max Mode: On · Weirdness: **30%** · Style Influence: **80%** · Variety: Normal · Personalize: Off · Instrumental: On
-- 고르는 기준: 종소리로 시작해서 20초 안에 끝나는 것. 길면 Code가 앞 20초만 씀.
+- Style: `joyful gold rush sting, accordion burst with bells and fast claps, 120 bpm, 20 seconds, celebration, instrumental, no vocals`
+- Exclude styles: `vocals, singing, choir, music box, epic orchestral, edm, synth, slow`
+- Vocal Gender: 선택 안 함 · Duration: **0:30** · Max Mode: On · Weirdness: **30%** · Style Influence: **75%** · Variety: Normal · Personalize: Off · Instrumental: On
+- 고르는 기준: 종으로 시작해 20초 안에 끝나는 것. 길면 Code가 앞 20초만 씀.
 - 파일명 `bgm_jackpot`
 
 ---
