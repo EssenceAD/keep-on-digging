@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.5';
+const VERSION = 'v1.2.6';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -2256,6 +2256,21 @@ function buildUI() {
   refreshUI();
 }
 
+/** HUD 창고 숫자 자리를 누르면 창고 현황 */
+function tapToStorage(c, x, y, w, h) {
+  const hit = new Graphics().rect(x, y, w, h).fill({ color: 0, alpha: 0.001 }); hit.eventMode = 'static'; hit.cursor = 'pointer';
+  hit.on('pointertap', () => { unlockAudio(); sfx('ui_tap'); openStorage(); }); c.addChild(hit); ui.refs.storage = hit;
+}
+/** 📦 창고: 지금 가진 광석 · 괴 · 개당 시세 · 팔면 얼마 (HUD 창고 숫자를 누르면) */
+function openStorage() {
+  const rows = ORES.map((o) => ({ o, n: stash[o.key], ing: S.ingots[o.key] ?? 0, p: priceOf(o.key), ip: ingotPrice(o.key) }));
+  const total = rows.reduce((a, r) => a + r.n * r.p + r.ing * r.ip, 0);
+  const has = rows.filter((r) => r.n || r.ing);
+  const line = (r) => `<div class="kitem"><b>${r.o.name} ${r.n}개${r.ing ? ` · 괴 ${r.ing}개` : ''}</b><small>개당 ${r.p}금${r.ing ? ` · 괴 ${r.ip}금` : ''} → 지금 팔면 ${(r.n * r.p + r.ing * r.ip).toLocaleString()}금</small></div>`;
+  openPanel('📦 창고', `<p><b>${whTotal()} / ${whCap()}</b> 칸 · 지금 다 팔면 <b>💰 ${total.toLocaleString()}</b></p>${has.length ? has.map(line).join('') : '<p class="kmuted">아직 캔 광석이 없어요</p>'}<p class="kmuted">시세는 10초마다 바뀌어요 · 매입자: ${B.buyers[buyer()].name}</p><div class="krow"><button class="kgo">판매 탭 열기</button></div>`, (b, close) => {
+    b.querySelector('.kgo').onclick = () => { close(); setSheet(true, 'sell'); };
+  });
+}
 /** HUD 한 줄 (§1): 💰 금화 · 📦 창고 · 🕒 날짜 · [특성] [회사]. 가로 폰은 같은 것을 세로로 */
 function makeHud(w, h, vertical = false) {
   const c = new Container();
@@ -2275,6 +2290,7 @@ function makeHud(w, h, vertical = false) {
       const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' || room < 120 });   // 좁으면 숫자도 본문 크기
       i.position.set(xa, cy + Math.round((14 - (tx ? i.height : 0)) / 2)); n.position.set(xa + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
       c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
+      if (key === 'wh') tapToStorage(c, i.x - 2, 0, (room < 120 ? 7 * 5 : 7 * 6) + i.width + 8, h);
       n.reserve = key === 'coin' ? 5 : key === 'wh' ? 7 : 0;               // 자리: 숫자가 바뀌어도 안 밀리게 (글자 수)
       xa = n.x + Math.max(n.width, n.reserve * (room < 120 ? 5 : 6)) + (room < 120 ? 5 : 8);
       if (key === 'clock' && n.x + 44 > room) { n.visible = false; }
@@ -2285,6 +2301,7 @@ function makeHud(w, h, vertical = false) {
     items.forEach(([key, tx]) => {
       const i = tx ? icon(tx) : new Container(), n = label('0', { small: true });
       i.position.set(5, ya + 1); n.position.set(5 + (tx ? i.width + 2 : 0), ya); c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
+      if (key === 'wh') tapToStorage(c, 2, ya - 2, w - 4, 16);
       ya += 16;
     });
     btns.forEach(([k, b], i) => { b.position.set(Math.round((w - 46) / 2), h - 6 - (btns.length - i) * 19); c.addChild(b); ui.refs[k] = b; });
@@ -2651,7 +2668,7 @@ function makeSell(w, h) {
     let x = 13;
     const nmw = rowW > 140 ? 36 : 0;
     if (nmw) { const t = label(o.name, { color: COLOR.paperInk, shadow: false, small: true }); t.position.set(x, 2); r.addChild(t); x += nmw; }
-    const qty = label('×0', { color: COLOR.paperInk, shadow: false, small: true }); qty.position.set(x, 2); r.addChild(qty); x += 26;
+    const qty = label('0개', { color: COLOR.paperInk, shadow: false, small: true }); qty.position.set(x, 2); r.addChild(qty); x += 28;
     const price = label('0', { color: COLOR.paperInk, shadow: false, small: true }); price.position.set(x, 2); r.addChild(price); x += 22;
     const arrow = icon(kit('arrow_up')); arrow.position.set(x, 3); r.addChild(arrow); x += 10;
     const spark = new Graphics(); spark.position.set(x, 1); r.addChild(spark);
@@ -2845,7 +2862,7 @@ function refreshUI() {
     ui.smeltLine.text = sm.jobs.length ? `제련 중 ${sm.jobs.length}/${CF.smeltSlots}${sm.queue.length ? ` · 대기 ${sm.queue.length}` : ''} · 다음 ${next}초` : `제련소 ${CF.smeltSlots}칸 · ${Math.round(CF.smeltSec)}초에 1개`;
   }
   for (const [key, r] of Object.entries(ui.rows)) {
-    r.qty.text = `×${stash[key]}`;
+    r.qty.text = `${stash[key]}개`;
     r.price.text = String(priceOf(key));
     const surge = market.surge?.key === key;
     const up = surge && mNow() >= market.surge.start ? 1 : market.last[key];
@@ -4048,7 +4065,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
