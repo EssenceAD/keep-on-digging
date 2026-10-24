@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2';
+const VERSION = 'v1.2.1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -1130,25 +1130,29 @@ function buildIntroLayer() {
   };
 }
 // ---- 대사 카드 (첫 경매 안내 · 상황별 1회 안내) — 탭으로 넘김, 강제 없음
-function showDialog(d) { if (dialog) dialogQueue.push(d); else { dialog = { i: 0, ...d }; buildUI(); } }
+/** 대사는 한 장에 한 문장 (V12 §2) — 여러 문장이면 장을 나눔 */
+const oneSentence = (lines) => lines.flatMap((l) => l.split(/(?<=[.!?…])\s+/).filter(Boolean));
+function showDialog(d) { d = { ...d, lines: oneSentence(d.lines) }; if (dialog) dialogQueue.push(d); else { dialog = { i: 0, ...d }; buildUI(); } }
 function dialogNext() {
   if (!dialog) return;
   dialog.i++;
   if (dialog.i >= dialog.lines.length) { const f = dialog.onDone; dialog = null; f?.(); if (dialogQueue.length) dialog = { i: 0, ...dialogQueue.shift() }; }
   sfx('stash', true); buildUI();
 }
+/** 대사 카드 (안내·첫 경매 등) — 튜토리얼 말풍선과 같은 규칙 (V12 §2): 폭 = 게임 폭 · 초상 48px · 한 문장 최대 2줄 · 높이 ≤ 게임 15% · 게임 아래쪽. 톡하면 다음 */
 function makeDialog() {
-  const uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS);
+  const k = 1 / L.uiS, uW = Math.round(L.W * k), uH = Math.round(L.H * k);
   const c = new Container(); c.eventMode = 'static'; c.hitArea = new Rectangle(0, 0, uW, uH); c.on('pointertap', dialogNext);
-  c.addChild(new Graphics().rect(0, 0, uW, uH).fill({ color: 0x0a0812, alpha: 0.45 }));
-  const w = Math.min(uW - 16, 300), who = dialog.who;
-  const tx = label(dialog.lines[dialog.i], { color: COLOR.paperInk, shadow: false, small: true, wrap: w - 58 });
-  const h = Math.max(50, Math.ceil(tx.height) + 22);
-  const box = new Container(); box.position.set(Math.round((uW - w) / 2), Math.round(uH * 0.55 - h / 2)); c.addChild(box);
+  c.addChild(new Graphics().rect(0, 0, uW, uH).fill({ color: 0x0a0812, alpha: 0.3 }));
+  const who = dialog.who, w = Math.round((L.vis.x1 - L.vis.x0) * k) - 8, ps = Math.max(20, Math.round(48 * k));
+  const tx = label(dialog.lines[dialog.i], { color: COLOR.paperInk, shadow: false, small: true, wrap: w - ps - 44 });
+  if (tx.height > 26) { tx.style.wordWrap = false; fitText(tx, (w - ps - 44) * 2 - 10); tx.style.wordWrap = true; }   // 최대 2줄
+  const h = Math.min(Math.max(ps + 8, Math.ceil(tx.height) + 10), Math.round((L.vis.y1 - L.vis.y0) * k * 0.15) + 8);
+  const box = new Container(); box.position.set(Math.round(((L.vis.x0 + L.vis.x1) / 2) * k - w / 2), Math.round(L.vis.y1 * k) - h - 6); c.addChild(box);
   box.addChild(frame('paper', w, h, 'panel'));
-  const pf = portraitFrame(tex(NPC[who]), 40, 'wood'); pf.position.set(5, 5); box.addChild(pf);
-  tx.position.set(52, 8); box.addChild(tx);
-  const nx = label(dialog.i < dialog.lines.length - 1 ? `${dialog.i + 1}/${dialog.lines.length} ▶` : '알겠어요 ▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 8 - Math.ceil(nx.width), h - 13); box.addChild(nx);
+  const pf = portraitFrame(tex(NPC[who]), ps, 'wood'); pf.position.set(4, Math.round((h - ps) / 2)); box.addChild(pf);
+  tx.position.set(ps + 12, Math.round((h - tx.height) / 2)); box.addChild(tx);
+  const nx = label(dialog.i < dialog.lines.length - 1 ? `${dialog.i + 1}/${dialog.lines.length} ▶` : '▶', { small: true, color: 0x8a7a68, shadow: false }); nx.position.set(w - 6 - Math.ceil(nx.width), h - 13); box.addChild(nx);
   ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
   return c;
 }
@@ -2259,11 +2263,11 @@ function makeHud(w, h, vertical = false) {
     let xa = 6;
     const room = w - 6 - btns.length * 48;
     items.forEach(([key, tx]) => {
-      const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' });
+      const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' || room < 120 });   // 좁으면 숫자도 본문 크기
       i.position.set(xa, cy + Math.round((14 - (tx ? i.height : 0)) / 2)); n.position.set(xa + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
       c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
       n.reserve = key === 'coin' ? 5 : key === 'wh' ? 7 : 0;               // 자리: 숫자가 바뀌어도 안 밀리게 (글자 수)
-      xa = n.x + Math.max(n.width, n.reserve * 6) + 8;
+      xa = n.x + Math.max(n.width, n.reserve * (room < 120 ? 5 : 6)) + (room < 120 ? 5 : 8);
       if (key === 'clock' && n.x + 44 > room) { n.visible = false; }
     });
     btns.forEach(([k, b], i) => { b.position.set(w - 2 - (btns.length - i) * 48, Math.round((h - 15) / 2)); c.addChild(b); ui.refs[k] = b; });
