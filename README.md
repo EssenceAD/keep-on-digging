@@ -36,6 +36,9 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.3.2
+- 오류 토스트 반복: `blonde_swing` 애니가 없어 금발 광부가 캐기에 들어가면 매 프레임 `actor: …reading 'dur'`. `animOf`로 없는 애니는 같은 광부 idle → red 같은 동작으로 대신.
+
 ## v1.3.1 (PATCH_V13 §3 7~9)
 7. 장면 밖 = `forest_fill` 타일(검정 대신, 시간대 색조, 끌면 같이 움직임) + 장면 가장자리 안쪽 8px 어둡게. 8. 광부: 라운드 밖엔 `idleSpots`에 흩어져 idle 프레임, 20~40초마다 빈 자리로 걸어감 · 라운드(SURVEY/DIG) 중엔 입구 ↔ 창고 왕복 (`yardWalkers`로 화면을 다시 그려도 이어짐). 9. 회사 건물 아이콘 48px · 한 줄 5개 가운데 정렬 · 글은 「Lv·💰」만(칸이 좁으면 Lv는 아이콘 위 뱃지).
 

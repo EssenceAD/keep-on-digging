@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.3.1';
+const VERSION = 'v1.3.2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -143,7 +143,9 @@ const HINT_TEXT = { rock: '바위층', water: '지하수', relic: '유물 흔적
 document.getElementById('loading')?.remove();
 
 /** 애니 재생기: 프레임 길이대로 넘긴다 */
-const player = (name, loop = true) => ({ name, fr: F[name], t: 0, i: 0, loop, done: false });
+/** 없는 애니(예: blonde_swing)는 같은 광부의 idle → 빨강 광부의 같은 동작으로 대신 (매 프레임 오류 방지) */
+const animOf = (name) => F[name] ?? F[name.replace(/_[a-z]+$/, '_idle')] ?? F[name.replace(/^[a-z]+_/, 'red_')] ?? F.red_idle;
+const player = (name, loop = true) => ({ name, fr: animOf(name), t: 0, i: 0, loop, done: false });
 function step(p, dt) {
   p.t += dt * 1000;
   while (p.t >= p.fr.dur[p.i]) {
@@ -1651,7 +1653,7 @@ function makeSite(sw, sh) {
   const runA = [door[0] - 6, door[1] + 8], runB = whLot ? [whLot.x + whLot.w / 2, whLot.y + whLot.h / 2 + 10] : [200, 120];
   const spots = YARD.idleSpots;
   const walkers = crew.slice(0, 6).map((m, i) => {
-    const sp = new Sprite(F[`${m.id}_idle`][0]); sp.anchor.set(0.5, 1); sp.scale.set(0.5); sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; chars.addChild(sp);
+    const sp = new Sprite(animOf(`${m.id}_idle`)[0]); sp.anchor.set(0.5, 1); sp.scale.set(0.5); sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; chars.addChild(sp);
     let w = yardWalkers.get(m.id);
     if (!w || w.round !== inRound) {                                       // 처음 · 라운드 들어가고 나올 때만 자리 다시
       const home = inRound ? (i % 2 ? runA : runB) : spots[i % spots.length];
@@ -1665,9 +1667,9 @@ function makeSite(sw, sh) {
     const w = wk.w, dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy);
     if (d > 0.5) {                                                       // 걷기
       const v = Math.min(d, 14 * dt); w.x += (dx / d) * v; w.y += (dy / d) * v;
-      wk.f += dt * 8; const fr = F[`${wk.id}_walk`]; wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (Math.abs(dx) > 0.3) wk.sp.scale.x = 0.5 * Math.sign(dx);
+      wk.f += dt * 8; const fr = animOf(`${wk.id}_walk`); wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (Math.abs(dx) > 0.3) wk.sp.scale.x = 0.5 * Math.sign(dx);
     } else {                                                             // 멈춘 행동 (앉기·기대기·물 긷기 = idle 프레임)
-      const fr = F[`${wk.id}_idle`]; wk.f += dt * 2; wk.sp.texture = fr[Math.floor(wk.f) % fr.length];
+      const fr = animOf(`${wk.id}_idle`); wk.f += dt * 2; wk.sp.texture = fr[Math.floor(wk.f) % fr.length];
       if ((w.wait -= dt) <= 0) {
         if (w.round) { w.leg = 1 - w.leg; const p = w.leg ? runA : runB; w.tx = p[0] + (Math.random() - 0.5) * 8; w.ty = p[1] + (Math.random() - 0.5) * 4; w.wait = 1 + Math.random() * 2; }   // 라운드 중: 입구 ↔ 창고
         else { w.spot = freeSpot(w); [w.tx, w.ty] = spots[w.spot]; w.wait = 20 + Math.random() * 20; }                          // 20~40초마다 다른 자리
@@ -2743,7 +2745,7 @@ function makeCrew(w, h) {
   const rowH = Math.max(18, Math.min(44, Math.floor(h / crew.length)));
   crew.forEach((m, i) => {
     const r = new Container(); r.y = i * rowH;
-    const pf = portraitFrame(F[`${m.id}_idle`][0], rowH - 2, 'wood'); r.addChild(pf);
+    const pf = portraitFrame(animOf(`${m.id}_idle`)[0], rowH - 2, 'wood'); r.addChild(pf);
     const compact = rowH < 28;                                // 광부가 많으면 한 줄 (이름 · 상태)
     const nm = label(m.name, { color: m.color, small: compact }); nm.position.set(rowH + 4, compact ? Math.round((rowH - 10) / 2) : 1); r.addChild(nm);
     if (!compact) { const tr = B.traits[m.trait]; const role = label(tr ? `${tr.name} · ${tr.text.split(" · ")[0]}` : m.role, { small: true, color: COLOR.dim }); role.position.set(rowH + 8 + Math.round(nm.width), 3); fitText(role, w - role.x); r.addChild(role); }
