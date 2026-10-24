@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2-3';
+const VERSION = 'v1.2-4';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -784,31 +784,57 @@ function upgradeEquip(k) {
   for (const a of crew.slice(0, CF.diggers)) emote(a, '오!', 1.2);
   save(); buildUI();
 }
+const GEAR_EMOJI = { pick: '⛏', cart: '🚃', lodge: '🏠', warehouse: '📦', mole: '🐾', vibro: '📡', lantern: '🔦', smelter: '🔥', pump: '💧', turret: '🔫' };
+let upCard = null;                                           // 열린 카드: { kind: 'gear', key } (회사 건물도 같은 카드 — V12 §5)
+/** 장비 (PATCH_V12 §5): 아이콘 타일 2줄 × 5 — 아이콘 · Lv 점 · 가격. 살 수 있으면 노란 테두리, 금화 부족이면 회색. 톡 → 카드, 길게 누르면 바로 구매 */
 function makeGear(w, h) {
   const c = new Container();
   c.addChild(frame('paper', w, h, 'panel'));
-  const ink = { color: COLOR.paperInk, shadow: false };
-  const t = label('장비 · 라운드 중에도 바로', { ...ink, small: true, color: 0x8a5a24 }); t.position.set(6, 3); c.addChild(t);
-  const n = UP_KEYS.length, cols = h - 16 >= n * 14 ? 1 : 2, per = Math.ceil(n / cols);     // 폰 시트가 낮으면 두 줄로
-  const rowH = Math.min(18, Math.floor((h - 16) / per)), cw = Math.floor((w - 4) / cols), two = cols === 2;
+  const cols = 5, tw = Math.floor((w - 8) / cols), th = Math.min(Math.floor((h - 8) / 2), tw + 22);
   UP_KEYS.forEach((k, i) => {
-    const x0 = 4 + Math.floor(i / per) * cw, y = 15 + (i % per) * rowH, lv = upLv(S, k), cost = gearCost(S, k);
-    const bw = two ? 34 : 42, bh = Math.min(16, rowH - 2);
-    const nm = label(`${UP[k].name} ${lv ? 'Lv' + lv : '-'}`, { ...ink, small: true }); nm.position.set(x0 + 2, y + (two ? -1 : 1)); c.addChild(nm);
-    if (two) fitText(nm, cw - bw - 8);
-    const tx = label(upText(S, k), { ...ink, small: true, color: 0x6a5a48 });
-    const tx0 = two ? x0 + 2 : x0 + 66, room = (two ? cw - bw - 8 : w - 66 - bw - 12);
-    if (two) tx.visible = false; else { fitText(tx, room); tx.position.set(tx0, y + 1); }   // §2: 작은 부제 삭제
-    c.addChild(tx);
-    const bt = button(cost == null ? 'stone' : S.gold >= cost ? 'wood' : 'paper', bw, bh, cost == null ? '최대' : `${cost}`, () => upgradeEquip(k), { small: true });
-    bt.position.set(x0 + cw - bw - 4, y); c.addChild(bt); ui.refs[`gear_${k}`] = bt;
-    if (cost == null) bt.setDisabled(true);
+    const x0 = 4 + (i % cols) * tw, y0 = 4 + Math.floor(i / cols) * th, lv = upLv(S, k), cost = gearCost(S, k), can = cost != null && S.gold >= cost, max = UP[k].max;
+    const t = new Container(); t.position.set(x0, y0); c.addChild(t);
+    t.addChild(frame(can ? 'wood' : 'stone', tw - 2, th - 2, 'panel'));
+    if (can) t.addChild(new Graphics().rect(0, 0, tw - 2, th - 2).stroke({ width: 1, color: 0xf5cf6a }));
+    const ic = label(GEAR_EMOJI[k], { shadow: false }); ic.position.set(Math.round((tw - 2 - ic.width) / 2), 2); if (cost != null && !can) ic.alpha = 0.5; t.addChild(ic);
+    const dots = new Graphics(), dn = max - UP[k].min, dw = Math.min(5, Math.floor((tw - 6) / dn));
+    for (let d = 0; d < dn; d++) dots.circle(Math.round((tw - 2 - dn * dw) / 2) + d * dw + dw / 2, ic.y + ic.height + 3, Math.max(1, dw / 2 - 0.5)).fill(d < lv - UP[k].min ? 0xf5cf6a : 0x5a4a40);
+    t.addChild(dots);
+    const pr = label(cost == null ? '최대' : `${cost}`, { small: true, color: cost == null ? COLOR.dim : can ? COLOR.gold : 0x8a7a68 }); fitText(pr, tw - 4); pr.position.set(Math.round((tw - 2 - pr.width) / 2), th - 2 - pr.height - 2); t.addChild(pr);
+    t.eventMode = 'static'; t.cursor = 'pointer'; ui.refs[`gear_${k}`] = t;
+    let hold = null, held = false;
+    t.on('pointerdown', () => { held = false; hold = setTimeout(() => { held = true; hold = null; if (gearCost(S, k) != null) upgradeEquip(k); }, 500); });   // 길게 = 바로 구매
+    const up = () => { if (hold) { clearTimeout(hold); hold = null; } };
+    t.on('pointerup', up); t.on('pointerupoutside', up);
+    t.on('pointertap', () => { if (held) return; upCard = { kind: 'gear', key: k }; sfx('ui_tap'); buildUI(); });
   });
   return c;
 }
-/** 막힌 갱도의 [장비] → 장비 탭 열기 */
-function openGear() {
+/** 카드 1장 (장비·회사 건물 공용): 큰 아이콘 · 이름 Lv · 효과 한 줄 · [올리기 💰N] · 닫기 */
+function makeUpCard() {
+  const u = (v) => Math.round(v / L.uiS);
+  const f = L.full, x = u(f.x0), y = u(f.y0), W0 = u(f.x1 - f.x0), H0 = u(f.y1 - f.y0);
+  const box = new Container();
+  const dim = new Graphics().rect(x, y, W0, H0).fill({ color: 0x0a0812, alpha: 0.4 }); dim.eventMode = 'static'; dim.on('pointertap', () => { upCard = null; buildUI(); }); box.addChild(dim);
+  const k = upCard.key, lv = upLv(S, k), cost = gearCost(S, k), w = Math.min(W0 - 16, 200), h = 92;
+  const c = new Container(); c.position.set(x + Math.round((W0 - w) / 2), y + Math.round((H0 - h) / 2)); box.addChild(c);
+  c.addChild(frame('paper', w, h, 'panel'));
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const ic = label(GEAR_EMOJI[k], { shadow: false }); ic.scale.set(2); ic.position.set(8, 8); c.addChild(ic);   // 그림(아이콘) — 글자 크기 규칙 밖
+  const nm = label(`${UP[k].name} Lv${lv}`, ink); nm.position.set(46, 10); fitText(nm, w - 46 - 22); c.addChild(nm);
+  const ef = label(k === 'pick' ? (lv >= UP.pick.max ? UP.pick.steps[lv] : `다음: ${UP.pick.steps[lv + 1]}`) : upText(S, k), { ...ink, small: true, color: 0x6a5a48 }); ef.position.set(46, 28); fitText(ef, w - 52); c.addChild(ef);
+  const can = cost != null && S.gold >= cost;
+  const bt = button(can ? 'wood' : 'stone', w - 16, 22, cost == null ? '최대' : `올리기 💰${cost}`, () => { upgradeEquip(k); }, { small: true });
+  bt.setDisabled(!can); bt.position.set(8, h - 30); c.addChild(bt); ui.refs.upCardBtn = bt;
+  const x0 = button('stone', 16, 14, '✕', () => { upCard = null; buildUI(); }, { small: true }); x0.position.set(w - 20, 4); c.addChild(x0);
+  if (cost != null && !can) { const lack = label(`💰 ${cost - S.gold} 모자라요`, { ...ink, small: true, color: 0xb84a62 }); lack.position.set(46, 44); c.addChild(lack); }
+  ui.overlayRect = { x: f.x0, y: f.y0, w: f.x1 - f.x0, h: f.y1 - f.y0 };
+  return box;
+}
+/** 막힌 갱도의 이유 줄 → 장비 탭 + 그 항목 카드 */
+function openGear(key) {
   setSheet(true, 'gear');
+  if (key) { upCard = { kind: 'gear', key }; buildUI(); }
   sfx('ui_open');
 }
 function makeDaybook(w, h) {
@@ -876,8 +902,8 @@ const TUT_STEPS = [                                        // 명세5 §7: 18단
   { focus: () => (buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)), hand: () => ({ kind: 'tap', at: centerOf(buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
     done: () => S.tutorial.merchantGold || (S.tutorial.goldSold && !stash.g && left('g') === 0 && !carts.some((c) => c.cargo.g) && !piles.some((p) => p.type === 'g')) },
   { enter: () => { const c = gearCost(S, 'pick'); if (c != null && S.gold < c) { S.gold = c; refreshUI(); toast('그룬 할아범이 곡괭이 값을 보탰어요', 'halabeoji', 2.5); } },
-    focus: () => (sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
-    hand: () => ({ kind: 'tap', at: centerOf(sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
+    focus: () => (upCard ? boundsOf(ui.refs.upCardBtn) : sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
+    hand: () => ({ kind: 'tap', at: centerOf(upCard ? boundsOf(ui.refs.upCardBtn) : sheetTab !== 'gear' || !sheetOpen() ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
     done: () => upLv(S, 'pick') >= 2 },
   { focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
   { focus: () => boundsOf(ui.refs.resultTalent), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.resultTalent)) }), done: () => talentView || talentSpent(S) > 0 },
@@ -2189,6 +2215,7 @@ function buildUI() {
   const sheetHidden = view === 'company' || (state() === 'AUCTION' && !(auctionSettings && !AU.card));   // 명세5 §8: 경매·회사 화면엔 시트 없음
   if (L.overY > 0 && view === 'mine' && ['SURVEY', 'DIG'].includes(state())) uiRoot.addChild(makeScrollBar());
   if (!sheetHidden) uiRoot.addChild(makeSheet());
+  if (upCard) uiRoot.addChild(makeUpCard());
   if (welcome) uiRoot.addChild(makeWelcome());
   if (rankView) uiRoot.addChild(makeRank());
   if (cloudChoice) uiRoot.addChild(makeCloudChoice());
@@ -3905,7 +3932,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get coListOpen() { return coListOpen; }, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, set coListOpen(v) { coListOpen = v; }, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get coListOpen() { return coListOpen; }, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, set coListOpen(v) { coListOpen = v; }, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
