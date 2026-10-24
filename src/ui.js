@@ -45,12 +45,21 @@ export function label(str, { color = COLOR.paper, small = false, align = 'left',
   return t;
 }
 
+/** PATCH_V12 §2: 글자는 두 크기만 — 넘치면 줄이지 말고 끝을 "…"로 자른다 */
+export function fitText(t, maxW) {
+  if (!t || maxW <= 0 || t.width <= maxW) return t;
+  let s = t.text;
+  while (s.length > 1 && t.width > maxW) { s = s.slice(0, -1); t.text = s.trimEnd() + '…'; }
+  return t;
+}
+
 /** 버튼: 4상태(normal/hover/pressed/disabled) 텍스처를 9-slice(4px)로 늘린다 */
 export function button(style, w, h, str, onTap, { small = false } = {}) {
   const c = new Container();
   const bg = new NineSliceSprite({ texture: K[`btn_${style}_normal`], leftWidth: 4, topWidth: 4, rightWidth: 4, bottomWidth: 4, width: w, height: h });
   const textColor = style === 'paper' ? COLOR.paperInk : COLOR.paper;
   const t = label(str, { color: textColor, small, shadow: style !== 'paper' });
+  fitText(t, w - 6);
   c.addChild(bg, t);
   const place = (dy) => { t.x = Math.round((w - t.width) / 2); t.y = Math.round((h - t.height) / 2) + dy - 1; };
   place(0);
