@@ -7,5 +7,7 @@ PY=$(command -v py || command -v python3)
 mkdir -p $OUT/bld $OUT/chars
 $PY scripts/bld_kit.py "$PACK" $OUT/bld
 $PY scripts/char_kit.py "$PACK" $OUT/chars
+$PY scripts/critter_kit.py $OUT/critters
+$PY scripts/shaft_kit.py "$PACK" $OUT/shaft
 $PY scripts/yard_map.py "$PACK" $OUT --mock $OUT/bld
 echo "→ $OUT"
