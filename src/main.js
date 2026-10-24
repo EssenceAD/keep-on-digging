@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2-6';
+const VERSION = 'v1.2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -637,6 +637,7 @@ function endRound(reason = 'retreat') {
   save(); buildUI(); cloudSoon();
 }
 function nextAuction() {
+  resultMore = false;
   const rd = S.round;
   if (rd?.card?.tutorial) finishTutorial();
   S.stats.rounds++; S.stats.profitTotal += rd.stats.profit; S.stats.bestVein = Math.max(S.stats.bestVein, rd.stats.maxVein);
@@ -1898,7 +1899,7 @@ function updateSurvey(dt) {
   if (tutOn()) { if (ui.survey) ui.survey.text = S.tutorial.sniffed ? '탐사 끝을 눌러요' : '꼬물이를 지켜봐요'; return; }
   rd.surveyLeft = Math.max(0, rd.surveyLeft - dt);
   if (rd.surveyLeft <= 0 && !(rd.vibroLeft > 0) && !(rd.xrayLeft > 0) && !rd.stakes?.some((q) => q.at > time)) { startDig(); return; }
-  if (ui.survey) ui.survey.text = rd.surveyLeft > 0 ? `꼬물 ${Math.ceil(rd.surveyLeft)}초` : '어디를 뚫을까요?';
+  if (ui.survey) ui.survey.text = rd.surveyLeft > 0 ? `🐾${Math.ceil(rd.surveyLeft)}` : '🐾✓';   // V12 §8: 아이콘 + 숫자
 }
 function updateMole(dt) {
   if (tutOn() && state() === 'SURVEY') {                       // 튜토리얼: 두더지가 구리 위(x=TUT_SHAFT_X)로 가서 3초 킁킁
@@ -2104,10 +2105,10 @@ function computeLayout() {
     uiS = clamp(Math.floor(H / 330), 2, 3);
     const hudH = Math.max(Math.round(H * 0.06), 22 * uiS), sw = Math.max(Math.round(Wd * 0.24), 160 * uiS);
     const gw = Math.min(Wd - sw, Math.round(H * 1.4)), gx = Math.round((Wd - sw - gw) / 2);
-    hud = { x: 0, y: 0, w: Wd - sw, h: hudH };
-    sheet = tabs = { x: Wd - sw, y: 0, w: sw, h: H };
+    hud = { x: 0, y: 0, w: Wd, h: hudH };
+    sheet = tabs = { x: Wd - sw, y: hudH, w: sw, h: H - hudH };
     vis = { x0: gx, x1: gx + gw, y0: hudH, y1: H, above: 3 };
-    full = { x0: 0, x1: Wd - sw, y0: hudH, y1: H };
+    full = { x0: 0, x1: Wd, y0: hudH, y1: H };                     // 경매·회사(시트 없음)는 폭 전체
   }
   // 정수 배율: 텍스처 1px(= 칸 32분의 1) = 기기 k px
   const visW = vis.x1 - vis.x0, visH = vis.y1 - vis.y0;
@@ -2249,14 +2250,14 @@ function makeHud(w, h, vertical = false) {
   const btns = [];
   if (S.tutorial.done) {
     const tl = talentLeft(S);
-    btns.push(['talents', button(tl > 0 ? 'wood' : 'stone', 38, 15, tl > 0 ? `특성${tl}` : '특성', openTalents, { small: true })]);
-    if (SHOW_COMPANY) btns.push(['company', button(view === 'company' ? 'paper' : 'stone', 38, 15, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true })]);
+    btns.push(['talents', button(tl > 0 ? 'wood' : 'stone', 46, 15, tl > 0 ? `특성${tl}` : '특성', openTalents, { small: true })]);
+    if (SHOW_COMPANY) btns.push(['company', button(view === 'company' ? 'paper' : 'stone', 46, 15, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true })]);
   }
   const items = [['coin', kit('coin')], ['wh', tex('icon_gold')], ['clock', null]];
   if (!vertical) {
     const cy = Math.round((h - 14) / 2);
     let xa = 6;
-    const room = w - 6 - btns.length * 40;
+    const room = w - 6 - btns.length * 48;
     items.forEach(([key, tx]) => {
       const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' });
       i.position.set(xa, cy + Math.round((14 - (tx ? i.height : 0)) / 2)); n.position.set(xa + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
@@ -2265,7 +2266,7 @@ function makeHud(w, h, vertical = false) {
       xa = n.x + Math.max(n.width, n.reserve * 6) + 8;
       if (key === 'clock' && n.x + 44 > room) { n.visible = false; }
     });
-    btns.forEach(([k, b], i) => { b.position.set(w - 2 - (btns.length - i) * 40, Math.round((h - 15) / 2)); c.addChild(b); ui.refs[k] = b; });
+    btns.forEach(([k, b], i) => { b.position.set(w - 2 - (btns.length - i) * 48, Math.round((h - 15) / 2)); c.addChild(b); ui.refs[k] = b; });
   } else {
     let ya = 6;
     items.forEach(([key, tx]) => {
@@ -2273,7 +2274,7 @@ function makeHud(w, h, vertical = false) {
       i.position.set(5, ya + 1); n.position.set(5 + (tx ? i.width + 2 : 0), ya); c.addChild(i, n); ui.counters[key] = n; if (key === 'clock') n.short = true;
       ya += 16;
     });
-    btns.forEach(([k, b], i) => { b.position.set(Math.round((w - 38) / 2), h - 6 - (btns.length - i) * 19); c.addChild(b); ui.refs[k] = b; });
+    btns.forEach(([k, b], i) => { b.position.set(Math.round((w - 46) / 2), h - 6 - (btns.length - i) * 19); c.addChild(b); ui.refs[k] = b; });
   }
   return c;
 }
@@ -2311,44 +2312,75 @@ function makeAuction(x, y, w, h) {
     cards.forEach((card, i) => { const k = makePlotCard(card, w - 16, chh); k.position.set(8, top0 + i * (chh + gap)); c.addChild(k); });
     return c;
   }
-  // 입찰 (§8): 위 40% 구획 그림 · 예상 가치·이익 막대 · 왼쪽 "나" 크게 ↔ 오른쪽 상대 3 작게 · 현재가 · [올리기] [포기]
+  // 입찰 (V12 §8): 그림 55% · 나/상대 25% · 버튼 20%. 가로로 넓으면 왼쪽 그림 / 오른쪽 사람·버튼 두 칸
+  const wide = w > h * 1.6;
+  let pc;
+  if (wide) {
+    const lw = Math.floor(w * 0.5), A = new Container(), Bc = new Container(); Bc.x = lw - 4; c.addChild(A, Bc);
+    pc = bidPic(A, lw, h - 4); bidPeople(Bc, w - lw + 4, h, 6, h - 64);
+  } else {
+    const zPic = Math.floor(h * 0.55);
+    pc = bidPic(c, w, zPic);
+    c.addChild(new Graphics().rect(8, zPic, w - 16, 1).fill({ color: 0x8a6c52, alpha: 0.6 }));
+    bidPeople(c, w, h, zPic + 4, Math.floor(h * 0.25) - 6);
+  }
+  // 망치 카운트 · 낙찰 도장 "낙찰! 303금" (그림 가운데)
+  if (AU.phase === 'count') {
+    const n = Math.max(1, Math.ceil((AU.count / B.auction.hammerSeconds) * 3));
+    const cl = label(`${n}`, { color: 0xb84a62, shadow: false }); cl.scale.set(3); cl.position.set(Math.round(pc[0] - cl.width / 2), Math.round(pc[1] - cl.height / 2)); c.addChild(cl);
+  }
+  if ((AU.phase === 'won' || AU.phase === 'lost') && AU.endAt != null) {
+    const age = time - AU.endAt, won = AU.phase === 'won', who = won ? `${AU.high}금` : typeof AU.holder === 'number' ? B.guilds[AU.holder].name.split(' ')[0] : null;
+    if (who) {
+      const st = new Container(); st.position.set(pc[0], pc[1]);
+      const g = new Graphics().circle(0, 0, 26).stroke({ width: 2, color: 0xb84a62 }).circle(0, 0, 21).stroke({ width: 1, color: 0xb84a62 });
+      const tl = label('낙찰!', { color: 0xb84a62, shadow: false }); tl.position.set(-Math.round(tl.width / 2), -13);
+      const wl = label(who, { small: true, color: 0xb84a62, shadow: false }); fitText(wl, 44); wl.position.set(-Math.round(wl.width / 2), 3);
+      st.addChild(g, tl, wl); st.rotation = -0.2;
+      const p = Math.min(1, age / 0.18); st.scale.set(2.2 - 1.2 * p); st.alpha = p;
+      c.addChild(st);
+    }
+  }
+  return c;
+}
+/** 입찰: 구획 그림(정수 배율) + 이름·힌트 + 예상 가치·이익 막대. 그림 가운데 [x,y] 돌려줌 */
+function bidPic(c, w, zPic) {
+  const ink = { color: COLOR.paperInk, shadow: false };
   const card = AU.card, val = cardValue(card), margin = (val.mid - AU.high) / val.mid;
-  const picW = w - 16, th = plotThumb(card), ps = Math.max(1, Math.floor(Math.min(picW / 96, (h * 0.38) / 64))), picH = 64 * ps;
-  const pic = new Sprite(th); pic.scale.set(ps); pic.position.set(Math.round(8 + (picW - 96 * ps) / 2), 6 + Math.round((picH - 64 * ps) / 2)); c.addChild(pic);
+  const picW = w - 16, th = plotThumb(card), ps = Math.max(1, Math.floor(Math.min(picW / 96, (zPic - 34) / 64))), picH = 64 * ps;
+  const pic = new Sprite(th); pic.scale.set(ps); pic.position.set(Math.round(8 + (picW - 96 * ps) / 2), 6 + Math.max(0, Math.round((zPic - 34 - picH) / 2))); c.addChild(pic);
   c.addChild(new Graphics().rect(pic.x - 1, pic.y - 1, 96 * ps + 2, 64 * ps + 2).stroke({ width: 1, color: 0x5c3832 }));
-  const tag = (txt, tx, ty, col = COLOR.paperInk) => { const l = label(txt, { small: true, color: col, shadow: false }); const bg = frame('paper', Math.ceil(l.width) + 8, 13, 'panel'); const t = new Container(); t.addChild(bg, l); l.position.set(4, 1); t.position.set(Math.round(tx), Math.round(ty)); c.addChild(t); return t; };
-  tag(`${card.floor === 2 ? '2층 ' : ''}${card.name} · ${card.size}`, pic.x + 3, pic.y + 3, card.floor === 2 ? 0x2a8a84 : 0x8a5a24);
+  const nl = label(`${card.floor === 2 ? '2층 ' : ''}${card.name} · ${card.size}`, { small: true, color: card.floor === 2 ? 0x2a8a84 : 0x8a5a24, shadow: false }); fitText(nl, 96 * ps - 14);
+  const nb = frame('paper', Math.ceil(nl.width) + 8, 13, 'panel'); nb.position.set(pic.x + 3, pic.y + 3); nl.position.set(pic.x + 7, pic.y + 4); c.addChild(nb, nl);
   let hx = pic.x + 3;
-  for (const hnt of card.hints) { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, pic.y + 64 * ps - 13); c.addChild(ic); hx += 12; }
-  // 예상 가치 · 이익 막대
-  let yy = 6 + picH + 4;
+  for (const hnt of card.hints) { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, pic.y + picH - 13); c.addChild(ic); hx += 12; }
+  const yy = pic.y + picH + 6;
   const vl = label(`예상 가치 ${val.lo}~${val.hi}`, { ...ink, small: true, color: 0x46702e }); vl.position.set(8, yy); c.addChild(vl);
   const ml = label(margin >= 0 ? `여유 +${Math.round(val.mid - AU.high)}` : `손해 ${Math.round(val.mid - AU.high)}`, { ...ink, small: true, color: margin >= B.auction.profitOk ? 0x46702e : margin >= 0 ? 0x8a5a24 : 0xb84a62 });
-  ml.position.set(w - 8 - Math.ceil(ml.width), yy); c.addChild(ml);
-  const barW = w - 16, bar = new Graphics();
-  bar.rect(8, yy + 12, barW, 5).fill(0x3a2a22).rect(8, yy + 12, Math.max(0, Math.min(1, margin)) * barW, 5).fill(margin >= B.auction.profitOk ? 0x6a9a3a : margin >= 0 ? 0xd39a3a : 0xb84a62);
-  if (margin < 0) bar.rect(8, yy + 12, barW, 5).fill({ color: 0xb84a62, alpha: 0.45 });
-  c.addChild(bar); yy += 22;
-  c.addChild(new Graphics().rect(8, yy, w - 16, 1).fill({ color: 0x8a6c52, alpha: 0.6 })); yy += 4;
-  // 아래: 버튼 줄 · 현재가 줄 · 그 위가 사람 자리
-  const btnH = 22, btnY = h - btnH - 6, priceY = btnY - 20;
-  const ppl = Math.max(40, priceY - yy - 2);
-  yy += Math.max(0, Math.floor((ppl - Math.max(Math.min(Math.floor(w * 0.3), ppl - 14, 64) + 8, 78)) / 2));   // 사람 줄은 남는 자리 가운데
-  // 나 (왼쪽 크게)
+  ml.position.set(w - 8 - Math.ceil(ml.width), yy); if (ml.x < vl.x + vl.width + 4) ml.y = yy + 12; c.addChild(ml);
+  const by = ml.y + 12, barW = w - 16, bar = new Graphics();
+  bar.rect(8, by, barW, 5).fill(0x3a2a22).rect(8, by, Math.max(0, Math.min(1, margin)) * barW, 5).fill(margin >= B.auction.profitOk ? 0x6a9a3a : margin >= 0 ? 0xd39a3a : 0xb84a62);
+  if (margin < 0) bar.rect(8, by, barW, 5).fill({ color: 0xb84a62, alpha: 0.45 });
+  c.addChild(bar);
+  return [Math.round(pic.x + 48 * ps), Math.round(pic.y + picH / 2)];
+}
+/** 입찰: 왼쪽 "나" 크게 ↔ 오른쪽 상대 3 작게 · 말풍선 1줄 · 현재가 · [올리기] [포기] */
+function bidPeople(c, w, h, yy, ppl) {
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const btnH = 22, btnY = h - btnH - 6, priceY = btnY - 18;
+  ppl = Math.max(40, ppl);
   const meS = Math.min(Math.floor(w * 0.3), ppl - 14, 64);
   const mf = portraitFrame(F.red_idle[0], meS, 'wood'); mf.position.set(8, yy + 2); c.addChild(mf);
   const badge = new Container(); const bl = label('나', { small: true, color: 0x5c3832, shadow: false }); const bbg = new Graphics().rect(0, 0, Math.ceil(bl.width) + 8, 11).fill(0xf5cf6a).stroke({ width: 1, color: 0x8a5a24 }); badge.addChild(bbg, bl); bl.position.set(4, 0);
   badge.position.set(8 + Math.round((meS - bbg.width) / 2), yy + 2 + meS - 6); c.addChild(badge);
-  const myBid = AU.me ? `${AU.me}` : '—', mine = AU.holder === 'me';
-  const mb = label(myBid, { color: mine ? COLOR.gold : COLOR.paperInk, shadow: mine }); mb.position.set(8 + meS + 6, yy + 4); c.addChild(mb);
-  const mg = label(`금화 ${S.gold}`, { ...ink, small: true, color: 0x8a7a68 }); mg.position.set(8 + meS + 6, yy + 20); c.addChild(mg);
-  // 상대 3 (오른쪽 작게 한 줄)
-  const rx0 = Math.max(8 + meS + 6 + Math.ceil(Math.max(mb.width, mg.width)) + 6, Math.round(w * 0.42)), rw = Math.floor((w - 8 - rx0) / 3);
+  const mine = AU.holder === 'me';
+  const mb = label(AU.me ? `${AU.me}` : '—', { color: mine ? COLOR.gold : COLOR.paperInk, shadow: mine }); mb.position.set(8 + meS + 6, yy + 4); c.addChild(mb);
+  const rx0 = Math.max(8 + meS + 6 + Math.ceil(mb.width) + 6, Math.round(w * 0.42)), rw = Math.floor((w - 8 - rx0) / 3);
   const fh = Math.max(20, Math.min(40, ppl - 26, Math.floor((rw - 2) / 0.8)));
   const latest = AU.say.map((q, i) => ({ q, i })).filter(({ q }) => q && time >= q.t && time - q.t < 2.2 && !q.old).reduce((m, e) => (!m || e.q.t > m.q.t ? e : m), null);
   B.guilds.forEach((g, i) => {
     const gx = rx0 + i * rw + rw / 2, say = AU.say[i], age = say ? time - say.t : 99, lead = AU.holder === i;
-    const fig = new Sprite(tex(GUILD_SPR[i])); fig.anchor.set(0.5, 1); const gs = fh / fig.texture.height; fig.scale.set(gs);
+    const fig = new Sprite(tex(GUILD_SPR[i])); fig.anchor.set(0.5, 1); fig.scale.set(fh / fig.texture.height);
     let jx = 0; if (say && !say.pass && !say.line && age >= 0 && age < 0.5) jx = Math.round(Math.sin(age * 70) * 1.5);
     if (AU.out[i]) fig.tint = 0x8a8a8a;
     const winBounce = AU.phase === 'lost' && lead ? -Math.round(Math.abs(Math.sin((time - AU.endAt) * 8)) * 3) : 0;
@@ -2356,41 +2388,19 @@ function makeAuction(x, y, w, h) {
     const bid = AU.bids[i];
     const nl = label(AU.out[i] ? '포기' : bid ? String(bid) : '—', { small: true, color: lead ? COLOR.gold : AU.out[i] ? 0x8a7a68 : COLOR.paperInk, shadow: lead });
     nl.position.set(Math.round(gx - nl.width / 2), yy + 16 + fh); c.addChild(nl);
-    const nm = label(g.name.split(' ')[0], { small: true, color: 0x8a7a68, shadow: false }); fitText(nm, rw - 2); nm.position.set(Math.round(gx - nm.width / 2), yy + 26 + fh); c.addChild(nm);
     c.addChild(new Graphics().rect(Math.round(gx - rw / 2 + 2), yy + 2, rw - 4, 2).fill({ color: GUILD_COLOR[i], alpha: 0.9 }));
   });
   if (latest) {                                       // 말풍선 1줄 · 한 번에 하나
     const { q, i } = latest, gx = rx0 + i * rw + rw / 2;
-    let bt = label(q.text, { small: true, color: q.pass ? 0x8a7a68 : 0x5c3832, shadow: false });
-    fitText(bt, w - 24);
+    const bt = label(q.text, { small: true, color: q.pass ? 0x8a7a68 : 0x5c3832, shadow: false }); fitText(bt, w - 24);
     const bw = Math.ceil(bt.width) + 8, bh = 13;
     const bub = new Container(); bub.addChild(frame('paper', bw, bh, 'panel'), bt); bt.position.set(4, 1);
     const tx = Math.max(Math.min(rx0 - 10, w - 8 - bw), Math.min(w - 8 - bw, Math.round(gx - bw / 2)));
     bub.addChild(new Graphics().poly([gx - tx - 3, bh - 1, gx - tx + 3, bh - 1, gx - tx, bh + 4]).fill(0xf4ecd2));
-    bub.position.set(tx, yy + 14 + fh - Math.round(fh * 1.0) - bh - 2); c.addChild(bub);
+    bub.position.set(tx, yy + 12 - bh - 2); c.addChild(bub);
   }
-  // 현재가
-  const hl = label(`현재가 ${AU.high}`, { ...ink }); hl.position.set(Math.round(w / 2 - hl.width / 2), priceY); c.addChild(hl);
-  const stl = label(auctionStatus(), { ...ink, small: true, color: 0x8a5a24 }); fitText(stl, w - 16); stl.position.set(Math.round(w / 2 - stl.width / 2), priceY - 12); c.addChild(stl);
+  const hl = label(`현재가 ${AU.high}`, ink); hl.position.set(Math.round(w / 2 - hl.width / 2), priceY); c.addChild(hl);
   bidButtons(c, 8, btnY, w - 16, btnH);
-  // 망치 카운트 · 낙찰 도장 "낙찰! 303금"
-  if (AU.phase === 'count') {
-    const n = Math.max(1, Math.ceil((AU.count / B.auction.hammerSeconds) * 3));
-    const cl = label(`${n}`, { color: 0xb84a62, shadow: false }); cl.scale.set(3); cl.position.set(Math.round(w / 2 - cl.width / 2), 6 + picH / 2 - cl.height / 2); c.addChild(cl);
-  }
-  if ((AU.phase === 'won' || AU.phase === 'lost') && AU.endAt != null) {
-    const age = time - AU.endAt, won = AU.phase === 'won', who = won ? `${AU.high}금` : typeof AU.holder === 'number' ? B.guilds[AU.holder].name.split(' ')[0] : null;
-    if (who) {
-      const st = new Container(); st.position.set(w / 2, 6 + picH / 2);
-      const g = new Graphics().circle(0, 0, 26).stroke({ width: 2, color: 0xb84a62 }).circle(0, 0, 21).stroke({ width: 1, color: 0xb84a62 });
-      const tl = label('낙찰!', { color: 0xb84a62, shadow: false }); tl.position.set(-Math.round(tl.width / 2), -13);
-      const wl = label(who, { small: true, color: 0xb84a62, shadow: false }); wl.position.set(-Math.round(wl.width / 2), 3); fitText(wl, 44); wl.x = -Math.round(wl.width / 2);
-      st.addChild(g, tl, wl); st.rotation = -0.2;
-      const p = Math.min(1, age / 0.18); st.scale.set(2.2 - 1.2 * p); st.alpha = p;
-      c.addChild(st);
-    }
-  }
-  return c;
 }
 /** 구획 단면 썸네일 96×64 (§8-1) — 격자로 코드가 그림: 지상 띠(풀·나무) + 안개 낀 흙. 힌트 있는 것만 희미하게 */
 const thumbCache = new Map();
@@ -2528,47 +2538,42 @@ function makeDigBar(x, y, w) {
   setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
 }
+let resultMore = false;                                      // [자세히 ▸] 펼침
+/** 결과 카드 (V12 §7): 순이익(크게) · 별 · 최대 광맥 · 시간 · [특성 찍기] [다음 경매]. 낙찰가·매출·사건·과제는 「자세히 ▸」 */
 function makeResult(x, y, w, h) {
   const rd = S.round, st = rd.stats;
   const c = new Container(); c.position.set(x, y);
   c.addChild(frame('paper', w, h, 'panel'));
   setOverlayRect(x, y, w, h);
   const ink = { color: COLOR.paperInk, shadow: false };
-  const title = label(`${rd.card.name} — 결과`, ink); title.position.set(8, 6); c.addChild(title);
-  const why = label(rd.reason === 'done' ? '광맥을 전부 캤어요' : '철수했어요', { ...ink, small: true, color: 0x8a7a68 }); why.position.set(8, 20); c.addChild(why);
-  let yy = 36;
+  const title = label(rd.card.name, ink); title.position.set(8, 6); fitText(title, w - 16); c.addChild(title);
+  let yy = 26;
+  const pl = label('순이익', ink); pl.position.set(10, yy + 6); c.addChild(pl);
+  const pv = label(`${st.profit >= 0 ? '+' : ''}${st.profit}`, { ...ink, color: st.profit >= 0 ? 0x46702e : 0xb84a62 }); pv.scale.set(2); pv.position.set(w - 12 - Math.ceil(pv.width), yy); c.addChild(pv);
+  yy += 32;
+  const stars = label('★'.repeat(st.stars) + '☆'.repeat(3 - st.stars), { color: 0xd39a3a, shadow: false }); stars.scale.set(1.5); stars.position.set(Math.round((w - stars.width) / 2), yy); c.addChild(stars);
+  yy += 26;
   const line = (k, v, col = COLOR.paperInk) => {
     const a = label(k, { ...ink, small: true }); a.position.set(10, yy); c.addChild(a);
-    const b = label(v, { ...ink, small: true, color: col }); b.position.set(w - 12 - Math.ceil(b.width), yy); c.addChild(b);
-    yy += 13;
+    const b = label(v, { ...ink, small: true, color: col }); fitText(b, w - 24 - a.width); b.position.set(w - 12 - Math.ceil(b.width), yy); c.addChild(b);
+    yy += 14;
   };
-  if (rd.card.gift) line('구획', '그룬 할아범 선물', 0x46702e); else line('낙찰가', `−${rd.bid}`, 0xb84a62);
-  line('매출(판매)', `+${st.revenue}`, 0x46702e);
-  if (st.relicGold) line(`유물 ${st.relics}개`, `+${st.relicGold}`, 0x46702e);
-  yy += 2;
-  const pl = label('순이익', ink); pl.position.set(10, yy + 4); c.addChild(pl);
-  const pv = label(`${st.profit >= 0 ? '+' : ''}${st.profit}`, { ...ink, color: st.profit >= 0 ? 0x46702e : 0xb84a62 }); pv.scale.set(2); pv.position.set(w - 12 - Math.ceil(pv.width), yy); c.addChild(pv);
-  yy += 30;
-  const stars = label('★'.repeat(st.stars) + '☆'.repeat(3 - st.stars), { color: 0xd39a3a, shadow: false }); stars.scale.set(1.5); stars.position.set(10, yy); c.addChild(stars);
-  yy += 24;
   const mins = Math.max(1, Math.round((rd.endedAt - rd.startedAt) / 60));
   line('최대 광맥', `${st.maxVein}칸${st.jackpots ? ' · 대박!' : ''}`);
   line('걸린 시간', `${mins}분`);
-  const evs = st.events.length ? [...new Set(st.events)].map((e) => `${EVENT_NAME[e]}${st.events.filter((q) => q === e).length > 1 ? '×' + st.events.filter((q) => q === e).length : ''}`).join(' · ') : '없음';
-  line('사건', evs);
-  const left = whTotal();
-  if (left) line('창고에 남은 광석', `${left}개 · 팔면 이익`, 0x8a7a68);
-  if (S.daybook?.tasks?.length) line('오늘 과제', `${S.daybook.tasks.filter((t) => t.done).length}/${S.daybook.tasks.length} ✓`, 0x46702e);
-  // 할아범 한마디 (틀 안)
-  const say = st.stars >= 3 ? '허허, 이 늙은이보다 낫구먼! 대박이야!' : st.stars >= 1 ? '나쁘지 않아. 다음엔 시세를 좀 더 노려 보게.' : '흠… 땅값이 비쌌나? 힌트를 잘 보게나.';
-  const by = yy + 6, ps = Math.max(20, Math.min(40, h - 46 - by));   // 남은 자리만큼 (좁은 폰에서 줄과 안 겹침)
-  const pf = portraitFrame(tex(NPC.halabeoji), ps, 'wood'); pf.position.set(8, by); c.addChild(pf);
-  const tx = label(say, { ...ink, small: true, wrap: w - ps - 24 }); tx.position.set(ps + 14, by + 2); c.addChild(tx);
-  const b = button('wood', 80, 20, '다음 경매', nextAuction); ui.refs.next = b;
-  b.position.set(w - 88, h - 26); c.addChild(b);
-  if (talentLeft(S) > 0) { const tb = button('paper', 64, 20, `특성 찍기 ${talentLeft(S)}`, openTalents, { small: true }); tb.position.set(w - (!rd.card.tutorial && SHOW_COMPANY ? 216 : 156), h - 26); c.addChild(tb); ui.refs.resultTalent = tb; }
-  if (!rd.card.tutorial && SHOW_COMPANY) { const co = button('paper', 56, 20, '회사로', openCompany); co.position.set(w - 148, h - 26); c.addChild(co); }
-  const tot = label(`누적 ${S.stats.rounds + 1}라운드 · 순이익 ${S.stats.profitTotal + st.profit}`, { ...ink, small: true, color: 0x8a7a68 }); tot.position.set(8, h - 40); if (by + Math.max(ps, Math.ceil(tx.height)) + 2 <= h - 40) c.addChild(tot); else tot.destroy();
+  const more = button('stone', 70, 14, resultMore ? '자세히 ▾' : '자세히 ▸', () => { resultMore = !resultMore; buildUI(); }, { small: true }); more.position.set(8, yy + 2); c.addChild(more);
+  yy += 20;
+  if (resultMore) {
+    if (rd.card.gift) line('구획', '그룬 할아범 선물', 0x46702e); else line('낙찰가', `−${rd.bid}`, 0xb84a62);
+    line('매출', `+${st.revenue}`, 0x46702e);
+    if (st.relicGold) line(`유물 ${st.relics}개`, `+${st.relicGold}`, 0x46702e);
+    const evs = st.events.length ? [...new Set(st.events)].map((e) => `${EVENT_NAME[e]}${st.events.filter((q) => q === e).length > 1 ? '×' + st.events.filter((q) => q === e).length : ''}`).join(' · ') : '없음';
+    line('사건', evs);
+    if (S.daybook?.tasks?.length) line('오늘 과제', `${S.daybook.tasks.filter((t) => t.done).length}/${S.daybook.tasks.length}`, 0x46702e);
+  }
+  const b = button('wood', 80, 22, '다음 경매', nextAuction); ui.refs.next = b;
+  b.position.set(w - 88, h - 28); c.addChild(b);
+  if (talentLeft(S) > 0) { const tb = button('paper', 80, 22, `특성 찍기 ${talentLeft(S)}`, openTalents, { small: true }); tb.position.set(w - 172, h - 28); c.addChild(tb); ui.refs.resultTalent = tb; }
   return c;
 }
 
