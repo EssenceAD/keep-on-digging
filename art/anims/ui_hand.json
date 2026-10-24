@@ -1,0 +1,85 @@
+{
+ "frames": {
+  "ui_hand_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "sourceSize": {
+    "w": 34,
+    "h": 34
+   },
+   "duration": 333
+  },
+  "ui_hand_1": {
+   "frame": {
+    "x": 34,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "sourceSize": {
+    "w": 34,
+    "h": 34
+   },
+   "duration": 333
+  },
+  "ui_hand_2": {
+   "frame": {
+    "x": 68,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 34,
+    "h": 34
+   },
+   "sourceSize": {
+    "w": 34,
+    "h": 34
+   },
+   "duration": 333
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "ui_hand.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 102,
+   "h": 34
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "ui_hand",
+    "from": 0,
+    "to": 2,
+    "direction": "forward"
+   }
+  ]
+ }
+}
