@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.0-5';
+const VERSION = 'v1.0-6';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -846,7 +846,7 @@ const left = (type) => (W ? W.g.flat().filter((ch) => ch === type).length : 0);
 const revealCells = (cells) => { for (const [x, y] of cells) { seenCells.add(`${x},${y}`); refreshAround(x, y, 0); } S.round.seen = [...seenCells]; };
 const X = TUT_SHAFT_X;
 // ---- [1] 튜토리얼 12단계: 강조(focus) · 손가락(hand) · 완료(done) · 시작할 때(enter) · 경로 검사(path)
-const TUT_STEPS = [
+const TUT_STEPS = [                                        // 명세5 §7: 18단계 — 탭 입구 · ◀ · 진동계 · 둘째 입구 · 장비 · 특성 1점
   { focus: () => actorRect(mole), hand: () => ({ kind: 'point', at: centerOf(actorRect(mole)) }), done: () => S.tutorial.sniffed },
   { focus: () => boundsOf(ui.refs.surveyEnd), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.surveyEnd)) }), done: () => state() === 'DIG' },
   { shaftX: X, stopY: TUT_STOP_Y, focus: () => cellScreen(X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(X, -0.4) }), done: () => S.round.shafts?.some((q) => q.x === X) },
@@ -859,11 +859,19 @@ const TUT_STEPS = [
     done: () => !L.portrait || (sheetTab === 'sell' && !S.settings.sheetFolded) },
   { enter: () => { S.tutorial.mark = S.counters?.soldGold ?? 0; }, focus: () => boundsOf(ui.rows.C?.r), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.rows.C?.btn)) }),
     done: () => (S.counters?.soldGold ?? 0) > (S.tutorial.mark ?? 0) },
-  { shaftX: TUT_GOLD_X, enter: () => { revealCells(W.veins.list[veinOf('g')].cells); toast(TUT_CARTS, 'momo', 3); }, focus: () => unionRect(cellScreen(TUT_GOLD_X, -1, 1, 2), veinRect(veinOf('g'))), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }),
-    done: () => S.round.claimed.includes(veinOf('g')) },
+  { enter: () => { S.round.vibroLeft = Math.max(1, S.round.vibroLeft ?? 0); toast(TUT_CARTS, 'momo', 3); }, focus: () => boundsOf(ui.refs.vibro), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.vibro)) }), done: () => toolArmed === 'vibro' || S.round.stakes?.length > 0 },
+  { vibroX: TUT_GOLD_X, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }), done: () => S.round.stakes?.some((q) => q.x === TUT_GOLD_X && !(q.at > 0)) },
+  { shaftX: TUT_GOLD_X, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }), done: () => S.round.claimed.includes(veinOf('g')) },
   { focus: () => (buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)), hand: () => ({ kind: 'tap', at: centerOf(buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
     done: () => S.tutorial.merchantGold || (S.tutorial.goldSold && !stash.g && left('g') === 0 && !carts.some((c) => c.cargo.g) && !piles.some((p) => p.type === 'g')) },
+  { enter: () => { const c = gearCost(S, 'pick'); if (c != null && S.gold < c) { S.gold = c; refreshUI(); toast('그룬 할아범이 곡괭이 값을 보탰어요', 'halabeoji', 2.5); } },
+    focus: () => (L.portrait && (sheetTab !== 'gear' || S.settings.sheetFolded) ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)),
+    hand: () => ({ kind: 'tap', at: centerOf(L.portrait && (sheetTab !== 'gear' || S.settings.sheetFolded) ? boundsOf(ui.tabs?.find((t) => t.key === 'gear')) : boundsOf(ui.refs.gear_pick)) }),
+    done: () => upLv(S, 'pick') >= 2 },
   { focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
+  { focus: () => boundsOf(ui.refs.resultTalent), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.resultTalent)) }), done: () => talentView || talentSpent(S) > 0 },
+  { focus: () => boundsOf(ui.refs.talent_dig), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.talent_dig)) }), done: () => talentSpent(S) > 0 },
+  { focus: () => boundsOf(ui.refs.talentClose), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.talentClose)) }), done: () => !talentView },
   { focus: () => boundsOf(ui.refs.next), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.next)) }), done: () => !S.tutorial.active },
 ];
 const tutStep = () => (tutOn() ? TUT_STEPS[S.tutorial.step] : null);
@@ -958,7 +966,7 @@ function tutTick(dt) {
   if (key) {
     const fc = focus ? (focus.y + focus.h / 2) * k : uH;
     const top = Math.round((L.portrait ? L.panels.hud.h : 0) * k) + 4, bottom = Math.round((L.portrait ? L.panels.sheet.y : L.H) * k) - tutBubble.bh - 6;
-    const last = S.tutorial.step === TUT_STEPS.length - 1;          // 결과 단계는 카드 아래 (v0.8 §4): 폰 = 아래 시트 위 · PC = 화면 아래 왼쪽
+    const last = state() === 'RESULT';          // 결과 단계는 카드 아래 (v0.8 §4): 폰 = 아래 시트 위 · PC = 화면 아래 왼쪽
     const y = last ? (L.portrait ? Math.round(L.panels.sheet.y * k) + 22 : Math.round(L.H * k) - tutBubble.bh - 6) : fc > uH * 0.45 ? top : Math.max(top, bottom);
     const shake = tutShakeT > 0 ? Math.sin(tutShakeT * 50) * 3 : 0;
     tutBubble.position.set(Math.round((last && !L.portrait ? L.vis.x0 * k + 4 : (uW - tutBubble.bw) / 2) + shake), y);
@@ -1588,7 +1596,7 @@ function makeTalents(tw, th) {
       l.position.set(3, Math.max(1, Math.round((cellH - l.height) / 2))); cell.addChild(l);
       if (l.height > cellH - 2) l.scale.set((cellH - 2) / l.height);
       if (i < rowsN - 1) cell.addChild(new Graphics().rect(Math.round(colW / 2) - 1, cellH, 1, 3).fill(learned ? 0xd39a3a : 0x8a7a68));
-      if (next) { cell.eventMode = 'static'; cell.cursor = 'pointer'; cell.on('pointertap', () => learnTalent(tree)); }
+      if (next) { cell.eventMode = 'static'; cell.cursor = 'pointer'; cell.on('pointertap', () => learnTalent(tree)); ui.refs[`talent_${tree}`] = cell; }
     });
   });
   const free = !S.talents.freeResetUsed;
@@ -1842,6 +1850,7 @@ function vibroAt(wx) {
   const rd = S.round, gx = Math.floor((wx - GX) / T);
   if (gx < 0 || gx >= GW || !(rd.vibroLeft > 0)) return false;
   if (rd.stakes.some((q) => q.x === gx)) { toast('여긴 이미 말뚝을 박았어요'); return false; }
+  const tst = tutStep(); if (tst && tst.vibroX != null && gx !== tst.vibroX) { tutShake(); return false; }
   rd.vibroLeft--; toolArmed = null;
   const st = { x: gx, text: '…', color: null, at: time + TV.vibro.seconds };
   rd.stakes.push(st); sfx('ui_tap'); shake = 0.15; shakeAmp = 0.8;
@@ -1850,7 +1859,7 @@ function vibroAt(wx) {
     for (let y = 0; y < W.rows && id < 0; y++) { const v = W.veins.id[y][gx]; if (v >= 0 && ORE_KEYS.has(W.g[y][gx])) { id = v; d = y + 1; } }
     if (id < 0) { st.text = '없음'; }
     else {
-      const v = W.veins.list[id], r = Math.max(1, vibroV('range') - CF.vibroRangeMinus), lo = Math.max(1, d - Math.floor(Math.random() * (r + 1)));
+      const v = W.veins.list[id], r = tutOn() ? 1 : Math.max(1, vibroV('range') - CF.vibroRangeMinus), lo = tutOn() ? d : Math.max(1, d - Math.floor(Math.random() * (r + 1)));
       const word = TV.sizeWords.find(([n]) => v.size <= n)[1];
       st.text = `깊이 ${lo}~${lo + r} · ${word}`;
       if (vibroV('color')) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
@@ -2326,10 +2335,10 @@ function makeScrollBar() {
   return c;
 }
 /** [진동 n] [투시 n] — 오른쪽 끝 xr에서 왼쪽으로. 남은 게 없으면 안 그림. 왼쪽 끝 x를 돌려줌 */
-function toolButtons(c, xr, y) {
+function toolButtons(c, xr, y, onlyVibro = false) {
   const rd = S.round;
   for (const [k, name, n] of [['xray', '투시', rd.xrayLeft], ['vibro', '진동', rd.vibroLeft]]) {
-    if (!(n > 0)) continue;
+    if (!(n > 0) || (onlyVibro && k !== 'vibro')) continue;
     const bt = button(toolArmed === k ? 'wood' : 'paper', 40, 16, `${name} ${n}`, () => armTool(k), { small: true });
     xr -= 42; bt.position.set(xr, y); c.addChild(bt); ui.refs[k] = bt;
   }
@@ -2342,7 +2351,7 @@ function makeDigBar(x, y, w) {
   if (W?.water.some((r) => r.some(Boolean)) && !(S.round.pumpLeft > 0)) {
     const pmp = button('paper', 56, 16, CF.pumpCost ? `펌프 ${CF.pumpCost}` : '펌프', pump, { small: true }); pmp.position.set(w - 108, 0); c.addChild(pmp); bw = 108;
   }
-  if (!tutOn()) bw = w - toolButtons(c, w - bw - 4, 0) + 4;                 // 시추 중에도 남은 도구 (명세5 §1)
+  if (!tutOn() || S.tutorial.step >= 8) bw = w - toolButtons(c, w - bw - 4, 0, tutOn()) + 4;                 // 시추 중에도 남은 도구 (명세5 §1)
   if (S.stats.rounds < DIG_LINE_ROUNDS || tutOn()) { const hl = label(DIG_LINE, { small: true, wrap: Math.max(60, w - bw - 6) }); hl.position.set(2, 2); c.addChild(hl); }   // §6 고정 안내줄 (3라운드까지)
   setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
