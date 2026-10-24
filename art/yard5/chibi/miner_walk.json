@@ -1,0 +1,106 @@
+{
+ "frames": {
+  "miner_walk_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 26
+   },
+   "duration": 125
+  },
+  "miner_walk_1": {
+   "frame": {
+    "x": 20,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 26
+   },
+   "duration": 125
+  },
+  "miner_walk_2": {
+   "frame": {
+    "x": 40,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 26
+   },
+   "duration": 125
+  },
+  "miner_walk_3": {
+   "frame": {
+    "x": 60,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 26
+   },
+   "sourceSize": {
+    "w": 20,
+    "h": 26
+   },
+   "duration": 125
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "miner_walk.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 80,
+   "h": 26
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "miner_walk",
+    "from": 0,
+    "to": 3,
+    "direction": "forward"
+   }
+  ]
+ }
+}
