@@ -401,6 +401,11 @@ anim("red_swing", { w: 46, h: H }, ...SWING.map(([ang, dx, hy], f) => frame({ ms
 // ---- 뚱보 갈색 수염 광부 (샌드위치) · 여성 금발 광부 (랜턴)
 anim("brown_idle", { w: W, h: H }, ...breathe("_brown_base", 22))
 anim("brown_walk", { w: W, h: H }, ...walk("_brown_base", 31, 16))
+// v0.8: 뚱보도 선두 채굴 (붉은 수염과 같은 곡괭이질 6f — 손 위치만 몸에 맞춤)
+anim("brown_swing", { w: 46, h: H }, ...SWING.map(([ang, dx, hy], f) => frame({ ms: f === 2 ? 70 : f < 2 ? 140 : 100 },
+  stamp("_brown_base", dx, f < 2 ? -1 : 0),
+  (c) => pick(c, ang, 24 + dx, 22 + hy),
+  rect(23 + dx, 21 + hy, 3, 3, "U"), box(23 + dx, 21 + hy, 3, 3, "k"))))
 anim("blonde_idle", { w: W, h: H }, ...breathe("_blonde_base", 18))
 anim("blonde_walk", { w: W, h: H }, ...walk("_blonde_base", 32, 15, 24))
 

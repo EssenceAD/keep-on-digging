@@ -1,0 +1,148 @@
+{
+ "frames": {
+  "brown_swing_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 140
+  },
+  "brown_swing_1": {
+   "frame": {
+    "x": 46,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 140
+  },
+  "brown_swing_2": {
+   "frame": {
+    "x": 92,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 70
+  },
+  "brown_swing_3": {
+   "frame": {
+    "x": 138,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 100
+  },
+  "brown_swing_4": {
+   "frame": {
+    "x": 184,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 100
+  },
+  "brown_swing_5": {
+   "frame": {
+    "x": 230,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 46,
+    "h": 40
+   },
+   "sourceSize": {
+    "w": 46,
+    "h": 40
+   },
+   "duration": 100
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "brown_swing.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 276,
+   "h": 40
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "brown_swing",
+    "from": 0,
+    "to": 5,
+    "direction": "forward"
+   }
+  ]
+ }
+}

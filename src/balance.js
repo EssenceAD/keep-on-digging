@@ -17,19 +17,27 @@ export const B = {
   hintsPerCard: 2,
   hintValue: 0.15,                  // 평가액 = 시작가 × (1 + 힌트 수 × 0.15) × 길드별 ±10%
   guildSpread: 0.10,
-  raises: [0.10, 0.25, 0.50],       // 플레이어 호가 버튼
-  guilds: [
-    { name: '심연낚시 동호회', style: 'aggressive', cap: 1.3, bigRaiseChance: 0.6 },   // 평가액 ×1.3까지, 60%로 +25% (아니면 +10%)
-    { name: '탑오르는중', style: 'careful', cap: 1.0 },                               // 평가액 ×1.0까지, 항상 +10%
-    { name: '방패장인 조합', style: 'random', capMin: 0.8, capMax: 1.4 },               // 평가액 ×(0.8~1.4), 호가 무작위
+  // v0.8 (PATCH_V08 §3): 텀오일식 — [올리기 +10%] 하나 + [포기]. 길드는 한도까지 즉시 따라옴. 2초 동안 아무도 안 올리면 낙찰
+  auction: {
+    raiseStep: 0.10,
+    guildReact: 0.4,                // 플레이어가 올린 뒤 길드가 따라오기까지 (초)
+    hammerSeconds: 2,               // 아무도 안 따라오면 이만큼 뒤 낙찰 (3·2·1)
+    valueSpread: 0.25,              // 카드의 예상 가치 범위 ±25% (특성 「탐사 4」면 valueSpreadTalent)
+    valueSpreadTalent: 0.10,
+    valueNoise: 0.15,               // 예상 가치 중간값이 실제 광맥 가치에서 이만큼까지 어긋남 (그래서 "예상")
+    profitOk: 0.3,                  // 이익 막대: (예상 − 현재가)/예상 ≥ 0.3 초록 · ≥ 0 노랑 · 그 밑 빨강
+  },
+  guilds: [                         // 한도 = 예상 가치(중간) × 길드 눈대중(±guildSpread) × 계수
+    { name: '심연낚시 동호회', style: 'aggressive', cap: 0.8 },     // 예상 가치의 0.8배까지 (명세는 1.3 — 그러면 이길 때마다 손해라 낮춤)
+    { name: '탑오르는중', style: 'careful', cap: 0.6 },
+    { name: '방패장인 조합', style: 'random', capMin: 0.45, capMax: 0.9 },
   ],
-  aiBidDelay: 0.7,                  // 길드 호가가 하나씩 뜨는 간격(연출)
   freePlot: { size: 'S', veinScale: 0.5 },   // 낙찰 못 하면 공짜 구획: 힌트 없음, 광맥 적음
 
   // ---------------------------------------------------------------- 격자 생성 (§5-1)
   oreMix: { C: 50, s: 30, g: 15, j: 4, c: 1 },   // 구리·은·금·보석·발광 비율 (뒷산)
   depthWeight: 1.5,                 // 깊을수록 귀한 광종 가중 (맨 아래 줄에서 ×1.5)
-  veinsPerRow: 0.4,                 // 줄당 광맥 덩어리 수 (L 16줄 ≈ 6개)
+  veinsPerRow: 0.52,                // 줄당 광맥 덩어리 수 (v0.8: +30% — 진행이 빨라진 만큼 라운드 5~8분 유지)
   veinSize: [3, 20],
   bigVeinChance: 0.55,              // 구획마다 큰 광맥(≥ bigVein칸) 하나가 있을 확률
   rockShare: 0.28,                  // 바탕 바위 비율 (힌트 🪨면 rockHint)
@@ -46,6 +54,8 @@ export const B = {
   glowHintMul: 3,                   // 힌트 ✨ 발광 확률 ×3
 
   // ---------------------------------------------------------------- 탐사 (§4)
+  diggers: 2,                       // v0.8: 선두 2명이 동시에 캐고 나머지는 운반
+  carrierWalkUp: 2,                 // 운반 광부: 광차가 이만큼(초) 없으면 직접 지상 창고까지
   surveySeconds: 15,
   xrayPerDay: 2,                    // 투시 랜턴 하루 횟수 (이번 단계 고정)
   xraySeconds: 2,
@@ -55,7 +65,7 @@ export const B = {
   // ---------------------------------------------------------------- 시추 (§5)
   pickTier: 1,                      // 곡괭이 등급: 1 = 바위까지
   hardness: { d: 1, r: 1, C: 1, s: 1, g: 1, j: 1, c: 1, w: 1, x: 1, R: 1, o: 1, h: 2, a: 3 },
-  digTime: { d: 0.6, r: 1.5, ore: 1.0, w: 0.6, x: 0.6, R: 1.0, o: 0 },
+  digTime: { d: 0.45, r: 1.2, ore: 0.8, w: 0.6, x: 0.6, R: 1.0, o: 0 },   // v0.8: 흙 0.6→0.45 · 바위 1.5→1.2 · 광맥 1.0→0.8
   walkSpeed: 2.2,                   // 칸/초
   climbSpeed: 1.6,
   carrySpeed: 1.8,
@@ -66,8 +76,8 @@ export const B = {
   badCellFlash: 0.6,                // 못 뚫는 칸 빨간 X
 
   // ---------------------------------------------------------------- 광차 · 창고 (§5-3)
-  cartCapacity: 8,
-  cartSpeed: 2,                     // 칸/초
+  cartCapacity: 10,
+  cartSpeed: 3,                     // 칸/초
   cartUnloadSeconds: 1.0,
   warehouseCapacity: 60,
 
@@ -138,7 +148,7 @@ export const B = {
     harmonyRange: 1,                // 어울림: 슬롯 사이 빈칸 1 이하(대각선 포함) — 체크인 harmony.ts gap()
     buildings: {
       warehouse: { name: '창고', cost: 150, cap: [60, 120, 200, 320, 400, 500] },
-      cartShed: { name: '광차 차고', cost: 250, carts: [1, 1, 1, 2, 2, 2], load: [8, 10, 12, 14, 15, 16], speed: [2, 2.1, 2.2, 2.3, 2.4, 2.5] },
+      cartShed: { name: '광차 차고', cost: 250, carts: [2, 2, 2, 3, 3, 4], load: [10, 12, 14, 16, 18, 20], speed: [3, 3.1, 3.2, 3.3, 3.4, 3.5] },   // v0.8: 기본 2대 · Lv3 3대 · Lv5 4대
       lodge: { name: '광부 숙소', cost: 300, miners: [3, 4, 5, 5, 6, 6], capHours: [4, 4, 4, 6, 6, 8] },
       smelter: { name: '제련소', cost: 400, sec: [0, 20, 17, 15, 12, 10], slots: [0, 1, 1, 2, 2, 3] },
       lanternShop: { name: '랜턴 공방', cost: 200, xray: [2, 3, 4, 4, 5, 6], radius: [1, 1, 1, 2, 2, 2] },   // 반경 1 = 3×3 · 2 = 5×5
@@ -189,10 +199,10 @@ export const B = {
   talents: {
     star3PerPoint: 10,              // 사무소 Lv당 1점 + 라운드 ★3 10회마다 1점
     resetCost: 500,                 // 초기화 (사무소 Lv1일 때 한 번은 무료)
-    survey: ['힌트 아이콘 3개', '투시 랜턴 +1/일', '킁킁에 광종 색', '카드에 광맥 총량', '공짜 구획 힌트 1'],
-    dig: ['곡괭이 2 · 단단한 바위', '맨땅 0.6 → 0.45초', '낙하 기절 ½', '곡괭이 3 · 고대석', '인접 광맥 발견'],
+    survey: ['힌트 아이콘 3개', '투시 랜턴 +1/일', '킁킁에 광종 색', '예상 가치 범위 좁게', '공짜 구획 힌트 1'],
+    dig: ['곡괭이 2 · 단단한 바위', '맨땅 0.45 → 0.34초', '낙하 기절 ½', '곡괭이 3 · 고대석', '인접 광맥 발견'],
     trade: ['시세 1분 미리보기', '판매가 +5%', '급등 예고 60초 전', '선호 페널티 −5%', '하루 1회 시세 고정'],
-    dirtTime: 0.45,
+    dirtTime: 0.34,
     stunMul: 0.5,
     sellAdd: 0.05,
     surgeWarnLong: 60,

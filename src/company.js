@@ -103,7 +103,7 @@ export function effectText(S, k) {
   switch (k) {
     case 'office': return lv >= 5 ? '부지 10열 · 모든 구획' : `부지 ${cols(S)}열 → ${cols(S) + 1}열${lv + 1 === C.lPlotLv ? ' · L 구획' : lv + 1 === C.mineLv ? ' · 폐광' : ''}`;
     case 'warehouse': return `창고 ${arrow(b.cap)}`;
-    case 'cartShed': return `적재 ${arrow(b.load)}${b.carts[n] > b.carts[lv] ? ' · 광차 2대' : b.carts[lv] > 1 ? ' · 2대' : ''}`;
+    case 'cartShed': return `적재 ${arrow(b.load)} · 광차 ${b.carts[lv]}대${b.carts[n] > b.carts[lv] ? ` → ${b.carts[n]}대` : ''}`;
     case 'lodge': return `광부 ${arrow(b.miners, '명')} · 방치 ${b.capHours[lv]}h`;
     case 'smelter': return lv ? `괴 ×${C.smeltMul} · ${b.sec[lv]}초 · 동시 ${b.slots[lv]}${lv < 5 ? ' → ' + b.slots[n] : ''}` : `광석 → 괴 (가격 ×${C.smeltMul})`;
     case 'lanternShop': return `투시 랜턴 ${arrow(b.xray, '/일')}${b.radius[n] > b.radius[lv] ? ' · 5×5' : ''}`;
