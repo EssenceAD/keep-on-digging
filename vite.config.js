@@ -11,8 +11,9 @@ const shotSaver = {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
-        mkdirSync('docs/screens', { recursive: true });
-        writeFileSync(`docs/screens/${name}.png`, Buffer.from(Buffer.concat(chunks).toString().split(',')[1], 'base64'));
+        const dir = server.config.root + '/docs/screens';
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(`${dir}/${name}.png`, Buffer.from(Buffer.concat(chunks).toString().split(',')[1], 'base64'));
         res.end('ok');
       });
     });

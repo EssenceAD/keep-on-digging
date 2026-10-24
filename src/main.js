@@ -14,6 +14,7 @@ import { COLOR, bar, button, frame, icon, kit, label, loadUI, portraitFrame, set
 import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
 import { loadSave, resetSave, writeSave } from './save.js';
+import { computeOffline } from './offline.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
 import { newSeed } from './rng.js';
 
@@ -23,14 +24,16 @@ const VERSION = 'v0.5';
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
 let saving = true;
-const save = () => { if (!saving) return; syncRound?.(); writeSave(S); };
-setInterval(save, B.autosaveSeconds * 1000);
-window.addEventListener('pagehide', save);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
+/** seen: 지금 화면을 보고 있다(방치 기준 시각 lastSeen 을 지금으로). 숨겨진 동안의 자동 저장은 lastSeen 을 안 건드린다 */
+const save = (seen = document.visibilityState === 'visible') => { if (!saving) return; syncRound?.(); if (seen) S.idle.lastSeen = Date.now(); S.savedAt = Date.now(); writeSave(S); };
+setInterval(() => save(), B.autosaveSeconds * 1000);
+window.addEventListener('pagehide', () => save(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(true); else settleOffline(); });
 // 게임 시계: 현실 24분 = 하루
 const TICK_PER_DAY = B.dayRealSeconds;
 const clockText = () => { const t = S.tick / TICK_PER_DAY * 24; return `${S.day}일차 ${String(Math.floor(t)).padStart(2, '0')}:${String(Math.floor((t % 1) * 60)).padStart(2, '0')}`; };
 const whTotal = () => Object.values(S.warehouse).reduce((a, b) => a + b, 0);
+const whCap = () => B.warehouseCapacity;                    // 회사 창고 Lv (명세3 §2)
 const now = () => S.day * TICK_PER_DAY + S.tick;            // 라운드 시간 재기용(현실 초)
 
 // ---------------------------------------------------------------- 세계 (단위 = 타일 1px. 화면에는 DENS배 촘촘하게 그린다)
@@ -512,6 +515,10 @@ function endRound(reason = 'retreat') {
   const base = rd.bid || B.plotSizes[rd.card.size].price;          // 공짜 구획은 그 크기 시작가 기준으로 별
   rd.stats.profit = profit;
   rd.stats.stars = B.stars.filter((t) => profit / base >= t).length;
+  // 방치 대상 (명세3 §1-1): 남은 광맥 칸. 다 캤으면 0 → 새 라운드를 돌아야 방치 수입이 이어진다
+  const lo = { C: 0, s: 0, g: 0, j: 0, c: 0 };
+  if (W) for (const row of W.g) for (const ch of row) if (ORE_KEYS.has(ch)) lo[ch]++;
+  S.idle.leftover = lo;
   tutorialDone(6);
   save(); buildUI();
 }
@@ -520,6 +527,106 @@ function nextAuction() {
   S.stats.rounds++; S.stats.profitTotal += rd.stats.profit; S.stats.bestVein = Math.max(S.stats.bestVein, rd.stats.maxVein);
   S.auction = null;                                                // 라운드가 끝나면 바로 새 경매
   startAuction();
+}
+
+// ---------------------------------------------------------------- 방치 정산 + 「돌아오셨군요」 카드 (명세3 §1)
+let welcome = null;                                     // 정산 요약 (카드가 떠 있는 동안)
+const idleHi = new Set(); let idleHiUntil = 0;          // [광종별로 고르기] → 판매 행 하이라이트
+const advanceClock = (sec) => { S.tick += sec; while (S.tick >= TICK_PER_DAY) { S.tick -= TICK_PER_DAY; S.day++; } };
+function settleOffline(boot = false) {
+  const r = computeOffline(S, {
+    market, gameNow: now, advanceClock,
+    miners: crew.length, pickGrade: B.pickTier, capHours: S.idle.capHours, whRoom: whCap() - whTotal(),
+  });
+  if (!r) return null;
+  if (r.midRound) { if (!boot) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3); return r; }
+  if (r.pendingTotal > 0 || r.missed.length) welcome = r;
+  save();
+  if (!boot) buildUI();
+  return r;
+}
+const pendingOf = () => ORES.filter((o) => S.idle.pending[o.key] > 0);
+const idleValue = () => pendingOf().reduce((a, o) => a + S.idle.pending[o.key] * priceOf(o.key), 0);
+function closeWelcome() { welcome = null; save(); buildUI(); }
+function idleSellAll(from) {
+  const gain = idleValue();
+  for (const o of ORES) S.idle.pending[o.key] = 0;
+  if (gain) { S.gold += gain; S.stats.idleSold = (S.stats.idleSold ?? 0) + gain; sfx('stash'); flyNumber('coin', from.x, from.y, gain, () => { refreshUI(); bumpCounter('coin'); }); }
+  closeWelcome();
+}
+/** 창고로. 넘치는 건 자동 판매 */
+function idleStore(highlight) {
+  let gain = 0;
+  idleHi.clear();
+  for (const o of ORES) {
+    const p = S.idle.pending[o.key]; if (!p) continue;
+    const put = Math.min(p, Math.max(0, whCap() - whTotal()));
+    stash[o.key] += put; gain += (p - put) * priceOf(o.key);
+    S.idle.pending[o.key] = 0;
+    idleHi.add(o.key);
+  }
+  if (gain) { S.gold += gain; toast(`창고가 꽉 차서 넘친 건 팔았어요 +${gain}`, 'brok'); }
+  sfx('stash');
+  if (highlight) { idleHiUntil = time + 6; if (L.portrait) { sheetTab = 'sell'; S.settings.sheetFolded = false; } }
+  closeWelcome();
+  if (highlight && L.portrait) layout();
+}
+const dur = (sec) => { const m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? `${h}시간 ${m % 60}분` : `${m}분`; };
+function whenText(day, tick) {
+  const hr = (tick / TICK_PER_DAY) * 24;
+  const part = hr < 6 ? '새벽' : hr < 11 ? '아침' : hr < 14 ? '낮' : hr < 18 ? '오후' : hr < 21 ? '저녁' : '밤';
+  return `${day === S.day ? '오늘' : day === S.day - 1 ? '어제' : `${day}일차`} ${part}`;
+}
+function makeWelcome() {
+  const r = welcome, uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS);
+  const box = new Container();
+  const dim = new Graphics().rect(0, 0, uW, uH).fill({ color: 0x0a0812, alpha: 0.6 }); dim.eventMode = 'static'; box.addChild(dim);
+  const w = Math.min(uW - 12, 250), ink = { color: COLOR.paperInk, shadow: false };
+  const c = new Container(); box.addChild(c);
+  const pf = portraitFrame(tex(NPC.halabeoji), 32, 'wood'); pf.position.set(6, 6); c.addChild(pf);
+  const t = label('돌아오셨군요!', ink); t.position.set(44, 8); c.addChild(t);
+  const a = label(`떠난 지 ${dur(r.away)}`, { ...ink, small: true, color: 0x8a7a68 }); a.position.set(44, 23); c.addChild(a);
+  let y = 44;
+  const rows = pendingOf();
+  if (rows.length) {
+    const head = label('캐 둔 것 · 지금 시세 · 떠난 뒤', { ...ink, small: true, color: 0x8a7a68 }); head.position.set(8, y); c.addChild(head); y += 13;
+    for (const o of rows) {
+      const n = S.idle.pending[o.key], pr = priceOf(o.key);
+      const pct = Math.round((market.coef[o.key] / (r.before[o.key] || 1) - 1) * 100);
+      const ic = icon(tex(ICON[o.key])); ic.position.set(10, y + 2); c.addChild(ic);
+      const nm = label(`${o.name} ×${n}`, { ...ink, small: true }); nm.position.set(22, y); c.addChild(nm);
+      const pv = label(String(pr), { ...ink, small: true }); pv.position.set(Math.round(w * 0.5), y); c.addChild(pv);
+      if (pct) { const ar = icon(kit(pct < 0 ? 'arrow_down' : 'arrow_up')); ar.position.set(Math.round(w * 0.5) + 22, y + 2); c.addChild(ar); }
+      const pc = label(`${pct > 0 ? '+' : ''}${pct}%`, { ...ink, small: true, color: pct > 0 ? 0x46702e : pct < 0 ? 0xb84a62 : 0x8a7a68 }); pc.position.set(w - 10 - Math.ceil(pc.width), y); c.addChild(pc);
+      y += 13;
+    }
+    let sum = label(`예상 매출 ${rows.map((o) => S.idle.pending[o.key] * priceOf(o.key)).join(' + ')} = ${idleValue().toLocaleString()}`, { ...ink, small: true });
+    if (sum.width > w - 16) { sum.destroy(); sum = label(`예상 매출 ${idleValue().toLocaleString()}`, { ...ink, small: true }); }
+    sum.position.set(8, y + 2); c.addChild(sum); y += Math.ceil(sum.height) + 6;
+  } else { const n0 = label('광부들이 캐 둔 건 없어요', { ...ink, small: true }); n0.position.set(8, y); c.addChild(n0); y += 15; }
+  const notes = [];
+  if (r.capped) notes.push(`광부들이 ${S.idle.capHours}시간 넘게 기다렸어요`);
+  if (r.whFull) notes.push('창고가 꽉 차서 멈췄어요. 창고를 늘려 보세요');
+  if (r.exhausted) notes.push('남은 광맥을 다 캤어요. 새 구획을 사야 계속 캐요');
+  else if (!Object.values(S.idle.leftover).some(Boolean)) notes.push('캘 광맥이 없어요. 철수할 때 남긴 광맥을 광부들이 캐요');
+  if (r.missed.length) { const m = r.missed[r.missed.length - 1], o = ORES.find((q) => q.key === m.key); notes.push(`${whenText(m.day, m.tick)} ${o.name} 시세가 ×${B.surgeMul} 갔어요 (놓침)${r.missed.length > 1 ? ` 외 ${r.missed.length - 1}번` : ''}`); }
+  for (const s of notes) { const l = label(s, { ...ink, small: true, color: 0x8a5a24, wrap: w - 16 }); l.position.set(8, y); c.addChild(l); y += Math.ceil(l.height) + 2; }
+  y += 4;
+  const bw = w - 16;
+  if (rows.length) {
+    const sellB = button('wood', bw, 20, `지금 팔기 ${idleValue().toLocaleString()}`, () => { unlockAudio(); idleSellAll(sellB.getGlobalPosition()); });
+    sellB.position.set(8, y); c.addChild(sellB); y += 24;
+    const hw = Math.floor((bw - 4) / 2);
+    const st = button('paper', hw, 18, '창고에 두기', () => idleStore(false), { small: true }); st.position.set(8, y); c.addChild(st);
+    const pk = button('paper', hw, 18, '골라 팔기 ▸', () => idleStore(true), { small: true }); pk.position.set(12 + hw, y); c.addChild(pk); y += 22;
+    const ad = button('stone', bw, 16, '광고 보고 방치 2배 받기 · 준비 중', () => toast('곧 열려요'), { small: true }); ad.alpha = 0.6; ad.position.set(8, y); c.addChild(ad); y += 20;
+  } else { const ok = button('wood', bw, 20, '확인', closeWelcome); ok.position.set(8, y); c.addChild(ok); y += 24; }
+  const foot = label(state() === 'RESULT' ? '라운드 결과를 보고 다음 경매로' : '오늘 경매 준비됐어요', { ...ink, small: true, color: 0x8a7a68 });
+  foot.position.set(Math.round((w - foot.width) / 2), y); c.addChild(foot); y += 14;
+  c.addChildAt(frame('paper', w, y + 4, 'panel'), 0);
+  c.position.set(Math.round((uW - w) / 2), Math.max(4, Math.round((uH - y) / 2)));
+  ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
+  return box;
 }
 
 // ---------------------------------------------------------------- 경매 진행: 플레이어 호가 → 길드 호가(연출) → 2라운드 → 낙찰
@@ -775,6 +882,7 @@ function buildUI() {
   const ov = makeOverlay();
   if (ov) uiRoot.addChild(ov);
   if (tut) uiRoot.addChild(tut);
+  if (welcome) uiRoot.addChild(makeWelcome());
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
   refreshUI();
@@ -1085,7 +1193,7 @@ function makeSettings(w) {
 function refreshUI() {
   if (!ui.counters) return;
   ui.counters.coin && (ui.counters.coin.text = String(S.gold));
-  ui.counters.wh && (ui.counters.wh.text = `${whTotal()}/${B.warehouseCapacity}`);
+  ui.counters.wh && (ui.counters.wh.text = `${whTotal()}/${whCap()}`);
   ui.counters.clock && (ui.counters.clock.text = clockText());
   for (const [key, r] of Object.entries(ui.rows)) {
     r.qty.text = `×${stash[key]}`;
@@ -1095,6 +1203,7 @@ function refreshUI() {
     r.arrow.texture = kit(up < 0 ? 'arrow_down' : 'arrow_up'); r.arrow.visible = up !== 0;
     r.btn.setDisabled(stash[key] === 0);
     r.bg.clear(); if (surge) r.bg.rect(0, 0, r.w - 33, 12).fill({ color: 0x9cc45a, alpha: 0.18 + 0.18 * Math.sin(time * 8) });
+    else if (idleHi.has(key) && time < idleHiUntil) r.bg.rect(0, 0, r.w - 33, 12).fill({ color: 0xf5cf6a, alpha: 0.35 });
     r.price.tint = surge && now() >= market.surge.start ? 0x46702e : 0xffffff;
     const hist = market.hist[key].slice(-8), max = Math.max(...hist), min = Math.min(...hist);
     r.spark.clear();
@@ -1736,7 +1845,7 @@ function updateCart(dt) {
   if (cart.mode === 'unload') {
     cart.unloadT -= dt;
     if (cart.unloadT > 0) return;
-    let room = B.warehouseCapacity - whTotal() - inFlight;
+    let room = whCap() - whTotal() - inFlight;
     for (const k of Object.keys(cart.cargo)) {
       const put = Math.min(cart.cargo[k], room);
       if (put > 0) { cart.cargo[k] -= put; room -= put; orePopup(k, cart.x, cart.y - 14, put); }
@@ -2109,6 +2218,7 @@ app.ticker.add((tk) => {
 });
 
 // ================================================================ 시작: 저장된 라운드가 있으면 이어서, 없으면 경매
+const bootIdle = settleOffline(true);
 buildWorld();
 layout();
 if (!S.round) startAuction();
@@ -2117,10 +2227,11 @@ else {
   Object.assign(cart.cargo, S.round.cartCargo ?? {});
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }
+if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3);
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
