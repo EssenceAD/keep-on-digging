@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.0-1';
+const VERSION = 'v1.0-2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -353,7 +353,7 @@ function syncWallLamps() {
   }
 }
 function buildWorld() {
-  setTimeout(() => { syncWallLamps(); drawShafts(); }, 0);                              // 구획이 바뀌면 벽 랜턴도 다시
+  setTimeout(() => { syncWallLamps(); drawShafts(); drawSurvey(); }, 0);                              // 구획이 바뀌면 벽 랜턴도 다시
   const rd = S.round;
   const rows = rd ? rd.grid.length : B.plotSizes.S.rows;
   W = {
@@ -584,6 +584,7 @@ function startRound(card, bid) {
   S.auction = null;
   buildWorld();
   mole.x = GX + 8; mole.goal = undefined; mole.wait = 0.5;
+  toolArmed = null; placeClues();
   save(); buildUI();
   if (!card.tutorial) toast(card.free ? '공짜 구획이에요. 힌트는 없어요' : `${card.name} 낙찰! 두더지가 냄새를 맡아요`, 'momo');
 }
@@ -595,7 +596,7 @@ function startDig() {
   if (!S.round) return;
   S.round.state = 'DIG';
   S.round.surveyLeft = 0;
-  xray.clear();
+  xray.clear(); drawSurvey();
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) refreshAround(gx, gy, 0);
   save(); buildUI();
 }
@@ -1656,7 +1657,7 @@ function updateAuction(dt) {
 }
 
 // ---------------------------------------------------------------- 탐사: 두더지가 걷다 아래 3칸 안 광맥 위에서 킁킁 · 투시 랜턴
-let xrayArmed = false;
+let toolArmed = null;                                       // 'vibro' | 'xray' — 다음 톡에 쓰임
 function veinBelow(gx) {                                  // 이 열 아래 moleSniffDepth칸 안 광맥 크기
   if (!W) return 0;
   for (let gy = 0; gy < Math.min(W.rows, CF.sniffDepth); gy++) {
@@ -1672,9 +1673,9 @@ function veinTypeBelow(gx) {
 function updateSurvey(dt) {
   const rd = S.round;
   if (tutOn()) { if (ui.survey) ui.survey.text = S.tutorial.sniffed ? '탐사 끝을 눌러요' : '두더지를 지켜봐요'; return; }
-  rd.surveyLeft -= dt;
-  if (rd.surveyLeft <= 0) { startDig(); return; }
-  if (ui.survey) ui.survey.text = `탐사 ${Math.ceil(rd.surveyLeft)}초`;
+  rd.surveyLeft = Math.max(0, rd.surveyLeft - dt);
+  if (rd.surveyLeft <= 0 && !(rd.vibroLeft > 0) && !(rd.xrayLeft > 0) && !rd.stakes?.some((q) => q.at > time)) { startDig(); return; }
+  if (ui.survey) ui.survey.text = rd.surveyLeft > 0 ? `두더지 ${Math.ceil(rd.surveyLeft)}초` : '어디를 뚫을까요?';
 }
 function updateMole(dt) {
   if (tutOn() && state() === 'SURVEY') {                       // 튜토리얼: 두더지가 구리 위(x=TUT_SHAFT_X)로 가서 3초 킁킁
@@ -1682,11 +1683,11 @@ function updateMole(dt) {
     if (S.tutorial.sniffed) { mole.sniffing = false; return; }
     if (mole.tw == null) {
       const d = tx - mole.x; mole.face = Math.sign(d) || 1; mole.x += Math.sign(d) * Math.min(Math.abs(d), B.moleSpeed * dt);
-      if (Math.abs(d) < 0.5) { mole.tw = 3; mole.face = -1; emote(mole, '킁킁', 3); sfx('mole_sniff'); }
+      if (Math.abs(d) < 0.5) { mole.tw = 3; mole.face = -1; emote(mole, '킁킁', 3); sfx('mole_sniff'); (S.round.paws ??= []).push(TUT_SHAFT_X); drawSurvey(); }
     } else { mole.tw -= dt; mole.sniffing = true; if (mole.tw <= 0) { S.tutorial.sniffed = true; mole.tw = null; mole.sniffing = false; save(); } }
     return;
   }
-  if (state() === 'SURVEY') {
+  if (state() === 'SURVEY' && S.round.surveyLeft > 0) {
     if (mole.wait > 0) { mole.wait -= dt; mole.sniffing = mole.wait > 0; return; }
     if (mole.goal === undefined) mole.goal = mole.x < GX + GW * T / 2 ? GX + GW * T - 8 : GX + 8;
     const d = mole.goal - mole.x;
@@ -1697,7 +1698,7 @@ function updateMole(dt) {
     if (after !== before && after >= 0 && after < GW) {
       const size = veinBelow(after);
       const vt = CF.oreColor ? veinTypeBelow(after) : null;
-      if (size) { mole.wait = 0.6 + size * 0.12; mole.x = GX + after * T + 8; sfx('mole_sniff', true); emote(mole, (vt ? ORES.find((o) => o.key === vt).name + ' ' : '') + (CF.sniffSize ? `킁킁 ${'•'.repeat(size >= B.bigVein ? 3 : size >= 6 ? 2 : 1)}` : '킁킁'), 0.6 + size * 0.12, vt ? ORE_COLOR[vt] : undefined); }
+      if (size) { mole.wait = 0.6 + size * 0.12; mole.x = GX + after * T + 8; sfx('mole_sniff', true); if (!S.round.paws?.includes(after)) { (S.round.paws ??= []).push(after); drawSurvey(); } emote(mole, (vt ? ORES.find((o) => o.key === vt).name + ' ' : '') + (CF.sniffSize ? `킁킁 ${'•'.repeat(size >= B.bigVein ? 3 : size >= 6 ? 2 : 1)}` : '킁킁'), 0.6 + size * 0.12, vt ? ORE_COLOR[vt] : undefined); }
     }
     if (Math.abs(d) < 0.5) mole.goal = undefined;
   } else {
@@ -1714,10 +1715,120 @@ function xrayAt(wx, wy) {
     if (x < 0 || x >= GW || y < 0 || y >= GH) continue;
     xray.set(`${x},${y}`, time + B.xraySeconds); refreshAround(x, y, 0);
   }
-  S.round.xrayLeft--; xrayArmed = false; sfx('ui_open');
-  setTimeout(() => { for (let y = gy - rr; y <= gy + rr; y++) for (let x = gx - rr; x <= gx + rr; x++) if (x >= 0 && x < GW && y >= 0 && y < GH) refreshAround(x, y, 0); }, B.xraySeconds * 1000 + 50);
+  S.round.xrayLeft--; toolArmed = null; sfx('ui_open');
+  const mem = S.round.xmem ??= [];                              // 본 광석 칸은 반투명으로 기억 (명세5 §1)
+  for (let y = gy - rr; y <= gy + rr; y++) for (let x = gx - rr; x <= gx + rr; x++) if (x >= 0 && x < GW && y >= 0 && y < W.rows && ORE_KEYS.has(W.g[y][x]) && !mem.includes(`${x},${y}`)) mem.push(`${x},${y}`);
+  setTimeout(() => { for (let y = gy - rr; y <= gy + rr; y++) for (let x = gx - rr; x <= gx + rr; x++) if (x >= 0 && x < GW && y >= 0 && y < GH) refreshAround(x, y, 0); drawSurvey(); }, B.xraySeconds * 1000 + 50);
   buildUI();
   return true;
+}
+
+// ---------------------------------------------------------------- 탐사 도구 (명세5 §1): 진동계 · 지표 단서 · 지상 표시(🐾 · 말뚝 · 투시 기억)
+const TV = B.tools;
+const toolLv = (k) => Math.min((S.upgrades?.[k] ?? 1) - 1, 3);
+const vibroUses = () => TV.vibro.uses[toolLv('vibro')];
+const CLUE = { C: ['grass', '변색된 풀', '구리'], s: ['gravel', '반짝이는 자갈', '은·금'], g: ['gravel', '반짝이는 자갈', '은·금'], j: ['crystal', '수정 조각', '보석'], c: ['moss', '푸른 이끼', '발광석'], o: ['crack', '갈라진 땅', '빈 공간'], w: ['damp', '축축한 땅', '지하수'] };
+/** 라운드 시작: 지표 단서 배치 — 참 단서(광맥·빈 공간·지하수 위) + 같은 비율의 헛단서 */
+function placeClues() {
+  const rd = S.round, C = TV.clue, used = new Set(), out = [];
+  const colsOf = (cells) => [...new Set(cells.map((q) => q[0]))];
+  const put = (x, kind, truth) => { if (used.has(x)) return; used.add(x); out.push({ x, kind, truth }); };
+  if (!rd.card.tutorial) for (const v of W.veins.list) if (Math.random() < C.perVein) { const xs = colsOf(v.cells); put(xs[Math.floor(Math.random() * xs.length)], v.type, true); }
+  for (const [ch, p] of [['o', C.cave], ['w', C.water]]) {
+    if (rd.card.tutorial) break;
+    const xs = []; W.g.forEach((row) => row.forEach((c, x) => { if (c === ch) xs.push(x); }));
+    if (xs.length && Math.random() < p) put(xs[Math.floor(Math.random() * xs.length)], ch, true);
+  }
+  const nTrue = out.length, nFalse = Math.round(nTrue * (1 - C.truth) / C.truth);
+  const kinds = Object.keys(CLUE);
+  for (let i = 0, tries = 0; i < nFalse && tries < 60; tries++) {
+    const x = Math.floor(Math.random() * GW), k = kinds[Math.floor(Math.random() * kinds.length)];
+    const below = W.g.some((row) => row[x] === k) || (k !== 'o' && k !== 'w' && W.g.some((row) => ORE_KEYS.has(row[x]) && row[x] === k));
+    if (used.has(x) || below) continue;
+    put(x, k, false); i++;
+  }
+  rd.clues = out; rd.paws = []; rd.stakes = []; rd.xmem = []; rd.vibroLeft = vibroUses();
+  drawSurvey();
+}
+/** 진동계: 그 열 맨 위 광맥 → "깊이 4~6 · 중간" (3초 뒤) */
+function vibroAt(wx) {
+  const rd = S.round, gx = Math.floor((wx - GX) / T);
+  if (gx < 0 || gx >= GW || !(rd.vibroLeft > 0)) return false;
+  if (rd.stakes.some((q) => q.x === gx)) { toast('여긴 이미 말뚝을 박았어요'); return false; }
+  rd.vibroLeft--; toolArmed = null;
+  const st = { x: gx, text: '…', color: null, at: time + TV.vibro.seconds };
+  rd.stakes.push(st); sfx('ui_tap'); shake = 0.15; shakeAmp = 0.8;
+  setTimeout(() => {
+    let id = -1, d = 0;
+    for (let y = 0; y < W.rows && id < 0; y++) { const v = W.veins.id[y][gx]; if (v >= 0 && ORE_KEYS.has(W.g[y][gx])) { id = v; d = y + 1; } }
+    if (id < 0) { st.text = '없음'; }
+    else {
+      const v = W.veins.list[id], r = TV.vibro.range[toolLv('vibro')], lo = Math.max(1, d - Math.floor(Math.random() * (r + 1)));
+      const word = TV.sizeWords.find(([n]) => v.size <= n)[1];
+      st.text = `깊이 ${lo}~${lo + r} · ${word}`;
+      if (TV.vibro.color[toolLv('vibro')]) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
+    }
+    st.at = 0; sfx(id < 0 ? 'pass' : 'vein_found', true); drawSurvey(); syncRound();
+  }, TV.vibro.seconds * 1000);
+  drawSurvey(); buildUI(); syncRound();
+  return true;
+}
+function armTool(k) {
+  const left = k === 'vibro' ? S.round.vibroLeft : S.round.xrayLeft;
+  if (!(left > 0)) return;
+  toolArmed = toolArmed === k ? null : k; sfx('ui_tap');
+  toast(toolArmed ? (k === 'vibro' ? '말뚝 박을 땅을 톡!' : '보고 싶은 곳을 톡!') : '취소');
+  buildUI();
+}
+function useToolAt(wx, wy) {
+  if (toolArmed === 'vibro') return vibroAt(wx);
+  if (toolArmed === 'xray') return xrayAt(wx, wy);
+  return false;
+}
+/** 지상 표시: 🐾 발자국 · 단서 소품 · 진동계 말뚝 · 투시로 본 광석(반투명) */
+const surveyG = new Graphics(); markU.addChild(surveyG);
+const stakeUI = new Container();                             // worldUI는 아래에서 만들어짐 → 처음 그릴 때 붙임
+let stakeKey = '';
+function drawSurvey() {
+  const g = surveyG; g.clear();
+  const rd = S.round; if (!rd || !W || !['SURVEY', 'DIG'].includes(rd.state)) return;
+  const y0 = SURFACE_Y;
+  for (const c of rd.clues ?? []) {
+    const cx = cellX(c.x), [kind] = CLUE[c.kind];
+    if (kind === 'grass') for (const dx of [-4, 0, 4]) g.moveTo(cx + dx, y0 + 1).lineTo(cx + dx - 1, y0 - 3).moveTo(cx + dx, y0 + 1).lineTo(cx + dx + 1, y0 - 2).stroke({ width: 1, color: 0xb87a3a });
+    if (kind === 'gravel') { for (const [dx, dy] of [[-4, 0], [0, 1], [3, 0], [-1, -1]]) g.rect(cx + dx, y0 + dy - 1, 2, 1.5).fill(0xd8d0b8); g.rect(cx + 1, y0 - 3, 1, 1).fill(0xffffff); }
+    if (kind === 'crystal') g.poly([cx - 2, y0 + 1, cx, y0 - 5, cx + 2, y0 + 1]).fill(0xb070e0).poly([cx + 2, y0 + 1, cx + 4, y0 - 2, cx + 5, y0 + 1]).fill(0x8a4ab0);
+    if (kind === 'moss') for (const dx of [-4, -1, 3]) g.circle(cx + dx, y0, 1.6).fill(0x48b8a8);
+    if (kind === 'crack') g.moveTo(cx - 5, y0 + 1).lineTo(cx - 2, y0 + 3).lineTo(cx + 1, y0 + 1).lineTo(cx + 5, y0 + 4).stroke({ width: 1, color: 0x1a120e });
+    if (kind === 'damp') g.ellipse(cx, y0 + 2, 6, 1.8).fill({ color: 0x2a3a52, alpha: 0.8 });
+  }
+  for (const x of rd.paws ?? []) { const cx = cellX(x); for (const [dx, dy] of [[-3, 5], [2, 6]]) { g.circle(cx + dx, y0 + dy, 1.1).fill({ color: 0x3a2418, alpha: 0.9 }); g.circle(cx + dx - 1, y0 + dy - 1.6, 0.5).fill({ color: 0x3a2418, alpha: 0.9 }); g.circle(cx + dx + 1, y0 + dy - 1.6, 0.5).fill({ color: 0x3a2418, alpha: 0.9 }); } }
+  for (const st of rd.stakes ?? []) { const cx = cellX(st.x) + 4; g.rect(cx - 0.5, y0 - 10, 1.5, 12).fill(0x8a5a34).rect(cx - 2, y0 - 11, 4.5, 2).fill(0xc8a070); }
+  for (const k of rd.xmem ?? []) {
+    const [x, y] = k.split(',').map(Number); const t = W.g[y]?.[x];
+    if (!ORE_KEYS.has(t) || revealed(x, y)) continue;
+    g.rect(GX + x * T + 3, GY + y * T + 3, T - 6, T - 6).fill({ color: ORE_COLOR[t], alpha: 0.35 }).stroke({ width: 1, color: ORE_COLOR[t], alpha: 0.6 });
+  }
+}
+/** 말뚝 글자 (화면 층, 칸을 따라감) */
+function drawStakeUI() {
+  const rd = S.round, show = !!rd?.stakes?.length && ['SURVEY', 'DIG'].includes(rd.state) && view === 'mine';
+  if (!stakeUI.parent) worldUI.addChild(stakeUI);
+  stakeUI.visible = show; if (!show) return;
+  const key = rd.stakes.map((q) => q.x + q.text).join('|') + L.uiS;
+  if (key !== stakeKey) {
+    stakeKey = key; stakeUI.removeChildren().forEach((c) => c.destroy({ children: true }));
+    for (const st of rd.stakes) {
+      const t = label(st.text, { small: true, color: st.color ?? COLOR.paper }); t.sx = st.x; stakeUI.addChild(t);
+    }
+  }
+  for (const t of stakeUI.children) {
+    t.scale.set(L.uiS);
+    const [sx, sy] = toScreen(cellX(t.sx) + 4, SURFACE_Y - 12);
+    const st = rd.stakes.find((q) => q.x === t.sx);
+    const jig = st?.at > time ? Math.sin(time * 40) * 1.5 : 0;
+    t.position.set(Math.round(sx - t.width / 2 + jig), Math.round(sy - t.height));
+  }
 }
 
 // ---------------------------------------------------------------- 머리 위 말풍선 (글자) — UI 층에 그리되 캐릭터를 따라감
@@ -2102,10 +2213,8 @@ function makeSurveyBar(x, y, w) {
   c.addChild(frame('paper', w, h, 'panel'));
   setOverlayRect(x, y, w, h);
   const t = label('', { small: true, color: COLOR.paperInk, shadow: false }); t.position.set(6, 5); c.addChild(t); ui.survey = t;
-  const xb = button('paper', 70, 16, `투시 랜턴 ${S.round.xrayLeft}`, () => { if (S.round.xrayLeft > 0) { xrayArmed = !xrayArmed; toast(xrayArmed ? '보고 싶은 곳을 톡!' : '투시 취소'); } }, { small: true });
-  xb.setDisabled(S.round.xrayLeft <= 0); xb.position.set(w - 128, 3); c.addChild(xb);
-  const sk = button('stone', 50, 16, tutOn() ? '탐사 끝' : '건너뛰기', () => { if (tutOn() && !S.tutorial.sniffed) return; startDig(); }, { small: true }); sk.position.set(w - 54, 3); c.addChild(sk); ui.refs.surveyEnd = sk;
-  if (tutOn()) xb.visible = false;
+  const sk = button('wood', 50, 16, tutOn() ? '탐사 끝' : '시추 시작', () => { if (tutOn() && !S.tutorial.sniffed) return; toolArmed = null; startDig(); }, { small: true }); sk.position.set(w - 54, 3); c.addChild(sk); ui.refs.surveyEnd = sk;
+  if (!tutOn()) toolButtons(c, w - 58, 3);
   return c;
 }
 const u0 = (v) => Math.round(v / L.uiS);
@@ -2121,14 +2230,25 @@ function makeScrollBar() {
   ui.overlayRect2 = { x: x * L.uiS, y: (y0 - 16) * L.uiS, w: 14 * L.uiS, h: (y1 - y0 + 34) * L.uiS };
   return c;
 }
+/** [진동 n] [투시 n] — 오른쪽 끝 xr에서 왼쪽으로. 남은 게 없으면 안 그림. 왼쪽 끝 x를 돌려줌 */
+function toolButtons(c, xr, y) {
+  const rd = S.round;
+  for (const [k, name, n] of [['xray', '투시', rd.xrayLeft], ['vibro', '진동', rd.vibroLeft]]) {
+    if (!(n > 0)) continue;
+    const bt = button(toolArmed === k ? 'wood' : 'paper', 40, 16, `${name} ${n}`, () => armTool(k), { small: true });
+    xr -= 42; bt.position.set(xr, y); c.addChild(bt); ui.refs[k] = bt;
+  }
+  return xr;
+}
 function makeDigBar(x, y, w) {
   const c = new Container(); c.position.set(x, y);
   const b = button('stone', 44, 16, '철수', () => askRetreat(), { small: true }); b.position.set(w - 48, 0); c.addChild(b); ui.refs.retreat = b;
-  if (S.stats.rounds < DIG_LINE_ROUNDS || tutOn()) { const hl = label(DIG_LINE, { small: true, wrap: w - 64 }); hl.position.set(2, 2); c.addChild(hl); }   // §6 고정 안내줄 (3라운드까지)
   let bw = 48;
   if (W?.water.some((r) => r.some(Boolean)) && !(S.round.pumpLeft > 0)) {
     const pmp = button('paper', 56, 16, CF.pumpCost ? `펌프 ${CF.pumpCost}` : '펌프', pump, { small: true }); pmp.position.set(w - 108, 0); c.addChild(pmp); bw = 108;
   }
+  if (!tutOn()) bw = w - toolButtons(c, w - bw - 4, 0) + 4;                 // 시추 중에도 남은 도구 (명세5 §1)
+  if (S.stats.rounds < DIG_LINE_ROUNDS || tutOn()) { const hl = label(DIG_LINE, { small: true, wrap: Math.max(60, w - bw - 6) }); hl.position.set(2, 2); c.addChild(hl); }   // §6 고정 안내줄 (3라운드까지)
   setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
 }
@@ -3318,7 +3438,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
   }
   if (inPanels(e.clientX, e.clientY) || shaftHits.some((r) => inRect(r, e.clientX, e.clientY))) return;
   const [wx, wy] = toWorld(e.clientX, e.clientY);
-  if (state() === 'SURVEY' && xrayArmed) { xrayAt(wx, wy); return; }
+  if (toolArmed && ['SURVEY', 'DIG'].includes(state())) { useToolAt(wx, wy); return; }
   const mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
   drag = { id: e.pointerId, mode, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY };
 });
@@ -3337,6 +3457,10 @@ app.canvas.addEventListener('pointermove', (e) => {
 window.addEventListener('pointerup', (e) => {
   touches.delete(e.pointerId);
   if (!drag || e.pointerId !== drag.id) return;
+  if (drag.mode === 'maybe' && state() === 'SURVEY') {              // 단서 소품 톡 → 이름 (반은 헛것)
+    const [wx, wy] = toWorld(e.clientX, e.clientY), [gx] = cellAtWorld(wx, wy), cl = S.round.clues?.find((q) => q.x === gx);
+    if (cl && wy < GY + 4 && wy > SURFACE_Y - 16) { const [, nm, what] = CLUE[cl.kind]; toast(`${nm} — 아래에 ${what}? (단서는 반쯤 헛것)`, 'momo', 2.5); }
+  }
   if (drag.mode === 'maybe' && state() === 'DIG') {                 // 톡: 지상 띠(맨 윗줄 포함) → 그 열에 입구
     const [wx, wy] = toWorld(e.clientX, e.clientY), [gx] = cellAtWorld(wx, wy);
     if (wy < GY + T && wy > GY - 48 && gx >= 0 && gx < GW) openShaft(gx);
@@ -3393,7 +3517,7 @@ app.ticker.add((tk) => {
   if (st === 'SURVEY') updateSurvey(dt);
   updateMole(dt);
   updateCrew(dt);
-  shaftTick(); drawShaftUI();
+  shaftTick(); drawShaftUI(); drawStakeUI(); if (fpsN % 20 === 0) drawSurvey();
   if (market.surge && fpsN % 3 === 0) refreshUI();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
 
@@ -3500,7 +3624,7 @@ buildWorld();
 layout();
 if (!S.round) startAuction();
 else {
-  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= [];
+  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= []; S.round.stakes ??= []; for (const q of S.round.stakes) if (q.text === '…') q.text = '?';
   (S.round.cartCargos ?? [S.round.cartCargo, S.round.cartCargo2]).forEach((cg, i) => cg && carts[i] && Object.assign(carts[i].cargo, cg));
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }
@@ -3511,7 +3635,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
