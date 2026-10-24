@@ -9,9 +9,11 @@
 //   art/buildings.px.js    명세3 §2-3 지상 부지 건물 9종 × Lv1/3/5 + 장식 6 (형철 초안 · 폴백)
 //   art/buildings_gpt.px.js 명세3 §2-3-1 GPT 건물 시트 → png2pxl (sh scripts/buildings.sh) — 게임은 이걸 먼저 씀
 //   art/yard/yard.px.js    PATCH_V10 회사 부지 장면 (형철 pxl 조립 · tiles.px.js 포함) → scenes/yard_day·yard_night + 덤불 소품(yd_*)
+//   art/yard/yard_anims.px.js  위 장면의 _ripple·_fire 를 yard_ripple·yard_fire 로 내보냄 (yard.px.js 를 include — 장면도 이걸로 빌드)
+//   art/yard/buildings64.px.js 부지 장면용 건물 64×64 · 장식 (sh scripts/buildings64.sh — GPT 원본에서 바로 64칸)
 // pxl: crsolver/claude-pxl (MIT) — ~/.claude/skills/pxl-pixel-art 에 클론 (PXL 환경변수로 경로 바꿀 수 있음)
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,7 +22,7 @@ rmSync('art/out', { recursive: true, force: true });
 rmSync('art/office/out', { recursive: true, force: true });
 rmSync('art/ui/out', { recursive: true, force: true });
 rmSync('art/yard/out', { recursive: true, force: true });
-for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/buildings.px.js', 'art/buildings_gpt.px.js', 'art/yard/yard.px.js', 'art/office/office_gpt.px.js', 'art/ui/ui.px.js'])
+for (const f of ['art/shaft.px.js', 'art/mine.px.js', 'art/chibi.px.js', 'art/chars.px.js', 'art/fx.px.js', 'art/buildings.px.js', 'art/buildings_gpt.px.js', 'art/yard/yard_anims.px.js', 'art/yard/buildings64.px.js', 'art/office/office_gpt.px.js', 'art/ui/ui.px.js'])
   execFileSync(process.execPath, [pxl, 'build', f], { stdio: ['ignore', 'ignore', 'inherit'] });
 
 rmSync('public/art', { recursive: true, force: true });
@@ -38,4 +40,6 @@ for (const [from, name] of [['art/out/scenes', 'surface'], ['art/out/scenes', 's
 // 부지 장면 (PATCH_V10): 낮·밤 첫 프레임 + 잠긴 터를 덮는 덤불
 for (const n of ['yard_day', 'yard_night']) cpSync(`art/yard/out/scenes/${n}.png`, `public/art/scenes/${n}.png`);
 for (const n of ['bush_white', 'bush_pink', 'bush_orange']) cpSync(`art/yard/out/sprites/${n}.png`, `public/art/sprites/yd_${n}.png`);
+for (const f of readdirSync('art/yard/out/sprites')) if (f.startsWith('g64_')) cpSync(`art/yard/out/sprites/${f}`, `public/art/sprites/${f}`);
+for (const n of ['yard_ripple', 'yard_fire']) for (const ext of ['png', 'json']) cpSync(`art/yard/out/anims/${n}.${ext}`, `public/art/anims/${n}.${ext}`);
 console.log('→ public/art');
