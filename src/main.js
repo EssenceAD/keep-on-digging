@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.4';
+const VERSION = 'v1.2.5';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -2363,7 +2363,7 @@ function bidPic(c, w, zPic) {
   const picW = w - 16, th = plotThumb(card), ps = Math.max(1, Math.floor(Math.min(picW / 96, (zPic - 34) / 64))), picH = 64 * ps;
   const pic = new Sprite(th); pic.scale.set(ps); pic.position.set(Math.round(8 + (picW - 96 * ps) / 2), 6 + Math.max(0, Math.round((zPic - 34 - picH) / 2))); c.addChild(pic);
   c.addChild(new Graphics().rect(pic.x - 1, pic.y - 1, 96 * ps + 2, 64 * ps + 2).stroke({ width: 1, color: 0x5c3832 }));
-  const nl = label(`${card.floor === 2 ? '2층 ' : ''}${card.name} · ${card.size}`, { small: true, color: card.floor === 2 ? 0x2a8a84 : 0x8a5a24, shadow: false }); fitText(nl, 96 * ps - 14);
+  const nl = label(`${card.floor === 2 ? '2층 ' : ''}${card.name} · ${card.size}`, { small: true, color: card.floor === 2 ? 0x2a8a84 : 0x8a5a24, shadow: false }); fitText(nl, w - 26 - (pic.x - 8));   // 이름표는 그림 밖으로 나가도 됨 (안 잘리게)
   const nb = frame('paper', Math.ceil(nl.width) + 8, 13, 'panel'); nb.position.set(pic.x + 3, pic.y + 3); nl.position.set(pic.x + 7, pic.y + 4); c.addChild(nb, nl);
   let hx = pic.x + 3;
   for (const hnt of card.hints) { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, pic.y + picH - 13); c.addChild(ic); hx += 12; }
@@ -2495,13 +2495,16 @@ function makePlotCard(card, w, h) {
   c.addChild(frame('wood', w, h, 'panel'));
   const ts = Math.max(0.4, Math.min(1, (h - 8) / 64, (w * 0.4) / 96)), th = new Sprite(plotThumb(card)); th.scale.set(ts); th.position.set(4, Math.round((h - 64 * ts) / 2)); c.addChild(th);
   const tx = Math.round(4 + 96 * ts + 6), tw = w - tx - 6;
-  const nm = label(card.name, { color: card.floor === 2 ? 0x6fe0d8 : COLOR.gold }); nm.position.set(tx, 5); fitText(nm, tw); c.addChild(nm);
+  let nm = label(card.name, { color: card.floor === 2 ? 0x6fe0d8 : COLOR.gold });
+  if (nm.width > tw) { nm.destroy(); nm = label(card.name, { small: true, color: card.floor === 2 ? 0x6fe0d8 : COLOR.gold, wrap: tw }); }   // 넘치면 본문 크기 · 그래도 넘치면 두 줄
+  nm.position.set(tx, 5); c.addChild(nm);
+  const dy = Math.max(0, Math.ceil(nm.height) - 14);                // 이름이 두 줄이면 아래 줄들을 내림
   const sz = B.plotSizes[card.size];
-  const info = label(`${card.floor === 2 ? '2층 · ' : ''}크기 ${card.size} · 깊이 ${sz.rows}`, { small: true, color: COLOR.dim }); info.position.set(tx, 20); c.addChild(info);
+  const info = label(`${card.floor === 2 ? '2층 · ' : ''}크기 ${card.size} · 깊이 ${sz.rows}`, { small: true, color: COLOR.dim }); info.position.set(tx, 20 + dy); c.addChild(info);
   let hx = tx;
-  card.hints.forEach((hnt) => { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, 33); c.addChild(ic); hx += 12; });
-  if (!card.hints.length) { const nh = label(card.free ? '힌트 없음' : '힌트 없음', { small: true, color: COLOR.dim }); nh.position.set(tx, 32); c.addChild(nh); }
-  const price = label(`시작가 ${card.price}`, { small: true, color: COLOR.gold }); price.position.set(tx, Math.min(46, h - 34)); c.addChild(price);
+  card.hints.forEach((hnt) => { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, 33 + dy); c.addChild(ic); hx += 12; });
+  if (!card.hints.length) { const nh = label(card.free ? '힌트 없음' : '힌트 없음', { small: true, color: COLOR.dim }); nh.position.set(tx, 32 + dy); c.addChild(nh); }
+  const price = label(`시작가 ${card.price}`, { small: true, color: COLOR.gold }); price.position.set(tx, Math.min(46 + dy, h - 14)); c.addChild(price);
   if (h < 64) info.visible = false;                             // 낮은 카드: 크기 줄 대신 시작가
   const b = button('wood', 48, 18, '입찰', () => { unlockAudio(); pickCard(card); }, { small: true });
   b.setDisabled(card.price > S.gold); b.position.set(w - 54, h - 22); c.addChild(b);
@@ -2513,8 +2516,9 @@ function makeSurveyBar(x, y, w) {
   c.addChild(frame('paper', w, h, 'panel'));
   setOverlayRect(x, y, w, h);
   const t = label('', { small: true, color: COLOR.paperInk, shadow: false }); t.position.set(6, 5); c.addChild(t); ui.survey = t;
-  const sk = button('wood', 50, 16, tutOn() ? '탐사 끝' : '시추 시작', () => { if (tutOn() && !S.tutorial.sniffed) return; toolArmed = null; startDig(); }, { small: true }); sk.position.set(w - 54, 3); c.addChild(sk); ui.refs.surveyEnd = sk;
-  if (!tutOn()) toolButtons(c, w - 58, 3);
+  const skText = tutOn() ? '탐사 끝' : '시추 시작', probe = label(skText, { small: true }), skW = Math.max(50, Math.ceil(probe.width) + 14); probe.destroy();   // 글자 폭에 맞춘 버튼 (안 잘리게)
+  const sk = button('wood', skW, 16, skText, () => { if (tutOn() && !S.tutorial.sniffed) return; toolArmed = null; startDig(); }, { small: true }); sk.position.set(w - skW - 4, 3); c.addChild(sk); ui.refs.surveyEnd = sk;
+  if (!tutOn()) toolButtons(c, w - skW - 8, 3);
   return c;
 }
 const u0 = (v) => Math.round(v / L.uiS);
@@ -2699,7 +2703,7 @@ function makeCrew(w, h) {
     const pf = portraitFrame(F[`${m.id}_idle`][0], rowH - 2, 'wood'); r.addChild(pf);
     const compact = rowH < 28;                                // 광부가 많으면 한 줄 (이름 · 상태)
     const nm = label(m.name, { color: m.color, small: compact }); nm.position.set(rowH + 4, compact ? Math.round((rowH - 10) / 2) : 1); r.addChild(nm);
-    if (!compact) { const tr = B.traits[m.trait]; const role = label(tr ? `${tr.name} · ${tr.text}` : m.role, { small: true, color: COLOR.dim }); role.position.set(rowH + 8 + Math.round(nm.width), 3); fitText(role, w - role.x); r.addChild(role); }
+    if (!compact) { const tr = B.traits[m.trait]; const role = label(tr ? `${tr.name} · ${tr.text.split(" · ")[0]}` : m.role, { small: true, color: COLOR.dim }); role.position.set(rowH + 8 + Math.round(nm.width), 3); fitText(role, w - role.x); r.addChild(role); }
     const st = label('', { small: true }); st.position.set(compact ? Math.max(rowH + 50, Math.round(w * 0.42)) : rowH + 4, compact ? nm.y : 15); r.addChild(st);
     c.addChild(r);
     ui.crew.push({ m, st });
