@@ -38,10 +38,12 @@ export function createMarket(saved) {
   }
   m.buyerMul = (key, buyer) => {
     const b = B.buyers[buyer];
-    return b.like.includes(key) ? 1 + b.bonus : 1 - b.penalty;
+    return b.like.includes(key) ? 1 + b.bonus : 1 - (m.penalty ?? b.penalty);
   };
   m.surgeMul = (key, now) => (m.surge && m.surge.key === key && now >= m.surge.start && now < m.surge.end ? B.surgeMul : 1);
-  m.price = (key, buyer, now) => Math.max(1, Math.round(B.basePrice[key] * m.coef[key] * m.surgeMul(key, now) * m.buyerMul(key, buyer)));
+  m.coefAt = (key, now) => (m.frozen && now < m.frozen.until ? m.frozen.coef[key] : m.coef[key]);   // 시세 고정 중이면 그때 값
+  m.price = (key, buyer, now) => Math.max(1, Math.round(B.basePrice[key] * m.coefAt(key, now) * m.surgeMul(key, now) * m.buyerMul(key, buyer)));
+  m.freeze = (now, secs) => { m.frozen = { coef: { ...m.coef }, until: now + secs }; };
   /** k번째 틱 한 걸음 */
   const step = (k) => {
     ORES.forEach((o, i) => {
@@ -69,10 +71,11 @@ export function createMarket(saved) {
     if (!m.plan || m.plan.day !== day) { m.plan = planOf(day); while (m.plan.done < m.plan.times.length && tick >= m.plan.times[m.plan.done]) m.plan.done++; }
     // 급등 예고 → 시작
     const pl = m.plan;
-    if (pl.done < pl.times.length && tick >= pl.times[pl.done] - B.surgeWarn) {
+    const warn = m.warnSec ?? B.surgeWarn;
+    if (pl.done < pl.times.length && tick >= pl.times[pl.done] - warn) {
       const key = pl.keys[pl.done]; pl.done++;
-      m.surge = { key, warn: now, start: now + B.surgeWarn, end: now + B.surgeWarn + B.surgeSeconds };
-      m.onWarn?.(key);
+      m.surge = { key, warn: now, start: now + warn, end: now + warn + B.surgeSeconds };
+      m.onWarn?.(key, warn);
     }
     if (m.surge && now >= m.surge.start && !m.surge.started) { m.surge.started = true; m.onSurge?.(m.surge.key); }
     if (m.surge && now >= m.surge.end) m.surge = null;
@@ -91,6 +94,19 @@ export function createMarket(saved) {
     m.surge = null; m.plan = null;                                 // 다음 update 에서 오늘 계획을 다시 (지난 시각은 건너뜀)
     return { before, missed };
   };
-  m.toJSON = () => ({ coef: m.coef, hist: m.hist, last: m.last, k: m.k, surge: m.surge, plan: m.plan });
+  /** 앞으로 n틱의 계수 (결정론적이라 미리 볼 수 있다 · 장사 특성 1) */
+  m.peek = (key, n) => {
+    const i = ORES.findIndex((o) => o.key === key), out = [];
+    let c = m.coef[key];
+    for (let k = m.k + 1; k <= m.k + n; k++) {
+      const st = B.priceStep[0] + hash01(k, i, 1) * (B.priceStep[1] - B.priceStep[0]);
+      c = c * (1 + (hash01(k, i, 2) < 0.5 ? st : -st));
+      c += (1 - c) * B.meanRevert;
+      c = Math.max(B.coefRange[0], Math.min(B.coefRange[1], c));
+      out.push(c);
+    }
+    return out;
+  };
+  m.toJSON = () => ({ coef: m.coef, hist: m.hist, last: m.last, k: m.k, surge: m.surge, plan: m.plan, frozen: m.frozen });
   return m;
 }

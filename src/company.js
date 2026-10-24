@@ -67,7 +67,12 @@ export function companyFx(S) {
   const L = (k) => lvOf(S, k), b = C.buildings;
   const add = { idleMul: 0, guildMul: 0, smeltMul: 0, surveyAdd: 0, sellMul: 0, cartMul: 0, turretAdd: 0, xrayAdd: 0 };
   for (const h of harmonies(S)) for (const [k, v] of Object.entries(h.fx)) add[k] += v;
+  const t = S.talents ?? {}, TL = B.talents, sv = t.survey ?? 0, dg = t.dig ?? 0, tr = t.trade ?? 0;
   return {
+    // 특성 (§3)
+    hints: sv >= 1 ? 3 : B.hintsPerCard, oreColor: sv >= 3, veinRange: sv >= 4, freeHint: sv >= 5,
+    pick: B.pickTier + (dg >= 1 ? 1 : 0) + (dg >= 4 ? 1 : 0), dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 3 ? TL.stunMul : 1, chainVein: dg >= 5,
+    preview: tr >= 1, surgeWarn: tr >= 3 ? TL.surgeWarnLong : B.surgeWarn, penalty: tr >= 4 ? TL.penaltyLow : null, freeze: tr >= 5,
     whCap: b.warehouse.cap[L('warehouse')],
     carts: b.cartShed.carts[L('cartShed')],
     cartLoad: b.cartShed.load[L('cartShed')],
@@ -76,7 +81,7 @@ export function companyFx(S) {
     capHours: b.lodge.capHours[L('lodge')],
     smeltSec: b.smelter.sec[L('smelter')] / (1 + add.smeltMul),
     smeltSlots: b.smelter.slots[L('smelter')],
-    xrayPerDay: b.lanternShop.xray[L('lanternShop')] + add.xrayAdd,
+    xrayPerDay: b.lanternShop.xray[L('lanternShop')] + add.xrayAdd + (sv >= 2 ? 1 : 0),
     xrayRadius: b.lanternShop.radius[L('lanternShop')],
     pumpCost: b.pumpRoom.pump[L('pumpRoom')],
     autoPump: !!b.pumpRoom.auto[L('pumpRoom')],
@@ -86,7 +91,7 @@ export function companyFx(S) {
     sniffSize: !!b.moleHouse.size[L('moleHouse')],
     idleMul: 1 + add.idleMul,
     guildMul: 1 + add.guildMul,
-    sellMul: 1 + add.sellMul,
+    sellMul: 1 + add.sellMul + (tr >= 2 ? TL.sellAdd : 0),
     plotSizes: S.company.coreLv >= C.lPlotLv ? ['S', 'M', 'L'] : ['S', 'M'],
   };
 }
@@ -111,3 +116,9 @@ export function effectText(S, k) {
     }
   }
 }
+
+// ---------------------------------------------------------------- 특성 포인트 (§3)
+export const TALENT_TREES = [['survey', '탐사'], ['dig', '채굴'], ['trade', '장사']];
+export const talentPoints = (S) => S.company.coreLv + Math.floor((S.stats.star3 ?? 0) / B.talents.star3PerPoint);
+export const talentSpent = (S) => (S.talents.survey ?? 0) + (S.talents.dig ?? 0) + (S.talents.trade ?? 0);
+export const talentLeft = (S) => talentPoints(S) - talentSpent(S);
