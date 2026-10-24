@@ -14,7 +14,8 @@ import { COLOR, bar, button, fitText, frame, icon, kit, label, loadUI, portraitF
 import { BUYERS, ORES, buyerOf, createMarket } from './market.js';
 import { B } from './balance.js';
 import { SAVE_VERSION, loadSave, migrate, resetSave, writeSave } from './save.js';
-import { BOARDS, initAuth, login, logout, me, online, pullSave, pushSave, recover, submitRank, topRank, weekKey } from './net.js';
+import { BOARDS, adminMineLetters, adminReply, initAuth, isAdmin, listNotices, login, logout, me, myMineReplies, online, pullSave, pushSave, recover, sendLetter, submitRank, topRank, weekKey } from './net.js';
+import { PATCH_NOTES } from './patchnotes.js';
 import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
 import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
@@ -25,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.1';
+const VERSION = 'v1.2.2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -765,7 +766,7 @@ function count(k, n = 1) {
 /** 날이 바뀌면 새 과제 — 모모 편지 */
 function checkNewDay() {
   if (!S.tutorial.done) return;                               // 과제 편지는 튜토리얼 뒤부터
-  if (rollDaybook(S)) { setTimeout(() => notify(() => toast('모모 편지: 오늘의 과제 3개가 왔어요! [과제]에서 봐요', 'momo', 4)), 1500); save(); if (sheetTab === 'day') buildUI(); }
+  if (rollDaybook(S)) { mail('오늘의 과제 3개가 왔어요! [과제]에서 봐요'); setTimeout(() => notify(() => toast('모모 편지: 오늘의 과제 3개가 왔어요! [과제]에서 봐요', 'momo', 4)), 1500); save(); if (sheetTab === 'day') buildUI(); }
 }
 setTimeout(checkNewDay, 0);                              // 모듈이 다 읽힌 뒤
 setInterval(checkNewDay, 60 * 1000);
@@ -1264,6 +1265,7 @@ window.addEventListener('pagehide', () => void pushNow());
 const progressOf = (d) => (d.company?.coreLv ?? 1) * 1000 + (d.stats?.rounds ?? 0);
 /** 로그인 직후: 클라우드가 더 진행됐으면 묻고, 아니면 이 기기 것을 올린다 (체크인 compareSaves) */
 async function afterLogin() {
+  refreshAdmin(); setTimeout(checkReplies, 1500);
   S.account.userId = me.profile.id; S.account.nickname = me.profile.nickname;
   try {
     const sv = await pullSave();
@@ -1285,7 +1287,7 @@ function useCloud() {
   saving = false; writeSave(d); location.reload();
 }
 function keepLocal() { cloudChoice = null; cloudReady = true; pushNow(); buildUI(); toast('이 기기 것을 클라우드에 올렸어요', 'momo'); }
-async function doLogout() { await pushNow(); await logout(); cloudReady = false; S.account.userId = null; S.account.nickname = null; save(); buildUI(); toast('로그아웃했어요 (이 기기엔 그대로 남아요)'); }
+async function doLogout() { await pushNow(); await logout(); adminOn = false; cloudReady = false; S.account.userId = null; S.account.nickname = null; save(); buildUI(); toast('로그아웃했어요 (이 기기엔 그대로 남아요)'); }
 function makeCloudChoice() {
   const d = cloudChoice.data, uW = Math.round(L.W / L.uiS), uH = Math.round(L.H / L.uiS), w = Math.min(uW - 12, 250);
   const box = new Container();
@@ -2698,46 +2700,126 @@ function makeCrew(w, h) {
   return c;
 }
 
-function makeSettings(w) {
+// ================================================================ 설정 = 아이콘 격자 (체크인 「⋯」 메뉴처럼) · 제보 · 새 소식 · 편지함 · 운영자 제보함
+let adminOn = false;
+async function refreshAdmin() { adminOn = await isAdmin(); if (sheetTab === 'set') buildUI(); }
+function makeSettings(w, h = 120) {
   const c = new Container();
-  const items = [
-    [() => `저사양 ${low ? '켬' : '끔'}`, () => setLow(!low)],
-    [() => (online() ? '로그아웃' : '로그인'), () => (online() ? doLogout() : openLoginForm())],
-    ['랭킹', () => openRank()],
-    ['전체 화면', () => document.documentElement.requestFullscreen?.().catch(() => {})],
-    ['설명서', () => { manualView = { key: MANUAL[0].key }; buildUI(); }],
-    ['튜토리얼 다시', replayTutorial],
-    ['처음부터', () => { if (confirm('저장을 지우고 처음부터 시작할까요?')) { saving = false; resetSave(); location.reload(); } }],
-  ].filter((it, i) => S.tutorial.done || i === 0);
-  // 음악 · 효과음 슬라이더 (끌거나 톡)
-  let sy0 = 0;
-  for (const [key, name] of [['bgm', '음악'], ['sfx', '효과음']]) {
-    const row = new Container(); row.y = sy0; c.addChild(row);
-    const l = label(name, { small: true, color: COLOR.paper }); l.position.set(0, 2); row.addChild(l);
-    const x0 = 40, bwid = Math.max(40, w - x0 - 30);
-    const bar = new Graphics(); row.addChild(bar);
-    const pct = label('', { small: true, color: COLOR.dim }); pct.position.set(x0 + bwid + 4, 2); row.addChild(pct);
-    const draw = () => { const v = volumes()[key]; bar.clear().rect(x0, 5, bwid, 4).fill(0x3a2a22).rect(x0, 5, bwid * v, 4).fill(0xd39a3a).rect(x0 + bwid * v - 2, 2, 4, 10).fill(0xf5cf6a); pct.text = `${Math.round(v * 100)}`; };
-    draw();
-    const hitA = new Graphics().rect(x0 - 4, 0, bwid + 8, 14).fill({ color: 0, alpha: 0.001 }); row.addChild(hitA);
-    hitA.eventMode = 'static'; hitA.cursor = 'pointer';
-    let dragging = false;
-    const setAt = (e) => { const p = row.toLocal(e.global); const v = Math.max(0, Math.min(1, (p.x - x0) / bwid)); setVolumes({ [key]: Math.round(v * 20) / 20 }); S.settings[key === 'bgm' ? 'bgmVol' : 'sfxVol'] = volumes()[key]; S.settings.sound = true; draw(); };
-    hitA.on('pointerdown', (e) => { unlockAudio(); dragging = true; setAt(e); });
-    hitA.on('globalpointermove', (e) => { if (dragging) setAt(e); });
-    hitA.on('pointerup', () => { dragging = false; save(); if (key === 'sfx') sfx('ui_tap'); }); hitA.on('pointerupoutside', () => { dragging = false; save(); });
-    sy0 += 16;
-  }
-  const cols = Math.max(2, Math.min(3, Math.floor((w + 4) / 70))), bw = Math.floor((w - (cols - 1) * 4) / cols), bh = 16;
-  items.forEach(([text, fn], i) => {
-    const b = button('stone', bw, bh, typeof text === 'function' ? text() : text, () => { fn(); if (typeof text === 'function') b.setText(text()); }, { small: true });
-    b.position.set((i % cols) * (bw + 4), sy0 + Math.floor(i / cols) * (bh + 4));
-    c.addChild(b);
+  const tiles = [
+    ['💌', '제보', openReport], ['📣', '새 소식', openNews], ['📬', '편지함', openMailbox], ['🏆', '랭킹', () => openRank()], ['📖', '설명서', () => { manualView = { key: MANUAL[0].key }; buildUI(); }],
+    ['👤', online() ? '로그아웃' : '로그인', () => (online() ? doLogout() : openLoginForm())], ['🔊', '소리', openSound], ['🔄', '배우기', replayTutorial], ['⚠', '초기화', () => { if (confirm('저장을 지우고 처음부터 시작할까요?')) { saving = false; resetSave(); location.reload(); } }],
+  ];
+  if (adminOn) tiles.push(['📥', '제보함', openInbox]);
+  const unread = (S.mail ?? []).filter((m) => !m.read).length;
+  const cols = w / 5 >= 46 ? 5 : 4, tw = Math.floor((w - 4) / cols), th = Math.min(46, Math.max(32, Math.floor((h - 14) / Math.ceil(tiles.length / cols))));   // 이름이 안 잘리게 좁으면 4칸
+  tiles.forEach(([ic, name, fn], i) => {
+    const t = new Container(); t.position.set((i % cols) * tw, Math.floor(i / cols) * th); c.addChild(t);
+    t.addChild(frame(name === '초기화' ? 'stone' : 'wood', tw - 3, th - 3, 'panel'));
+    const e = label(ic, { shadow: false }); e.position.set(Math.round((tw - 3 - e.width) / 2), 3); t.addChild(e);
+    const l = label(name, { small: true, color: name === '초기화' ? 0xe8a0a0 : COLOR.paper }); fitText(l, tw - 5); l.position.set(Math.round((tw - 3 - l.width) / 2), th - 3 - l.height - 2); t.addChild(l);
+    if (name === '편지함' && unread) { const d = new Graphics().circle(tw - 8, 5, 3).fill(0xe8483a); t.addChild(d); }
+    t.eventMode = 'static'; t.cursor = 'pointer'; t.on('pointertap', () => { unlockAudio(); sfx('ui_tap'); fn(); });
+    ui.refs[`set_${name}`] = t;
   });
-  const fps = label('', { small: true, color: 0x9cc45a }); fps.position.set(0, sy0 + Math.ceil(items.length / cols) * (bh + 4) + 2);
+  const fps = label('', { small: true, color: 0x9cc45a }); fps.position.set(0, Math.ceil(tiles.length / cols) * th + 1);
   c.addChild(fps); ui.fps = fps;
   return c;
 }
+/** DOM 창 (글을 쓰고 읽는 곳은 HTML이 편함) — 체크인 창처럼 위에 뜨고 [닫기] */
+function openPanel(title, html, mount) {
+  document.getElementById('kpanel')?.remove();
+  const el = document.createElement('div'); el.id = 'kpanel';
+  el.innerHTML = `<div class="kp"><div class="kh"><b>${title}</b><button class="kx" aria-label="닫기">✕</button></div><div class="kb">${html}</div></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.querySelector('.kx').onclick = close;
+  el.onclick = (e) => { if (e.target === el) close(); };
+  mount?.(el.querySelector('.kb'), close);
+  return el;
+}
+const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const linkify = (h) => h.replace(/https?:\/\/[^\s<]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:io|com|net|kr|app|dev|me)(?:\/[^\s<]*)?/gi, (m) => { const tail = m.match(/[.,!?)\]…]+$/)?.[0] ?? ''; const u = tail ? m.slice(0, -tail.length) : m; const href = /^https?:/i.test(u) ? u : `https://${u}`; return `<a href="${href}" target="_blank" rel="noopener noreferrer">${u}</a>${tail}`; });   // 주소(https:// 없어도)는 새 탭 링크
+const whenText = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+/** 💌 제보: 제목 없이 본문만 → 모모가 "전해 드릴게요" */
+function openReport() {
+  if (!online()) { openPanel('💌 제보', '<p class="kmuted">제보는 로그인하면 보낼 수 있어요 — 답장도 모모 편지로 받아요.</p><div class="krow"><button class="kgo">로그인</button></div>', (b, close) => { b.querySelector('.kgo').onclick = () => { close(); openLoginForm(); }; }); return; }
+  openPanel('💌 제보', '<textarea maxlength="1000" placeholder="버그 · 건의 · 아무 말이나 (모모가 전해 드려요)"></textarea><p class="kmsg"></p><div class="krow"><button class="kgo">보내기</button></div>', (b, close) => {
+    const ta = b.querySelector('textarea'), msg = b.querySelector('.kmsg'), go = b.querySelector('.kgo');
+    setTimeout(() => ta.focus(), 50);
+    go.onclick = async () => {
+      const body = ta.value.trim(); if (!body) { msg.textContent = '내용을 써 주세요'; return; }
+      go.disabled = true; msg.textContent = '…';
+      const r = await sendLetter(body, `mine-${VERSION}`);
+      if (!r.ok) { go.disabled = false; msg.textContent = r.why === 'login' ? '로그인이 풀렸어요' : '보내지 못했어요. 잠시 뒤에 다시 해 주세요'; return; }
+      S.letters ??= { sent: [], seen: [] }; if (r.id != null) S.letters.sent.push(r.id); save();
+      close(); showDialog({ who: 'momo', lines: ['편지 잘 받았어요. 전해 드릴게요!'] });
+    };
+  });
+}
+/** 📣 새 소식: 체크인 공지(notices) + 채굴 패치노트 */
+function openNews() {
+  openPanel('📣 새 소식', '<div class="ktabs"><button data-t="n" class="on">공지</button><button data-t="p">패치노트</button></div><div class="klist">불러오는 중…</div>', (b) => {
+    const list = b.querySelector('.klist');
+    const notes = () => PATCH_NOTES.map((p) => `<div class="kitem"><b>${p.v}</b><small>${p.d}</small><ul>${p.items.map((t) => `<li>${escH(t)}</li>`).join('')}</ul></div>`).join('');
+    const notices = async () => { const rows = await listNotices(); list.innerHTML = rows.length ? rows.map((r) => `<div class="kitem"><b>${escH(r.title)}</b><small>${new Date(r.created_at).toLocaleDateString('ko-KR')}</small><p>${linkify(escH(r.body)).replace(/\n/g, '<br>')}</p></div>`).join('') : '<p class="kmuted">아직 공지가 없어요</p>'; };
+    b.querySelectorAll('.ktabs button').forEach((t) => (t.onclick = () => { b.querySelectorAll('.ktabs button').forEach((x) => x.classList.toggle('on', x === t)); if (t.dataset.t === 'p') list.innerHTML = notes(); else { list.textContent = '불러오는 중…'; notices(); } }));
+    notices();
+  });
+}
+/** 📬 편지함: 모모 편지 다시 보기 (급등 예고 · 오늘의 과제 · 제보 답장) */
+function mail(text, title = '모모 편지') {
+  S.mail ??= []; S.mail.unshift({ at: Date.now(), title, text, read: false }); S.mail.length = Math.min(S.mail.length, 50); save();
+  if (sheetTab === 'set') buildUI();
+}
+function openMailbox() {
+  const ms = S.mail ?? [];
+  openPanel('📬 편지함', ms.length ? ms.map((m) => `<div class="kitem ${m.read ? '' : 'new'}"><b>${escH(m.title)}</b><small>${whenText(m.at)}</small><p>${escH(m.text)}</p></div>`).join('') : '<p class="kmuted">아직 받은 편지가 없어요</p>');
+  ms.forEach((m) => (m.read = true)); save(); buildUI();
+}
+/** 🔊 소리 · 화면 */
+function openSound() {
+  const v = volumes();
+  openPanel('🔊 소리 · 화면', `<label>음악 <input type="range" min="0" max="100" step="5" data-k="bgm" value="${Math.round(v.bgm * 100)}"></label><label>효과음 <input type="range" min="0" max="100" step="5" data-k="sfx" value="${Math.round(v.sfx * 100)}"></label><div class="krow"><button class="klow">저사양 ${low ? '켬' : '끔'}</button><button class="kfs">전체 화면</button></div>`, (b) => {
+    b.querySelectorAll('input[type=range]').forEach((r) => (r.oninput = () => { unlockAudio(); const k = r.dataset.k; setVolumes({ [k]: +r.value / 100 }); S.settings[k === 'bgm' ? 'bgmVol' : 'sfxVol'] = +r.value / 100; S.settings.sound = true; save(); }));
+    b.querySelector('.klow').onclick = (e) => { setLow(!low); e.target.textContent = `저사양 ${low ? '켬' : '끔'}`; };
+    b.querySelector('.kfs').onclick = () => document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+}
+/** 📥 운영자 제보함: 채굴 제보 목록 (닉 · 시각 · 본문 · [답장]) — 답장은 그 유저의 다음 접속 때 모모 편지로 */
+function openInbox() {
+  openPanel('📥 제보함 (채굴)', '<div class="klist">불러오는 중…</div>', async (b) => {
+    const list = b.querySelector('.klist');
+    const rows = await adminMineLetters();
+    if (!rows.length) { list.innerHTML = '<p class="kmuted">채굴 제보가 아직 없어요</p>'; return; }
+    list.innerHTML = rows.map((r) => `<div class="kitem" data-id="${r.id}"><b>${escH(r.nickname ?? '(손님)')}</b><small>${whenText(r.created_at)} · ${escH(r.app_version ?? '')} · ${escH(r.status)}</small><p>${escH(r.body)}</p>${r.reply ? `<p class="kreply">↳ ${escH(r.reply)}${r.reply_read ? ' · 읽음' : ''}</p>` : ''}<div class="krow"><button class="krep">${r.reply ? '답장 고치기' : '답장'}</button></div></div>`).join('');
+    list.querySelectorAll('.krep').forEach((btn) => (btn.onclick = () => {
+      const item = btn.closest('.kitem'), id = +item.dataset.id;
+      if (item.querySelector('textarea')) return;
+      const box = document.createElement('div'); box.innerHTML = '<textarea maxlength="500" placeholder="답장 (그 유저가 다음에 들어오면 모모 편지로)"></textarea><div class="krow"><button class="ksend">보내기</button></div><p class="kmsg"></p>';
+      item.appendChild(box);
+      box.querySelector('.ksend').onclick = async () => {
+        const t = box.querySelector('textarea').value.trim(); if (!t) return;
+        const ok = await adminReply(id, t);
+        box.querySelector('.kmsg').textContent = ok ? '보냈어요' : '보내지 못했어요';
+        if (ok) { const p = document.createElement('p'); p.className = 'kreply'; p.textContent = '↳ ' + t; item.insertBefore(p, box); box.remove(); btn.textContent = '답장 고치기'; }
+      };
+    }));
+  });
+}
+/** 접속할 때: 내 채굴 제보에 온 답장 → 모모 편지 (한 번만) */
+async function checkReplies() {
+  const L0 = (S.letters ??= { sent: [], seen: [] });
+  if (!online() || !L0.sent.length) return;
+  const rows = await myMineReplies(L0.sent);
+  for (const r of rows) {
+    if (L0.seen.includes(r.id) || !r.reply) continue;
+    L0.seen.push(r.id);
+    mail(`「${String(r.body).slice(0, 40)}${String(r.body).length > 40 ? '…' : ''}」에 답장이 왔어요 — ${r.reply}`, '💌 제보 답장');
+    notify(() => showDialog({ who: 'momo', lines: ['제보에 답장이 왔어요!', r.reply] }));
+  }
+  save();
+}
+setInterval(() => { if (online()) checkReplies(); }, 10 * 60 * 1000);
 
 function refreshUI() {
   if (!ui.counters) return;
@@ -2868,7 +2950,7 @@ market.onTick = () => { refreshUI(); };
 market.onWarn = (key, warn = B.surgeWarn) => notify(() => {
   tip('surge'); sfx('letter');
   const o = ORES.find((q) => q.key === key), who = B.buyers[buyerOf(key)].name;
-  toast(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! (${warn}초 뒤)`, 'momo', 5);
+  toast(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! (${warn}초 뒤)`, 'momo', 5); mail(`오늘 저녁 ${who}이(가) ${o.name}을(를) 비싸게 산대요! 창고에 두고 기다려 보세요.`);
   sfx('bell');
 }, () => !market.surge || mNow() >= market.surge.start);
 market.onSurge = (key) => notify(() => { const o = ORES.find((q) => q.key === key); toast(`지금 ${o.name} 시세 ×${CF.surgeMul}! 40초 동안`, 'momo', 3); sfx('surge'); }, surgeGone(key));
@@ -3955,7 +4037,7 @@ initAuth().then(() => { if (online()) afterLogin(); });
 if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3);
 
 window.__kod = {
-  get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
+  get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
   startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();

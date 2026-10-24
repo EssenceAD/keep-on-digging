@@ -52,3 +52,17 @@ body {
 #login .rec { display: flex; flex-direction: column; gap: 8px; } #login .rec[hidden], #login input[hidden] { display: none; }
 #login .row { display: flex; gap: 8px; } #login button { flex: 1; font: inherit; font-size: 14px; padding: 8px; border: 2px solid #3a2a22; background: #8a5a24; color: #f4ecd2; }
 #login button.x { background: #d8ccb0; color: #3a2a22; } #login .msg { margin: 0; min-height: 1em; color: #b84a62; } #login a { color: #46702e; font-size: 12px; }
+
+/* v1.2.2 설정 창들 (제보 · 새 소식 · 편지함 · 소리 · 제보함) — 로그인 창과 같은 종이 */
+#kpanel { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5, 4, 8, 0.7); padding: 12px; user-select: text; -webkit-user-select: text; touch-action: auto; }
+#kpanel .kp { width: min(380px, 100%); max-height: 86vh; display: flex; flex-direction: column; background: #f4ecd2; color: #3a2a22; border: 3px solid #5a3a2a; box-shadow: 0 0 0 2px #1a1220; }
+#kpanel .kh { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #8a5a24; color: #f4ecd2; }
+#kpanel .kh b { font-size: 16px; } #kpanel .kx { font: inherit; font-size: 16px; width: 32px; height: 32px; border: 2px solid #3a2a22; background: #d8ccb0; color: #3a2a22; }
+#kpanel .kb { padding: 10px; overflow: auto; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.45; }
+#kpanel textarea { font: inherit; font-size: 16px; min-height: 120px; padding: 8px; border: 2px solid #8a6c52; background: #fffaf0; color: #3a2a22; border-radius: 0; resize: vertical; }
+#kpanel .krow { display: flex; gap: 8px; } #kpanel .krow button, #kpanel .ktabs button { flex: 1; font: inherit; font-size: 15px; padding: 8px; border: 2px solid #3a2a22; background: #8a5a24; color: #f4ecd2; }
+#kpanel .ktabs { display: flex; gap: 4px; } #kpanel .ktabs button { background: #d8ccb0; color: #3a2a22; } #kpanel .ktabs button.on { background: #8a5a24; color: #f4ecd2; }
+#kpanel .kitem { padding: 8px; background: #fffaf0; border: 2px solid #d8ccb0; } #kpanel .kitem.new { border-color: #d39a3a; }
+#kpanel .kitem b { display: block; } #kpanel .kitem small { display: block; color: #8a7a68; font-size: 13px; } #kpanel .kitem p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; } #kpanel .kitem ul { margin: 4px 0 0; padding-left: 18px; }
+#kpanel .kreply { color: #46702e; } #kpanel .kmsg { margin: 0; min-height: 1em; color: #b84a62; } #kpanel .kmuted { color: #8a7a68; margin: 0; } #kpanel a { color: #2a6ab0; text-decoration: underline; overflow-wrap: anywhere; }
+#kpanel label { display: flex; align-items: center; gap: 8px; } #kpanel input[type=range] { flex: 1; }

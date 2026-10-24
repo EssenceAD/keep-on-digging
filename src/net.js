@@ -116,3 +116,34 @@ export async function topRank(col, week, n = 20) {
   }
   return { rows, mine, total };
 }
+
+// ───────── 제보 편지 · 공지 · 운영자 제보함 (체크인 net/server.ts · net/direction.ts 와 같은 테이블·함수) ─────────
+// bug_letters: 채굴 제보는 app_version 'mine-vX' 로 구분. 답장은 내 편지 select 정책으로 직접 읽는다 (보낸 id 는 세이브에)
+/** 서버 함수 부르기: 성공 → data · 실패 → null (던지지 않음) */
+export async function rpc(fn, args = {}) {
+  if (!sb) return null;
+  try { const { data, error } = await sb.rpc(fn, args); return error ? null : data ?? null; } catch { return null; }
+}
+/** 제보 보내기 → { ok, id } | { ok:false, why } · 로그인해야 (손님 편지는 서버 준비 전 — 체크인과 같음) */
+export async function sendLetter(body, appVersion) {
+  if (!sb) return { ok: false, why: 'nosrv' };
+  if (!me.profile) return { ok: false, why: 'login' };
+  const { data, error } = await sb.from('bug_letters').insert({ user_id: me.profile.id, body: body.slice(0, 1000), app_version: appVersion.slice(0, 32) }).select('id').single();
+  return error ? { ok: false, why: 'fail' } : { ok: true, id: data?.id ?? null };
+}
+/** 내가 채굴에서 보낸 편지 중 답장 온 것 */
+export async function myMineReplies(ids) {
+  if (!sb || !me.profile || !ids.length) return [];
+  const { data } = await sb.from('bug_letters').select('id,body,reply,replied_at').in('id', ids).not('reply', 'is', null);
+  return data ?? [];
+}
+/** 공지 (체크인과 같은 notices) */
+export async function listNotices() {
+  if (!sb) return [];
+  const { data } = await sb.from('notices').select('*').order('created_at', { ascending: false }).limit(30);
+  return data ?? [];
+}
+export const isAdmin = async () => !!me.profile && (await rpc('is_admin')) === true;
+/** 운영자: 채굴 제보만 */
+export const adminMineLetters = async () => ((await rpc('admin_list_letters', { p_status: null, p_limit: 200 })) ?? []).filter((r) => (r.app_version ?? '').startsWith('mine-'));
+export const adminReply = async (id, reply) => (await rpc('admin_set_letter', { p_id: id, p_status: null, p_reply: reply, p_ver_fixed: null })) === 'ok';
