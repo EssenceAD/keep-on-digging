@@ -113,3 +113,6 @@ daybook:{ date, tasks:[{id,done}] }, account:{ userId?, nickname? }, floorUnlock
 
 ## 10. 안 만드는 것 (명세4)
 지하 호수·드워프 도시·엔딩·회차 · 광고 SDK 실제 연동 · 스킨 · 체크인 크로스 보상 · 이웃 광산·방명록·채팅 · 길드 공동 광산.
+
+### 2-3-1. 건물 아트 초안 도착 (09:58)
+`art/buildings.px.js` — 사무소·창고·광차 차고·숙소·제련소(연기 anim)·랜턴 공방(창 빛 anim)·펌프실(물방울 anim)·포탑 공방·두더지 집 각 Lv1/3/5 + 장식 6(모닥불 anim·깃발 anim·우물·꽃밭·저울·레일). 미리보기 `docs/preview/yard_day.png` · `yard_night.png`. Lv2·Lv4는 Lv1·Lv3 그림에 간판 색만 바꿔 쓰고, 부지 밤 조명은 창문(L)·모닥불 `lamp`로.
