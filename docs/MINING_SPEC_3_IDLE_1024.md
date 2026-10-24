@@ -114,5 +114,9 @@ daybook:{ date, tasks:[{id,done}] }, account:{ userId?, nickname? }, floorUnlock
 ## 10. 안 만드는 것 (명세4)
 지하 호수·드워프 도시·엔딩·회차 · 광고 SDK 실제 연동 · 스킨 · 체크인 크로스 보상 · 이웃 광산·방명록·채팅 · 길드 공동 광산.
 
-### 2-3-1. 건물 아트 초안 도착 (09:58)
-`art/buildings.px.js` — 사무소·창고·광차 차고·숙소·제련소(연기 anim)·랜턴 공방(창 빛 anim)·펌프실(물방울 anim)·포탑 공방·두더지 집 각 Lv1/3/5 + 장식 6(모닥불 anim·깃발 anim·우물·꽃밭·저울·레일). 미리보기 `docs/preview/yard_day.png` · `yard_night.png`. Lv2·Lv4는 Lv1·Lv3 그림에 간판 색만 바꿔 쓰고, 부지 밤 조명은 창문(L)·모닥불 `lamp`로.
+### 2-3-1. 건물 아트 — 품질 기준 상향 (10:04, 형철 "퀄이 구림")
+`art/buildings.px.js`(코드로 그린 것)는 **품질 미달 → 폴백 전용**. 건물도 캐릭터(§10)와 같은 파이프라인:
+- 기준 = `docs/ref/building_quality_1.png`(상점 정면: 간판·창·기와·소품 디테일) · `building_quality_2.png`(마을 군집) · `scene_quality_iso.png`(장면 분위기).
+- GPT 「채굴하실게요 그림」에서 **64×64 칸 × 10(5×2 시트)**로 Lv1 외형 → `art/raw/mine_buildings_lv1.png`. `png2pxl.py --cols 320 --rows 128 --clean`으로 통째 변환 후 64칸씩 잘라 `art/buildings_gpt.px.js`. Lv3·Lv5는 같은 시트 규격으로 추가 생성(간판 커지고 층 올라감). 장식 6종은 10번 칸을 소품 단위로 분리.
+- pxl이 얹는 것: 창문 빛 `lamp` · 굴뚝 연기 `anim` · 모닥불·깃발 anim · 밤 lighting. 건물 본체 픽셀은 손대지 않는다.
+- 미리보기 `docs/preview/yard_day.png`·`yard_night.png`는 **배치·조명 참고용**으로만.
