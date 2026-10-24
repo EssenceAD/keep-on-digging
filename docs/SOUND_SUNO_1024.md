@@ -25,7 +25,7 @@
 
 2단계용(나중): `bgm_mine_3`(지하 호수 — 물 반사·글라스 하모니카), `bgm_mine_4`(드워프 도시 — 황금·웅장·저음 합창 없이), `bgm_ending`.
 
-## 2. 효과음 (Suno "Sound effect"보다 **freesound.org CC0**가 정확함 — Suno는 BGM만, SFX는 아래 목록을 freesound에서 받거나 Code가 합성)
+## 2. 효과음 — **전부 합성 완료** (`scripts/sfx_synth.py` → `art/raw/audio/sfx/*.wav` 46종, 11:20). freesound 안 씀. 소리가 마음에 안 들면 스크립트 숫자만 바꿔 재생성. Code는 `sh scripts/sfx_build.sh`로 mp3/ogg 변환해 `public/audio/sfx/`에.
 | 파일 | 소리 | 비고 |
 |---|---|---|
 | `sfx_pick_dirt` | 곡괭이 흙 (퍽) ×3 변주 | 타격마다 랜덤 |
