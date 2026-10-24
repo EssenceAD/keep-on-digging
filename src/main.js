@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.3';
+const VERSION = 'v1.3.1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -1474,9 +1474,9 @@ const SIGN_OF = { office: 'bag', lodge: 'bed', smelter: 'anvil', warehouse: 'cra
 /** 회사 화면 (V12 §4): 부지 장면(세로 3× · 가로·PC 2~3×, 끌어서 봄) + 아래 아이콘 격자. 건물·빈 터를 톡하면 카드 1장 */
 function makeCompany(x, y, w, h) {
   const c = new Container();
-  const iconH = Math.round(64 / L.uiS), listH = placing ? 30 : 2 * (iconH + 14) + 22;
+  const iconH = Math.round(48 / L.uiS), listH = placing ? 30 : 2 * (iconH + 13) + 24;
   const areaH = h - listH;
-  c.addChild(new Graphics().rect(x, y, w, areaH).fill(0x0b0910));
+  { const ff = new TilingSprite({ texture: tex('forest_fill'), width: w, height: areaH }); const kf = yardScale() / L.uiS; ff.tileScale.set(kf); ff.position.set(x, y); ff.tint = YARD_SHADE[yardPhase()]; c.addChild(ff); ui.forestFill = ff; }   // §3-7 장면 밖 = 숲 (검정 대신)
   const site = makeSite(w, areaH); site.position.set(x, y); c.addChild(site);
   ui.overlayRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS };
   const tag = label(`🏗 ${openLots(S).length}/${YARD.lots.length}`, { small: true, color: COLOR.gold }); const tg = new Graphics().rect(x + 2, y + 2, Math.ceil(tag.width) + 8, 13).fill({ color: 0x0b0910, alpha: 0.55 }); tag.position.set(x + 6, y + 3); c.addChild(tg, tag);   // 빈 터 n/10 (작게)
@@ -1502,7 +1502,7 @@ function makeCoGrid(w, h) {
   const tabs = [['build', '건물'], ['deco', '장식'], ['harmony', `어울림 ${S.company.harmoniesFound.length}/${B.company.harmonies.length}`]];
   const tw = Math.floor((w - 12) / 3);
   tabs.forEach(([key, name], i) => { const tb = tab(tw, name, () => { coTab = key; sfx('stash', true); buildUI(); }); tb.setOn(coTab === key); tb.position.set(6 + i * tw, 3); c.addChild(tb); });
-  const top = 20, iconH = Math.round(64 / L.uiS);
+  const top = 20, iconH = Math.round(48 / L.uiS);   // V13 §3-9: 48px 아이콘
   if (coTab === 'harmony') {
     B.company.harmonies.slice(0, 8).forEach((hm, i) => {
       const found = S.company.harmoniesFound.includes(hm.id), on = harmonies(S).some((q) => q.id === hm.id);
@@ -1512,16 +1512,18 @@ function makeCoGrid(w, h) {
     return c;
   }
   const items = coTab === 'build' ? ['office', ...BUILDINGS] : DECOS;
-  const cols = 5, cw = Math.floor((w - 8) / cols), rh = iconH + 14;
+  const cols = 5, cw = Math.min(Math.floor((w - 8) / cols), iconH + 40), rh = iconH + 13, gx0 = Math.round((w - cols * cw) / 2);   // 한 줄 5개 균등 (넓은 화면에서 벌어지지 않게 가운데로)
   items.forEach((k, i) => {
-    const x0 = 4 + (i % cols) * cw, y0 = top + Math.floor(i / cols) * rh;
+    const x0 = gx0 + (i % cols) * cw, y0 = top + Math.floor(i / cols) * rh;
     const deco = coTab === 'deco', lv = deco ? 0 : lvOf(S, k), have = deco ? S.company.decos.some((d) => d.kind === k) : k === 'office' || lv > 0;
     const chk = canUp(S, k), cost = chk.cost ?? (deco ? null : upCost(S, k));
     const cell = new Container(); cell.position.set(x0, y0); c.addChild(cell);
     if (chk.ok) cell.addChild(new Graphics().roundRect(0, 0, cw - 2, rh - 1, 3).stroke({ width: 1, color: 0xf5cf6a }));
-    const art = yardArt(k, Math.max(1, lv)); art.anchor.set(0.5, 1); art.scale.set(1 / L.uiS); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);
-    if (!deco && have) { const lb = label(`Lv${lv}`, { small: true, color: COLOR.gold }); const bg = new Graphics().rect(1, 1, Math.ceil(lb.width) + 4, 11).fill({ color: 0x1a1220, alpha: 0.7 }); lb.position.set(3, 0); cell.addChild(bg, lb); }   // Lv 뱃지
-    const tx = label(deco && have ? '놓음' : cost != null ? `💰${cost}` : '최대', { ...ink, small: true, color: chk.ok ? 0x46702e : 0x8a7a68 });
+    const art = yardArt(k, Math.max(1, lv)); art.anchor.set(0.5, 1); art.scale.set(0.75 / L.uiS); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);   // 64px 그림 → 48px
+    const tx = label(deco ? (have ? '놓음' : `💰${cost}`) : `${have ? `Lv${lv}` : ''}${have && cost != null ? '·' : ''}${cost != null ? `💰${cost}` : have ? '' : '최대'}`, { ...ink, small: true, color: chk.ok ? 0x46702e : 0x8a7a68 });   // Lv·💰 만
+    if (!deco && have && cost != null && tx.width > cw - 2) {           // 폰처럼 칸이 좁으면 Lv 는 아이콘 왼쪽 위 뱃지로, 줄에는 💰만
+      tx.text = `💰${cost}`; const lb = label(`Lv${lv}`, { small: true, color: COLOR.gold }); const bg = new Graphics().rect(0, 0, Math.ceil(lb.width) + 4, 11).fill({ color: 0x1a1220, alpha: 0.7 }); lb.position.set(2, -1); cell.addChild(bg, lb);
+    }
     fitText(tx, cw - 2); tx.position.set(Math.round((cw - 2 - tx.width) / 2), iconH + 1); cell.addChild(tx);
     cell.eventMode = 'static'; cell.cursor = 'pointer'; cell.hitArea = new Rectangle(0, 0, cw - 2, rh);
     cell.on('pointertap', () => { upCard = { kind: deco ? 'deco' : 'bld', key: k }; sfx('ui_tap'); buildUI(); });
@@ -1540,6 +1542,7 @@ function glowTex() {
   _glowTex = Texture.from(cv); _glowTex.source.scaleMode = 'linear';
   return _glowTex;
 }
+const yardWalkers = new Map();                               // 부지 광부 자리 (화면을 다시 그려도 이어서)
 let siteDragged = false, yardPan = null, yardPanY = null;   // 끌기 (CSS px, 처음 = 사무소 터 가운데)
 /** 장면 배율 (정수만): 폰도 최소 2× — 넘치는 폭은 좌우로 끌어 봄 */
 const yardScale = () => (L.portrait ? 3 : Math.max(2, Math.min(3, Math.floor((L.full.x1 - L.full.x0) / YARD.scene.w))));   // V12 §4: 세로 폰 3× · 가로·PC 2~3× 꽉 차게 (넘치면 끌어 봄)
@@ -1567,7 +1570,7 @@ function makeSite(sw, sh) {
   const clampPanX = (v) => (minX < 0 ? Math.max(minX, Math.min(0, v)) : centerX);
   const clampPanY = (v) => (minY < 0 ? Math.max(minY, Math.min(0, v)) : centerY);
   yardPan = clampPanX(yardPan); yardPanY = clampPanY(yardPanY);
-  const placeSc = () => sc.position.set(Math.round(yardPan) / L.uiS, Math.round(yardPanY) / L.uiS);
+  const placeSc = () => { sc.position.set(Math.round(yardPan) / L.uiS, Math.round(yardPanY) / L.uiS); if (ui.forestFill && !ui.forestFill.destroyed) ui.forestFill.tilePosition.set(sc.x, sc.y); };
   placeSc();
   if (minX < 0 || minY < 0) {                                  // 끌기 (탭과 구분: 4px 넘게 움직이면 끌기)
     c.eventMode = 'static'; c.hitArea = new Rectangle(0, 0, sw, sh);
@@ -1578,6 +1581,7 @@ function makeSite(sw, sh) {
     c.on('pointerup', end); c.on('pointerupoutside', end);
   }
   const bg = new Sprite(yardTex(`yard_${phase}`)); sc.addChild(bg);
+  { const ed = new Graphics(); for (let i = 0; i < 4; i++) { const a = 0.22 - i * 0.05; ed.rect(i * 2, 0, 2, SH).fill({ color: 0x0a0812, alpha: a }).rect(SW - (i + 1) * 2, 0, 2, SH).fill({ color: 0x0a0812, alpha: a }).rect(0, SH - (i + 1) * 2, SW, 2).fill({ color: 0x0a0812, alpha: a }); } sc.addChild(ed); sc.edge = ed; }   // 가장자리 안쪽 8px 어둡게
   bg.eventMode = 'static'; bg.on('pointertap', () => { if (siteDragged) return; if (upCard && !placing) { upCard = null; buildUI(); } });
   const ripple = new Sprite(F.yard_ripple[0]); ripple.tint = night ? 0x9090c8 : dusk ? 0xe0b8a0 : 0xffffff; sc.addChild(ripple);                 // yard.px.js _ripple 자리 (0,0)
   const fireBg = new Sprite(F.yard_fire[0]); fireBg.position.set(230, 184); sc.addChild(fireBg);                                 // _fire 자리 (그림 속 모닥불)
@@ -1642,11 +1646,35 @@ function makeSite(sw, sh) {
   YARD.decoSpots.forEach(([dx, dy], i) => { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(dx - 2, dy - 4, 20, 22); hit.on('pointertap', () => onSpot(i)); sc.addChild(hit); });
   // 사람·움직임 (PATCH_V10 §3): 광부는 흙길 따라 · 밤엔 둘이 모닥불 곁 · 레일 광차 · 두더지
   const path = YARD.path, plen = polyLen(path), chars = new Container(); sc.addChild(chars);
+  const inRound = ['SURVEY', 'DIG'].includes(state());
+  const whLot = lotOf(S.company.buildings.warehouse?.lot ?? -1), door = YARD.entrance.door;
+  const runA = [door[0] - 6, door[1] + 8], runB = whLot ? [whLot.x + whLot.w / 2, whLot.y + whLot.h / 2 + 10] : [200, 120];
+  const spots = YARD.idleSpots;
   const walkers = crew.slice(0, 6).map((m, i) => {
-    const sp = new Sprite(F[`${m.id}_walk`][0]); sp.anchor.set(0.5, 1); sp.scale.set(0.5); sp.tint = night ? 0xb8b8e0 : m.tint ?? 0xffffff; chars.addChild(sp);
-    const fire = night && i < 2;
-    return { sp, id: m.id, d: fire ? 0 : 30 + ((i * 53) % (plen - 60)), goal: Math.random() * plen, t: Math.random() * 2, f: 0, fire, fx: YARD.campfire[0] + (i ? 14 : -14), fy: YARD.campfire[1] + 2 };
+    const sp = new Sprite(F[`${m.id}_idle`][0]); sp.anchor.set(0.5, 1); sp.scale.set(0.5); sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; chars.addChild(sp);
+    let w = yardWalkers.get(m.id);
+    if (!w || w.round !== inRound) {                                       // 처음 · 라운드 들어가고 나올 때만 자리 다시
+      const home = inRound ? (i % 2 ? runA : runB) : spots[i % spots.length];
+      w = { x: home[0], y: home[1], tx: home[0], ty: home[1], wait: inRound ? i * 1.5 : 5 + Math.random() * 20, spot: i % spots.length, round: inRound, leg: i % 2 };
+      yardWalkers.set(m.id, w);
+    }
+    return { sp, id: m.id, w, f: Math.random() * 4 };
   });
+  const freeSpot = (me) => { const used = new Set(walkers.filter((o) => o.w !== me).map((o) => o.w.spot)); const c0 = spots.map((_, j) => j).filter((j) => !used.has(j) && j !== me.spot); return c0[Math.floor(Math.random() * c0.length)] ?? me.spot; };
+  const stepWalker = (wk, dt) => {
+    const w = wk.w, dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy);
+    if (d > 0.5) {                                                       // 걷기
+      const v = Math.min(d, 14 * dt); w.x += (dx / d) * v; w.y += (dy / d) * v;
+      wk.f += dt * 8; const fr = F[`${wk.id}_walk`]; wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (Math.abs(dx) > 0.3) wk.sp.scale.x = 0.5 * Math.sign(dx);
+    } else {                                                             // 멈춘 행동 (앉기·기대기·물 긷기 = idle 프레임)
+      const fr = F[`${wk.id}_idle`]; wk.f += dt * 2; wk.sp.texture = fr[Math.floor(wk.f) % fr.length];
+      if ((w.wait -= dt) <= 0) {
+        if (w.round) { w.leg = 1 - w.leg; const p = w.leg ? runA : runB; w.tx = p[0] + (Math.random() - 0.5) * 8; w.ty = p[1] + (Math.random() - 0.5) * 4; w.wait = 1 + Math.random() * 2; }   // 라운드 중: 입구 ↔ 창고
+        else { w.spot = freeSpot(w); [w.tx, w.ty] = spots[w.spot]; w.wait = 20 + Math.random() * 20; }                          // 20~40초마다 다른 자리
+      }
+    }
+    wk.sp.position.set(Math.round(w.x), Math.round(w.y));
+  };
   const mh = pl.find((p) => p.kind === 'moleHouse'), ml = mh ? lotOf(mh.lot) : null;
   const moleS = new Sprite(F.mole_sniff[0]); moleS.anchor.set(0.5, 1); moleS.scale.set(0.5); moleS.tint = shade;
   moleS.position.set(ml ? ml.x + ml.w - 4 : 58, ml ? ml.y + ml.h + 4 : 134); chars.addChild(moleS);
@@ -1656,23 +1684,14 @@ function makeSite(sw, sh) {
   const puffs = new Graphics(); sc.addChild(puffs);
   { const fr = new Sprite(tex('yard_front')); fr.tint = shade; sc.addChild(fr); }   // §3-6 앞 수풀 — 건물·캐릭터 위
   sc.addChild(glows);
+  if (sc.edge) sc.addChild(sc.edge);
   let tt = 0;
   ui.coTick = (dt) => {
     tt += dt; drawMarks(tt);
     if (yardPhase() !== phase) { ui.coTick = null; setTimeout(buildUI, 0); return; }      // 낮 → 해질녘 → 밤 바뀌면 장면 다시
     if (!ripple.destroyed) { ripple.texture = F.yard_ripple[Math.floor(tt * 3) % F.yard_ripple.length]; fireBg.texture = F.yard_fire[Math.floor(tt * 8) % F.yard_fire.length]; }
     for (const g of lampGlows) { const f = 0.55 * Math.sin(tt * 6.3 + g.seed) + 0.3 * Math.sin(tt * 18.8 + g.seed * 2); g.alpha = 0.45 + 0.12 * f; g.width = g.height = 20 * (1 + 0.06 * f); }
-    for (const wk of walkers) {
-      if (wk.sp.destroyed) return;
-      if (wk.fire) { wk.sp.texture = F[`${wk.id}_idle`]?.[Math.floor(tt * 3) % (F[`${wk.id}_idle`]?.length || 1)] ?? wk.sp.texture; wk.sp.position.set(wk.fx, wk.fy); wk.sp.scale.x = wk.fx < YARD.campfire[0] ? 0.5 : -0.5; continue; }
-      if (wk.t > 0) { wk.t -= dt; wk.sp.texture = F[`${wk.id}_idle`]?.[0] ?? wk.sp.texture; }
-      else {
-        const dd = wk.goal - wk.d;
-        if (Math.abs(dd) < 1) { wk.t = 1 + Math.random() * 3; wk.goal = Math.random() * plen; }
-        else { wk.d += Math.sign(dd) * Math.min(Math.abs(dd), 14 * dt); wk.f += dt * 8; const fr = F[`${wk.id}_walk`]; wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; wk.sp.scale.x = 0.5 * Math.sign(dd); }
-      }
-      const [px, py] = polyAt(path, wk.d); wk.sp.position.set(Math.round(px), Math.round(py + 4));
-    }
+    for (const wk of walkers) { if (wk.sp.destroyed) return; stepWalker(wk, dt); }
     chars.children.sort((a, b) => a.y - b.y);
     if (cwait > 0) cwait -= dt; else { cx += cdir * 18 * dt; if (cx > rail.x1 - 6 || cx < rail.x0 + 6) { cdir = -cdir; cwait = 1.5; } }
     const cf = F.cart_roll_empty; cartS.texture = cf[Math.floor(tt * 8) % cf.length]; cartS.scale.x = 0.5 * -cdir; cartS.position.set(Math.round(cx), rail.y + 6);
