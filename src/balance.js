@@ -64,9 +64,25 @@ export const B = {
   moleSpeed: 14,                    // px/초 (지상)
   // 명세5 §1 탐사 도구 — Lv1부터 (장비 탭 업글은 3단계에서 upgrades 표로)
   tools: {
-    vibro: { uses: [2, 3, 4, 5], range: [2, 2, 1, 1], color: [0, 0, 1, 1], seconds: 3 },   // 진동계: 하루 횟수 · 깊이 범위 ± · 광종 색
+    vibro: { seconds: 3 },          // 진동계 결과까지 (횟수·범위·색은 upgrades.vibro)
     sizeWords: [[4, '작은'], [8, '중간'], [99, '큰']],                                         // 진동계 크기 말 (칸 수 이하)
     clue: { perVein: 0.7, truth: 0.5, cave: 0.6, water: 0.6 },                                // 지표 단서: 광맥마다 확률 · 참 비율 · 빈 공간·지하수 단서 확률
+  },
+
+  // ---------------------------------------------------------------- 장비 (명세5 §3) — 라운드 중에도 [장비] 탭에서 즉시. 회사 건물(building)과 같은 Lv
+  // 값 배열은 Lv 자리 그대로(0부터). min = 처음 Lv. cost[lv] = 지금 Lv → 다음 Lv 값 (라운드 순이익의 0.5~1.5배쯤)
+  upgrades: {
+    pick: { name: '곡괭이', min: 1, max: 5, cost: [0, 300, 800, 1800, 3500], tier: [0, 1, 2, 3, 3, 3], speed: [1, 1, 1, 1, 1.5, 1.5], double: [0, 0, 0, 0, 0, 1],
+      steps: ['', '흙·바위', '단단한 바위', '고대석', '속도 ×1.5', '광맥 2칸 동시'] },
+    cart: { name: '광차', building: 'cartShed', min: 1, max: 5, cost: [0, 250, 600, 1300, 2600], load: [0, 10, 12, 15, 18, 20], speed: [0, 3, 3.5, 4, 4.5, 5], carts: [0, 2, 2, 3, 3, 4] },
+    lodge: { name: '숙소', building: 'lodge', min: 1, max: 5, cost: [0, 300, 700, 1500, 3000], miners: [0, 3, 4, 5, 6, 7], capHours: [0, 4, 4, 6, 6, 8] },
+    warehouse: { name: '창고', building: 'warehouse', min: 1, max: 5, cost: [0, 150, 350, 800, 1600], cap: [0, 60, 120, 200, 320, 500] },
+    mole: { name: '두더지', building: 'moleHouse', min: 1, max: 4, cost: [0, 200, 500, 1100], depth: [0, 3, 4, 6, 99], speed: [0, 14, 17, 20, 24], size: [0, 0, 0, 0, 1] },
+    vibro: { name: '진동계', min: 1, max: 4, cost: [0, 200, 500, 1100], uses: [0, 2, 3, 4, 5], range: [0, 2, 2, 1, 1], color: [0, 0, 0, 1, 1] },
+    lantern: { name: '투시 랜턴', building: 'lanternShop', min: 1, max: 4, cost: [0, 200, 500, 1100], xray: [0, 2, 3, 3, 4], radius: [0, 1, 1, 2, 2] },   // 반경 1 = 3×3 · 2 = 5×5
+    smelter: { name: '제련', building: 'smelter', min: 0, max: 3, cost: [400, 900, 2000], sec: [0, 20, 15, 10], slots: [0, 1, 2, 3] },
+    pump: { name: '펌프', building: 'pumpRoom', min: 0, max: 3, cost: [200, 500, 1000], price: [30, 20, 10, 0], auto: [0, 0, 0, 1] },
+    turret: { name: '포탑', building: 'turretShop', min: 0, max: 3, cost: [350, 800, 1600], grade: [0, 1, 2, 3] },
   },
 
   // ---------------------------------------------------------------- 시추 (§5)

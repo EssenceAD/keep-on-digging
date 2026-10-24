@@ -13,9 +13,41 @@ export function ensureCompany(S) {
   const co = S.company;
   co.coreLv ??= 1; co.buildings ??= {}; co.decos ??= []; co.harmoniesFound ??= [];
   co.buildings.office ??= { x: 0, y: C.rows - 1 };
+  ensureUpgrades(S);
   return co;
 }
-export const lvOf = (S, k) => (k === 'office' ? S.company.coreLv : S.company.buildings[k]?.lv ?? 0);
+// ---- 장비 (명세5 §3): S.upgrades[k] = Lv. 회사 건물 Lv = 그 장비 Lv − min (Lv0 = 안 지음)
+export const UP = B.upgrades;
+export const UP_KEYS = Object.keys(UP);
+export const BUILD_UP = Object.fromEntries(UP_KEYS.filter((k) => UP[k].building).map((k) => [UP[k].building, k]));
+export const upLv = (S, k) => S.upgrades?.[k] ?? UP[k].min;
+const upV = (S, k, f) => UP[k][f][upLv(S, k)];
+/** 처음 한 번: 예전 회사 건물 Lv → 장비 Lv */
+export function ensureUpgrades(S) {
+  if (S.upgrades) { for (const k of UP_KEYS) S.upgrades[k] ??= UP[k].min; return; }
+  S.upgrades = {};
+  for (const k of UP_KEYS) S.upgrades[k] = Math.min(UP[k].max, UP[k].min + (UP[k].building ? S.company.buildings[UP[k].building]?.lv ?? 0 : 0));
+}
+export const upCostOf = (S, k) => (upLv(S, k) >= UP[k].max ? null : UP[k].cost[upLv(S, k)]);
+/** 장비 한 줄: 지금 → 다음 */
+export function upText(S, k) {
+  const lv = upLv(S, k), n = Math.min(UP[k].max, lv + 1), u = UP[k], top = lv >= u.max;
+  const ar = (arr, unit = '') => (top || arr[n] === arr[lv] ? `${arr[lv]}${unit}` : `${arr[lv]}→${arr[n]}${unit}`);
+  switch (k) {
+    case 'pick': return top ? u.steps[lv] : `다음: ${u.steps[n]}`;
+    case 'cart': return `적재 ${ar(u.load)} · 속도 ${ar(u.speed)} · ${ar(u.carts, '대')}`;
+    case 'lodge': return `광부 ${ar(u.miners, '명')}`;
+    case 'warehouse': return `창고 ${ar(u.cap)}`;
+    case 'mole': return `깊이 ${u.depth[lv] > 50 ? '전부' : u.depth[lv]}${!top && u.depth[n] !== u.depth[lv] ? '→' + (u.depth[n] > 50 ? '전부' : u.depth[n]) : ''}${!top && u.size[n] && !u.size[lv] ? ' · 크기 점' : ''}`;
+    case 'vibro': return `하루 ${ar(u.uses, '회')} · ±${ar(u.range)}${!top && u.color[n] && !u.color[lv] ? ' · 광종 색' : ''}`;
+    case 'lantern': return `하루 ${ar(u.xray, '회')}${!top && u.radius[n] > u.radius[lv] ? ' · 5×5' : u.radius[lv] > 1 ? ' · 5×5' : ' · 3×3'}`;
+    case 'smelter': return lv ? `괴 동시 ${ar(u.slots)}` : '광석 → 괴 (×1.6)';
+    case 'pump': return `펌프 ${ar(u.price, '금')}${!top && u.auto[n] ? ' · 자동' : u.auto[lv] ? ' · 자동' : ''}`;
+    case 'turret': return `등급 ${ar(u.grade)}`;
+  }
+  return '';
+}
+export const lvOf = (S, k) => (k === 'office' ? S.company.coreLv : BUILD_UP[k] && S.upgrades ? upLv(S, BUILD_UP[k]) - UP[BUILD_UP[k]].min : S.company.buildings[k]?.lv ?? 0);
 export const cols = (S) => C.baseCols + S.company.coreLv - 1;
 
 /** 다음 Lv 비용 (최대면 null) */
@@ -71,24 +103,29 @@ export function companyFx(S) {
   return {
     // 특성 (§3)
     hints: sv >= 1 ? 3 : B.hintsPerCard, oreColor: sv >= 3, veinRange: sv >= 4, freeHint: sv >= 5,
-    pick: B.pickTier + (dg >= 1 ? 1 : 0) + (dg >= 4 ? 1 : 0), dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 3 ? TL.stunMul : 1, chainVein: dg >= 5,
+    pick: Math.min(3, upV(S, 'pick', 'tier') + (dg >= 1 ? 1 : 0) + (dg >= 4 ? 1 : 0)), pickSpeed: upV(S, 'pick', 'speed'), pickDouble: !!upV(S, 'pick', 'double'),
+    dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 3 ? TL.stunMul : 1, chainVein: dg >= 5,
     preview: tr >= 1, surgeWarn: tr >= 3 ? TL.surgeWarnLong : B.surgeWarn, penalty: tr >= 4 ? TL.penaltyLow : null, freeze: tr >= 5,
-    whCap: b.warehouse.cap[L('warehouse')],
-    carts: b.cartShed.carts[L('cartShed')],
-    cartLoad: b.cartShed.load[L('cartShed')],
-    cartSpeed: b.cartShed.speed[L('cartShed')] * (1 + add.cartMul),
-    miners: b.lodge.miners[L('lodge')],
-    capHours: b.lodge.capHours[L('lodge')],
-    smeltSec: b.smelter.sec[L('smelter')] / (1 + add.smeltMul),
-    smeltSlots: b.smelter.slots[L('smelter')],
-    xrayPerDay: b.lanternShop.xray[L('lanternShop')] + add.xrayAdd + (sv >= 2 ? 1 : 0),
-    xrayRadius: b.lanternShop.radius[L('lanternShop')],
-    pumpCost: b.pumpRoom.pump[L('pumpRoom')],
-    autoPump: !!b.pumpRoom.auto[L('pumpRoom')],
-    turret: b.turretShop.grade[L('turretShop')] + (L('turretShop') ? add.turretAdd : 0),
-    surveySec: b.moleHouse.survey[L('moleHouse')] + add.surveyAdd,
-    sniffDepth: b.moleHouse.depth[L('moleHouse')],
-    sniffSize: !!b.moleHouse.size[L('moleHouse')],
+    // 장비 (명세5 §3 — upgrades 표 하나)
+    whCap: upV(S, 'warehouse', 'cap'),
+    carts: upV(S, 'cart', 'carts'),
+    cartLoad: upV(S, 'cart', 'load'),
+    cartSpeed: upV(S, 'cart', 'speed') * (1 + add.cartMul),
+    miners: upV(S, 'lodge', 'miners'),
+    diggers: Math.max(2, Math.ceil(upV(S, 'lodge', 'miners') / 2)),     // 갱도 조: 광부 절반이 캐고 나머지는 운반
+    capHours: upV(S, 'lodge', 'capHours'),
+    smeltSec: (upV(S, 'smelter', 'sec') || 20) / (1 + add.smeltMul),
+    smeltSlots: upV(S, 'smelter', 'slots'),
+    xrayPerDay: upV(S, 'lantern', 'xray') + add.xrayAdd + (sv >= 2 ? 1 : 0),
+    xrayRadius: upV(S, 'lantern', 'radius'),
+    pumpCost: upV(S, 'pump', 'price'),
+    autoPump: !!upV(S, 'pump', 'auto'),
+    turret: upV(S, 'turret', 'grade') + (upLv(S, 'turret') ? add.turretAdd : 0),
+    surveySec: B.surveySeconds + add.surveyAdd,
+    sniffDepth: upV(S, 'mole', 'depth'),
+    moleSpeed: upV(S, 'mole', 'speed'),
+    sniffSize: !!upV(S, 'mole', 'size'),
+    shafts: upLv(S, 'cart') >= 3 ? 3 : 2,                               // 동시 갱도 (광차 Lv3 → 3개)
     idleMul: 1 + add.idleMul,
     guildMul: 1 + add.guildMul,
     sellMul: 1 + add.sellMul + (tr >= 2 ? TL.sellAdd : 0),

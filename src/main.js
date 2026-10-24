@@ -19,13 +19,13 @@ import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
 import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
 import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_GOLD_X, TUT_SHAFT_X, TUT_STOP_Y, TUT_TEXT } from './onboard.js';
-import { BUILDINGS, DECOS, at as coAt, canUp, cols as coCols, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
+import { BUILD_UP, UP, UP_KEYS, upCostOf as gearCost, upLv, upText, BUILDINGS, DECOS, at as coAt, canUp, cols as coCols, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
 const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa09a };
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.0-2';
+const VERSION = 'v1.0-3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -747,6 +747,50 @@ function checkNewDay() {
 }
 setTimeout(checkNewDay, 0);                              // 모듈이 다 읽힌 뒤
 setInterval(checkNewDay, 60 * 1000);
+// ================================================================ 장비 (명세5 §3): 라운드 중에도 [장비] 탭에서 바로
+function upgradeEquip(k) {
+  const cost = gearCost(S, k);
+  if (cost == null) { toast('최대예요'); return; }
+  if (S.gold < cost) { toast('금화가 모자라요'); sfx('pass', true); return; }
+  S.gold -= cost; S.upgrades[k]++;
+  const lv = upLv(S, k);
+  refreshCompany();
+  count('builds');
+  if (k === 'pick' && S.round?.shafts) for (const q of S.round.shafts) if (q.blocked && canDig(q.blocked)) { q.blocked = null; q.dir = 'down'; }   // 막힌 갱도 다시
+  if (k === 'lantern' && S.round && ['SURVEY', 'DIG'].includes(S.round.state)) S.round.xrayLeft = (S.round.xrayLeft ?? 0) + Math.max(0, UP.lantern.xray[lv] - UP.lantern.xray[lv - 1]);
+  if (k === 'vibro' && S.round && ['SURVEY', 'DIG'].includes(S.round.state)) S.round.vibroLeft = (S.round.vibroLeft ?? 0) + Math.max(0, UP.vibro.uses[lv] - UP.vibro.uses[lv - 1]);
+  sfx('upgrade'); toast(`${UP[k].name} Lv${lv}! ${k === 'pick' ? UP.pick.steps[lv] : upText(S, k).replace(/\d+(\.\d+)?→/g, '')}`, 'momo', 2.5);
+  for (const a of crew.slice(0, CF.diggers)) emote(a, '오!', 1.2);
+  save(); buildUI();
+}
+function makeGear(w, h) {
+  const c = new Container();
+  c.addChild(frame('paper', w, h, 'panel'));
+  const ink = { color: COLOR.paperInk, shadow: false };
+  const t = label('장비 · 라운드 중에도 바로', { ...ink, small: true, color: 0x8a5a24 }); t.position.set(6, 3); c.addChild(t);
+  const n = UP_KEYS.length, cols = h - 16 >= n * 14 ? 1 : 2, per = Math.ceil(n / cols);     // 폰 시트가 낮으면 두 줄로
+  const rowH = Math.min(18, Math.floor((h - 16) / per)), cw = Math.floor((w - 4) / cols), two = cols === 2;
+  UP_KEYS.forEach((k, i) => {
+    const x0 = 4 + Math.floor(i / per) * cw, y = 15 + (i % per) * rowH, lv = upLv(S, k), cost = gearCost(S, k);
+    const bw = two ? 34 : 42, bh = Math.min(16, rowH - 2);
+    const nm = label(`${UP[k].name} ${lv ? 'Lv' + lv : '-'}`, { ...ink, small: true }); nm.position.set(x0 + 2, y + (two ? -1 : 1)); c.addChild(nm);
+    if (two && nm.width > cw - bw - 8) nm.scale.set((cw - bw - 8) / nm.width);
+    const tx = label(upText(S, k), { ...ink, small: true, color: 0x6a5a48 });
+    const tx0 = two ? x0 + 2 : x0 + 66, room = (two ? cw - bw - 8 : w - 66 - bw - 12);
+    if (two) { tx.scale.set(Math.min(0.7, room / tx.width)); tx.position.set(tx0, y + 9); } else { if (tx.width > room) tx.scale.set(Math.max(0.55, room / tx.width)); tx.position.set(tx0, y + 1); }
+    c.addChild(tx);
+    const bt = button(cost == null ? 'stone' : S.gold >= cost ? 'wood' : 'paper', bw, bh, cost == null ? '최대' : `${cost}`, () => upgradeEquip(k), { small: true });
+    bt.position.set(x0 + cw - bw - 4, y); c.addChild(bt); ui.refs[`gear_${k}`] = bt;
+    if (cost == null) bt.setDisabled(true);
+  });
+  return c;
+}
+/** 막힌 갱도의 [장비] → 장비 탭 열기 */
+function openGear() {
+  if (L.portrait) { sheetTab = 'gear'; S.settings.sheetFolded = false; save(); layout(); }
+  else toast('왼쪽 [장비]에서 곡괭이를 올려요');
+  sfx('ui_open');
+}
 function makeDaybook(w, h) {
   const c = new Container();
   c.addChild(frame('paper', w, h, 'panel'));
@@ -1237,7 +1281,7 @@ function refreshCompany() {
   S.idle.capHours = CF.capHours;
   if (S.company.coreLv >= B.company.mineLv && S.floorUnlocked < 2) { S.floorUnlocked = 2; S.auction = null; setTimeout(() => toast('폐광(2층)이 열렸어요! 다음 경매에 나와요', 'halabeoji', 3), 600); }
   S.talents.points = talentPoints(S); S.talents.spent = talentSpent(S);
-  if (talentLeft(S) > 0 && S.tutorial.done) setTimeout(() => tip('talent'), 900);
+  if (talentLeft(S) > 0 && S.tutorial.done && SHOW_COMPANY) setTimeout(() => tip('talent'), 900);
   applyMarketFx();
   ensureCrew();
   for (const h of harmonies(S)) if (!S.company.harmoniesFound.includes(h.id)) {
@@ -1253,7 +1297,7 @@ function coAction(kind) {
   const isDeco = !!B.company.decos[kind];
   if (kind === 'office' || (!isDeco && lvOf(S, kind) > 0)) {   // 올리기 (즉시)
     S.gold -= chk.cost;
-    if (kind === 'office') S.company.coreLv++; else S.company.buildings[kind].lv++;
+    if (kind === 'office') S.company.coreLv++; else { S.company.buildings[kind].lv++; if (BUILD_UP[kind]) S.upgrades[BUILD_UP[kind]]++; }
     count('builds'); afterBuild(`${nameOf(kind)} Lv${lvOf(S, kind)}!`);
   } else { placing = { kind, cost: chk.cost, move: false }; coSel = null; toast('놓을 빈 자리를 톡!'); buildUI(); }
 }
@@ -1269,7 +1313,7 @@ function onSlot(x, y) {
       if (S.gold < placing.cost) { toast('금화가 모자라요'); placing = null; buildUI(); return; }
       S.gold -= placing.cost;
       if (B.company.decos[kind]) S.company.decos.push({ kind, x, y });
-      else S.company.buildings[kind] = { lv: 1, x, y };
+      else { S.company.buildings[kind] = { lv: 1, x, y }; if (BUILD_UP[kind]) S.upgrades[BUILD_UP[kind]] = Math.max(S.upgrades[BUILD_UP[kind]], UP[BUILD_UP[kind]].min + 1); }
     }
     placing = null;
     if (!move) count('builds');
@@ -1682,7 +1726,7 @@ function updateMole(dt) {
     const tx = GX + TUT_SHAFT_X * T + 8;
     if (S.tutorial.sniffed) { mole.sniffing = false; return; }
     if (mole.tw == null) {
-      const d = tx - mole.x; mole.face = Math.sign(d) || 1; mole.x += Math.sign(d) * Math.min(Math.abs(d), B.moleSpeed * dt);
+      const d = tx - mole.x; mole.face = Math.sign(d) || 1; mole.x += Math.sign(d) * Math.min(Math.abs(d), CF.moleSpeed * dt);
       if (Math.abs(d) < 0.5) { mole.tw = 3; mole.face = -1; emote(mole, '킁킁', 3); sfx('mole_sniff'); (S.round.paws ??= []).push(TUT_SHAFT_X); drawSurvey(); }
     } else { mole.tw -= dt; mole.sniffing = true; if (mole.tw <= 0) { S.tutorial.sniffed = true; mole.tw = null; mole.sniffing = false; save(); } }
     return;
@@ -1693,7 +1737,7 @@ function updateMole(dt) {
     const d = mole.goal - mole.x;
     mole.face = Math.sign(d) || 1;
     const before = Math.floor((mole.x - GX) / T);
-    mole.x += Math.sign(d) * Math.min(Math.abs(d), B.moleSpeed * dt);
+    mole.x += Math.sign(d) * Math.min(Math.abs(d), CF.moleSpeed * dt);
     const after = Math.floor((mole.x - GX) / T);
     if (after !== before && after >= 0 && after < GW) {
       const size = veinBelow(after);
@@ -1725,8 +1769,8 @@ function xrayAt(wx, wy) {
 
 // ---------------------------------------------------------------- 탐사 도구 (명세5 §1): 진동계 · 지표 단서 · 지상 표시(🐾 · 말뚝 · 투시 기억)
 const TV = B.tools;
-const toolLv = (k) => Math.min((S.upgrades?.[k] ?? 1) - 1, 3);
-const vibroUses = () => TV.vibro.uses[toolLv('vibro')];
+const vibroV = (f) => UP.vibro[f][upLv(S, 'vibro')];
+const vibroUses = () => vibroV('uses');
 const CLUE = { C: ['grass', '변색된 풀', '구리'], s: ['gravel', '반짝이는 자갈', '은·금'], g: ['gravel', '반짝이는 자갈', '은·금'], j: ['crystal', '수정 조각', '보석'], c: ['moss', '푸른 이끼', '발광석'], o: ['crack', '갈라진 땅', '빈 공간'], w: ['damp', '축축한 땅', '지하수'] };
 /** 라운드 시작: 지표 단서 배치 — 참 단서(광맥·빈 공간·지하수 위) + 같은 비율의 헛단서 */
 function placeClues() {
@@ -1763,10 +1807,10 @@ function vibroAt(wx) {
     for (let y = 0; y < W.rows && id < 0; y++) { const v = W.veins.id[y][gx]; if (v >= 0 && ORE_KEYS.has(W.g[y][gx])) { id = v; d = y + 1; } }
     if (id < 0) { st.text = '없음'; }
     else {
-      const v = W.veins.list[id], r = TV.vibro.range[toolLv('vibro')], lo = Math.max(1, d - Math.floor(Math.random() * (r + 1)));
+      const v = W.veins.list[id], r = vibroV('range'), lo = Math.max(1, d - Math.floor(Math.random() * (r + 1)));
       const word = TV.sizeWords.find(([n]) => v.size <= n)[1];
       st.text = `깊이 ${lo}~${lo + r} · ${word}`;
-      if (TV.vibro.color[toolLv('vibro')]) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
+      if (vibroV('color')) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
     }
     st.at = 0; sfx(id < 0 ? 'pass' : 'vein_found', true); drawSurvey(); syncRound();
   }, TV.vibro.seconds * 1000);
@@ -1931,8 +1975,8 @@ function buildUI() {
     const s = new Container(); s.y = u(sheet.y);
     const sw = u(sheet.w), sh = u(L.H) - u(sheet.y);
     s.addChild(frame('stone', sw, sh + 6, 'panel'));
-    const tabs = [['sell', '판매'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
-    const tw = Math.floor((sw - 12 - 22) / 4);
+    const tabs = [['sell', '판매'], ['gear', '장비'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
+    const tw = Math.floor((sw - 12 - 22) / tabs.length);
     const body = new Container(); body.position.set(5, 19);
     const bw = sw - 10, bh = sh - 23;
     const show = (key) => {
@@ -1941,7 +1985,7 @@ function buildUI() {
       body.removeChildren().forEach((c) => c.destroy({ children: true }));
       ui.rows = {};
       for (const k of ['crew', 'fps', 'buyerFace', 'buyerName', 'irows', 'smeltLine']) ui[k] = null;
-      body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : key === 'day' ? makeDaybook(bw, bh) : makeSettings(bw, bh));
+      body.addChild(state() === 'AUCTION' && AU.card && view !== 'company' ? makeBidPanel(bw, bh) : key === 'sell' ? makeSell(bw, bh) : key === 'gear' ? makeGear(bw, bh) : key === 'miner' ? makeCrew(bw, bh) : key === 'day' ? makeDaybook(bw, bh) : makeSettings(bw, bh));
       refreshUI();
     };
     ui.tabs = tabs.map(([key, name], i) => {
@@ -1966,10 +2010,9 @@ function buildUI() {
     const cr = makeCrew(lw - 10, ch - 10); cr.position.set(5, 43); lc.addChild(cr);
     const dh = 78;
     const db = makeDaybook(lw, dh); db.y = 38 + ch + 2; lc.addChild(db);
-    const logH = Math.max(30, lh - 38 - ch - 2 - 136 - dh - 2);
-    const lf = frame('stone', lw, logH, 'panel'); lf.y = 38 + ch + 2 + dh + 2; lc.addChild(lf);
-    const lt = label('사건 기록', { small: true, color: COLOR.gold }); lt.position.set(6, lf.y + 4); lc.addChild(lt);
-    (eventLog.length ? eventLog : ['아직 없어요']).slice(0, Math.floor((logH - 20) / 12)).forEach((t, i) => { const l = label(t, { small: true, color: COLOR.stone }); l.position.set(8, lf.y + 18 + i * 12); lc.addChild(l); });
+    const logH = Math.max(150, lh - 38 - ch - 2 - 100 - dh - 2);
+    const lf = { y: 38 + ch + 2 + dh + 2 };                       // 명세5 §3: 사건 기록 자리 → 장비 (PC 패널은 §12-7에서 정리)
+    const gr = makeGear(lw, logH); gr.y = lf.y; lc.addChild(gr);
     const sf = frame('stone', lw, lh - 38 - ch - 2 - logH - 2, 'panel'); sf.y = lf.y + logH + 2; lc.addChild(sf);
     const st = makeSettings(lw - 10, lh - 38 - ch - logH - 14); st.position.set(5, sf.y + 5); lc.addChild(st);
     uiRoot.addChild(lc);
@@ -2646,7 +2689,7 @@ const nodeOf = (a) => a.node ?? 'S';
 
 // ---- 칸 파기 · 광맥 · 유물 (사건은 6단계)
 const canDig = (t) => (B.hardness[t] ?? 9) <= CF.pick;
-const digSeconds = (t) => ORE_KEYS.has(t) ? B.digTime.ore : t === 'd' ? CF.dirt : (B.digTime[t] ?? 1);
+const digSeconds = (t) => (ORE_KEYS.has(t) ? B.digTime.ore : t === 'd' ? CF.dirt : (B.digTime[t] ?? 1)) / CF.pickSpeed;
 let piles = [];                                           // 캔 광석 더미: { gx, gy, type, n } — 운반 광부가 나른다
 const marks = [];                                          // 빨간 X
 function markX(gx, gy) {
@@ -2866,7 +2909,7 @@ function updateEvents(dt) {
 // 광맥에 닿으면 덩어리 통째로 캐고 그 갱도는 기다림("다음 어디?") · 못 뚫는 칸이면 멈춤 · 붕괴는 광부가 다시 뚫음
 const cellAtWorld = (wx, wy) => [Math.floor((wx - GX) / T), Math.floor((wy - GY) / T)];
 const inGrid = (gx, gy) => !!W && gx >= 0 && gx < GW && gy >= 0 && gy < W.rows;
-const shaftMax = () => (lvOf(S, 'cartShed') >= 3 ? 3 : 2);
+const shaftMax = () => CF.shafts;
 const shaftNext = (s) => (s.dir === 'left' ? [s.hx - 1, s.hy] : s.dir === 'right' ? [s.hx + 1, s.hy] : [s.hx, s.hy + 1]);
 const nearOre = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ORE_KEYS.has(W.g[y + dy]?.[x + dx]));
 const shaftsG = new Graphics(), shaftHeadG = new Graphics();
@@ -2923,7 +2966,7 @@ function shaftTick() {
   // 기다리는 갱도: 광맥을 다 캤으면 "다음 어디?"
   if (!rd.jobs.some((j) => j.vein != null)) rd.shafts.forEach((s, i) => {
     if (s.dir !== 'wait' || s.blocked || (s.askT != null && time - s.askT < 9)) return;
-    s.askT = time; const a = crew[i % B.diggers]; if (a && !tutOn()) emote(a, '다음 어디?', 2.5);
+    s.askT = time; const a = crew[i % CF.diggers]; if (a && !tutOn()) emote(a, '다음 어디?', 2.5);
   });
   if (changed) { drawShafts(); syncRound(); }
 }
@@ -2956,7 +2999,7 @@ function drawShaftUI() {
         b.alpha = on ? 0.5 : 0.85;
         b.dir = d; box.addChild(b); shaftBtns[`${s.id}:${d}`] = b;
       }
-      if (s.blocked) { const l = label(s.blocked === 'a' ? '곡괭이 3등급 필요' : '곡괭이 2등급 필요', { small: true, color: 0xffd0a0 }); l.isNote = true; box.addChild(l); }
+      if (s.blocked) { const l = button('wood', 96, 16, s.blocked === 'a' ? '곡괭이 Lv3 [장비]' : '곡괭이 Lv2 [장비]', openGear, { small: true }); l.isNote = true; box.addChild(l); }
     }
   }
   if (!show) return;
@@ -2966,7 +3009,7 @@ function drawShaftUI() {
     box.scale.set(L.uiS);
     const [cx, cy] = toScreen(cellX(s.hx), GY + s.hy * T + 8);
     for (const b of box.children) {
-      if (b.isNote) { b.position.set(Math.round((cx - b.width * L.uiS / 2 - box.x) / L.uiS), Math.round((cy + half + 4 - box.y) / L.uiS)); continue; }
+      if (b.isNote) { const nx = Math.max(2, Math.min(L.W - b.width * L.uiS - 2, cx - b.width * L.uiS / 2)), ny = cy - half - 22 * L.uiS; b.position.set(Math.round(nx / L.uiS), Math.round(ny / L.uiS)); shaftHits.push({ x: nx, y: ny, w: b.width * L.uiS, h: b.height * L.uiS }); continue; }
       const bs = b.width * L.uiS;
       let [x, y] = b.dir === 'left' ? [cx - half - bs - 2, cy - bs / 2] : b.dir === 'right' ? [cx + half + 2, cy - bs / 2] : [cx - bs / 2, cy + half + 2];
       x = Math.max(2, Math.min(L.W - bs - 2, x));                // 가장자리 열이면 화면 안쪽으로
@@ -3045,7 +3088,12 @@ function updateDigger(a, dt) {
     if (a.digT >= need) {
       a.digT = 0;
       rd.jobs = rd.jobs.filter((j) => !(j.x === x && j.y === y));
-      breakCell(x, y, nodeOf(a), a.job);
+      const done = a.job;
+      breakCell(x, y, nodeOf(a), done);
+      if (CF.pickDouble && done.vein != null) {             // 곡괭이 Lv5: 맞닿은 광맥 칸 하나 더
+        const j2 = rd.jobs.find((j) => j.vein === done.vein && Math.abs(j.x - x) + Math.abs(j.y - y) === 1 && W.g[j.y][j.x] !== '.' && !crew.some((o) => o.job === j));
+        if (j2) { rd.jobs = rd.jobs.filter((j) => j !== j2); breakCell(j2.x, j2.y, nodeOf(a), j2); }
+      }
       a.job = null;
     }
     return;
@@ -3171,7 +3219,7 @@ function cartStop() {
     const path = cartPath(cart.node, (n) => want.has(n));
     if (path) return path.length ? path[path.length - 1] : cart.node;
   }
-  const red = crew[carts.indexOf(cart) % B.diggers] ?? crew[0];   // v0.8: 광차마다 선두 한 명씩 따라감
+  const red = crew[carts.indexOf(cart) % CF.diggers] ?? crew[0];   // v0.8: 광차마다 선두 한 명씩 따라감
   if (typeof red.node !== 'number') return 'S';
   const seen = new Set([red.node]), q = [red.node], nb = [];
   while (q.length) {
@@ -3378,7 +3426,7 @@ function updateCrew(dt) {
     if (state() !== 'DIG') { setAnim(a, `${a.id}_idle`); a.state = 'idle'; continue; }
     checkFall(a);
     if (a.fall) continue;
-    if (crew.indexOf(a) < B.diggers) updateDigger(a, dt); else updateCarrier(a, dt);
+    if (crew.indexOf(a) < CF.diggers) updateDigger(a, dt); else updateCarrier(a, dt);
   }
   cart = cartA;
   // 운반 중 광석 아이콘 (머리 위)
@@ -3635,7 +3683,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, upgradeEquip, openGear, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
