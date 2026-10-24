@@ -320,6 +320,7 @@ function buildWorld() {
     rows,
     g: rd ? rd.grid.map((r) => r.split('')) : Array.from({ length: rows }, () => Array(GW).fill('d')),
     ladder: rd?.ladder ? rd.ladder.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),
+    climb: rd?.climb ? rd.climb.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),   // 광맥을 캐낸 빈 공간: 사다리 없이 기어오름
     rail: rd?.rail ? rd.rail.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),
     water: rd?.water ? rd.water.map((r) => r.split('').map((c) => c === '1')) : Array.from({ length: rows }, () => Array(GW).fill(false)),
   };
@@ -449,7 +450,7 @@ function bigVein(x, y) {
 // AUCTION → SURVEY → DIG ⇄ (판매 탭) → RESULT → AUCTION
 let time = 0;
 const state = () => S.round?.state ?? 'AUCTION';
-const AU = { phase: 'pick', card: null, high: 0, holder: null, log: [], timer: 0, queue: [] };   // 경매 진행(저장 안 함)
+const AU = { phase: 'pick', card: null, high: 0, holder: null, log: [], timer: 0, queue: [], say: [null, null, null], me: null };   // 경매 진행(저장 안 함)
 
 function todayCards() {
   if (!S.auction || S.auction.day !== S.day) S.auction = { day: S.day, cards: makeCards(newSeed()) };
@@ -469,7 +470,7 @@ function startRound(card, bid) {
   const blank = () => grid.map(() => '0'.repeat(GW));
   S.gold -= bid;
   S.round = {
-    state: 'SURVEY', card, bid, grid, orig: grid.slice(), ladder: blank(), rail: blank(), water: blank(),
+    state: 'SURVEY', card, bid, grid, orig: grid.slice(), ladder: blank(), climb: blank(), rail: blank(), water: blank(),
     startedAt: now(), surveyLeft: B.surveySeconds, xrayLeft: B.xrayPerDay,
     stats: { revenue: 0, maxVein: 0, relics: 0, relicGold: 0, events: [], jackpots: 0 },
     jobs: [], claimed: [], piles: [], gasUntil: 0,
@@ -529,14 +530,15 @@ function guildValue(card, g) {
   return v * spread * g.cap;
 }
 function pickCard(card) {
-  AU.card = card; AU.phase = 'r1'; AU.high = card.price; AU.holder = null; AU.log = [`시작가 ${card.price}`];
+  AU.card = card; AU.phase = 'r1'; AU.high = card.price; AU.holder = null; AU.log = [`시작가 ${card.price}`]; AU.say = [null, null, null]; AU.me = null;
   AU.caps = B.guilds.map((g) => guildValue(card, g));
   buildUI();
 }
 function playerRaise(pct) {
   const price = Math.round(AU.high * (1 + pct));
   if (price > S.gold) { toast('금화가 모자라요'); return; }
-  AU.high = price; AU.holder = 'me'; AU.log.push(`나 +${Math.round(pct * 100)}% → ${price}`);
+  AU.high = price; AU.holder = 'me'; AU.log.push(`나 +${Math.round(pct * 100)}% → ${price}`); AU.me = `↑${price}`;
+  AU.say = AU.say.map((t) => (t ? { ...t, old: true } : t));
   sfx('stash', true);
   if (AU.phase === 'r2') { AU.phase = 'won'; AU.timer = 1.2; buildUI(); return; }
   // 1라운드: 길드가 차례로 (aiBidDelay 간격으로 하나씩 뜬다)
@@ -550,11 +552,11 @@ function guildTurn(i) {
   else if (g.style === 'careful') pct = 0.10;
   else pct = B.raises[Math.floor(Math.random() * B.raises.length)];
   const price = Math.round(AU.high * (1 + pct));
-  if (price <= cap) { AU.high = price; AU.holder = i; AU.log.push(`${g.name} +${Math.round(pct * 100)}% → ${price}`); sfx('ore'); }
-  else AU.log.push(`${g.name} 패스`);
+  if (price <= cap) { AU.high = price; AU.holder = i; AU.log.push(`${g.name} +${Math.round(pct * 100)}% → ${price}`); AU.say[i] = { text: `↑${price}`, pass: false, t: time }; sfx('ore'); }
+  else { AU.log.push(`${g.name} 패스`); AU.say[i] = { text: '패스', pass: true, t: time }; sfx('clink', true); }
 }
 function playerFold() {
-  AU.log.push('나 포기');
+  AU.log.push('나 포기'); AU.me = '포기';
   AU.phase = 'lost'; AU.timer = 1.4; buildUI();
 }
 function updateAuction(dt) {
@@ -769,9 +771,10 @@ function buildUI() {
     uiRoot.addChild(rc);
   }
   ui.overlayRect = null;
+  const tut = makeTutorial();                                    // 먼저 만들어 높이를 안다 (경매 카드가 비켜 줌)
   const ov = makeOverlay();
   if (ov) uiRoot.addChild(ov);
-  const tut = makeTutorial(); if (tut) uiRoot.addChild(tut);
+  if (tut) uiRoot.addChild(tut);
   ui.fxLayer = new Container(); uiRoot.addChild(ui.fxLayer);
   ui.toast = new Container(); ui.toast.visible = false; uiRoot.addChild(ui.toast);
   refreshUI();
@@ -806,7 +809,7 @@ function makeHud(w, h) {
 function makeOverlay() {
   const st = state();
   const u = (v) => Math.round(v / L.uiS);
-  const v = L.vis, x = u(v.x0) + 4, y = u(v.y0) + 4, w = u(v.x1 - v.x0) - 8, h = u(v.y1 - v.y0) - 8;
+  const v = L.vis, x = u(v.x0) + 4, y = u(v.y0) + 4, w = u(v.x1 - v.x0) - 8, h = u(v.y1 - v.y0) - 8 - (st === 'AUCTION' ? tutorialH : 0);
   if (st === 'AUCTION') return makeAuction(x, y, w, h);
   if (st === 'SURVEY') return makeSurveyBar(x, y, w);
   if (st === 'RESULT') return makeResult(x, y, w, h);
@@ -835,16 +838,30 @@ function makeAuction(x, y, w, h) {
     });
     return c;
   }
-  // 입찰 화면: 고른 카드 + 호가 기록 + 버튼
-  const k = makePlotCard(AU.card, w - 16, 64, true); k.position.set(8, 34); c.addChild(k);
+  // 입찰 화면: 고른 카드 + 길드 3곳(초상 · 없으면 이름 카드) + 호가 말풍선 + 버튼
+  const k = makePlotCard(AU.card, w - 16, 36, true); k.position.set(8, 32); c.addChild(k);
   const hi = label(`최고가 ${AU.high} · ${AU.holder === 'me' ? '나' : AU.holder == null ? '아직 없음' : B.guilds[AU.holder].name}`, { color: COLOR.paperInk, shadow: false });
-  hi.position.set(8, 104); c.addChild(hi);
-  const logH = Math.max(30, h - 160);
-  const lines = AU.log.slice(-Math.floor(logH / 12));
-  lines.forEach((t, i) => { const l = label(t, { small: true, color: 0x5c3832, shadow: false }); l.position.set(10, 120 + i * 12); c.addChild(l); });
+  hi.position.set(8, 72); c.addChild(hi);
+  const gw = Math.floor((w - 16 - 8) / 3), gy = 108;
+  B.guilds.forEach((g, i) => {
+    const gc = guildCard(i, gw, AU.holder === i);
+    gc.position.set(8 + i * (gw + 4), gy); c.addChild(gc);
+    const say = AU.say[i];
+    if (say) {                                              // 말풍선: 방금 부른 건 진하게, 지난 건 흐리게
+      const bt = label(say.text, { small: true, color: say.pass ? 0x8a7a68 : 0x5c3832, shadow: false });
+      const bw = Math.min(gw, Math.ceil(bt.width) + 8);
+      const bub = new Container(); bub.addChild(frame('paper', bw, 15, 'panel'), bt); bt.position.set(4, 1);
+      const tail = new Graphics().poly([bw / 2 - 3, 14, bw / 2 + 3, 14, bw / 2, 18]).fill(0xf4ecd2); bub.addChild(tail);
+      bub.position.set(8 + i * (gw + 4) + Math.round((gw - bw) / 2), gy - 19);
+      bub.alpha = say.old ? 0.5 : 1;
+      const age = time - say.t; if (age < 0.25) bub.scale.set(0.8 + age * 0.8);
+      c.addChild(bub);
+    }
+  });
   const by = h - 26;
+  if (AU.me) { const m = label(`나 ${AU.me}`, { small: true, color: 0x46702e, shadow: false }); m.position.set(w - 8 - Math.ceil(m.width), Math.max(gy + 46, by - 14)); c.addChild(m); }
   if (AU.phase === 'r1' || AU.phase === 'r2') {
-    const note = label(AU.phase === 'r2' ? '마지막 기회! 한 번 더 올리면 낙찰' : '얼마나 올릴까요?', { small: true, color: 0x8a5a24, shadow: false });
+    const note = label(AU.phase === 'r2' ? '마지막 기회! 올리면 낙찰' : '얼마나 올릴까요?', { small: true, color: 0x8a5a24, shadow: false });
     note.position.set(8, by - 14); c.addChild(note);
     const bw = Math.floor((w - 16 - 12) / 4);
     B.raises.forEach((pct, i) => {
@@ -860,18 +877,46 @@ function makeAuction(x, y, w, h) {
   }
   return c;
 }
+const GUILD_COLOR = [0x3d5a9a, 0x8a5a24, 0x7a2e48];
+let guildFaces = [];                                       // art/raw/guild_*.png → npm run portraits → public/assets/portraits/guild_N.png
+fetch(`${BASE}assets/portraits/guilds.json`).then((r) => (r.ok ? r.json() : [])).then(async (list) => {
+  guildFaces = await Promise.all(list.map((f) => (f ? Assets.load(`${BASE}assets/portraits/${f}`).catch(() => null) : null)));
+  if (state() === 'AUCTION') buildUI();
+}).catch(() => {});
+/** 길드 카드: 초상이 있으면 틀 안 초상, 없으면 이름 첫 글자 큰 카드 */
+function guildCard(i, w, leading) {
+  const g = B.guilds[i], c = new Container();
+  c.addChild(frame(leading ? 'wood' : 'stone', w, 42, 'panel'));
+  const face = guildFaces[i], fs = 24;
+  if (face) { const pf = portraitFrame(face, fs + 2, 'wood'); pf.position.set(2, 2); c.addChild(pf); }
+  else {                                                   // 초상 오기 전: 길드 색 + 이름 첫 글자
+    const box = new Graphics().rect(3, 3, fs, fs).fill(GUILD_COLOR[i]).rect(3, 3, fs, 1).fill(0xffffff); c.addChild(box);
+    const ini = label(g.name[0], { color: COLOR.paper }); ini.position.set(3 + Math.round((fs - ini.width) / 2), 8); c.addChild(ini);
+  }
+  const style = { aggressive: '공격', careful: '신중', random: '변덕' }[g.style];
+  const st = label(style, { small: true, color: COLOR.dim }); st.position.set(fs + 7, 4); c.addChild(st);
+  const short = w >= 90 ? g.name : g.name.split(' ')[0];
+  const nm = label(short, { small: true, color: leading ? COLOR.gold : COLOR.paper }); nm.position.set(4, 29); c.addChild(nm);
+  if (nm.width > w - 6) nm.scale.set((w - 6) / nm.width);
+  if (leading) { const crown = icon(kit('badge_gold')); crown.position.set(1, 1); c.addChild(crown); }
+  return c;
+}
 function makePlotCard(card, w, h, flat = false) {
   const c = new Container();
   c.addChild(frame('wood', w, h, 'panel'));
   const nm = label(card.name, { color: COLOR.gold }); nm.position.set(6, 5); c.addChild(nm);
   const sz = B.plotSizes[card.size];
   const info = label(`크기 ${card.size} · 12×${sz.rows}`, { small: true, color: COLOR.dim }); info.position.set(6, 20); c.addChild(info);
-  card.hints.forEach((hnt, i) => {
-    const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(6 + i * 72, 34); c.addChild(ic);
-    const t = label(HINT_TEXT[hnt], { small: true }); t.position.set(18 + i * 72, 34); c.addChild(t);
+  let hx = Math.ceil(info.width) + 14;                        // 힌트는 크기 줄 옆에 (카드가 짧아도 시작가와 안 겹침)
+  const narrow = w < 240;
+  card.hints.forEach((hnt) => {
+    const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, 21); c.addChild(ic);
+    if (narrow) { hx += 12; return; }                         // 좁은 카드는 아이콘만
+    const t = label(HINT_TEXT[hnt], { small: true }); t.position.set(hx + 11, 20); c.addChild(t);
+    hx += 11 + Math.ceil(t.width) + 8;
   });
   const price = label(`시작가 ${card.price}`, { small: true, color: COLOR.gold });
-  price.position.set(6, h - 14); c.addChild(price);
+  price.position.set(6, h - 14); if (h >= 50) c.addChild(price);
   if (!flat) {
     const b = button('wood', 52, 18, '입찰', () => { unlockAudio(); pickCard(card); }, { small: true });
     b.setDisabled(card.price > S.gold);
@@ -1177,17 +1222,20 @@ const cxy = (n) => [n % GW, Math.floor(n / GW)];
 const cellX = (gx) => GX + gx * T + 8;
 const floorY = (gy) => GY + (gy + 1) * T + 1;
 const ladderAt = (gx, gy) => !!W && gy >= 0 && gy < W.rows && gx >= 0 && gx < GW && W.ladder[gy][gx];
+const climbAt = (gx, gy) => !!W && gy >= 0 && gy < W.rows && gx >= 0 && gx < GW && W.climb[gy][gx];
+/** 오르내릴 수 있는 칸: 그린 사다리 또는 광맥 공간(벽을 짚고 기어오름) */
+const holdAt = (gx, gy) => ladderAt(gx, gy) || climbAt(gx, gy);
 const waterAt = (gx, gy) => !!W && gy >= 0 && gy < W.rows && gx >= 0 && gx < GW && W.water[gy][gx];
 /** 발밑이 받쳐 주나 (사다리거나 아래가 막혔거나 맨 아래) */
-const supported = (gx, gy) => ladderAt(gx, gy) || gy + 1 >= W.rows || !isDug(gx, gy + 1);
+const supported = (gx, gy) => holdAt(gx, gy) || gy + 1 >= W.rows || !isDug(gx, gy + 1);
 function graphNeighbors(n, out) {
   out.length = 0;
   if (n === 'S') { for (let gx = 0; gx < GW; gx++) if (isDug(gx, 0)) out.push(idx(gx, 0)); return out; }
   const [x, y] = cxy(n);
   if (y === 0) out.push('S');
   for (const dx of [-1, 1]) if (isDug(x + dx, y) && supported(x + dx, y) && supported(x, y)) out.push(idx(x + dx, y));
-  if (isDug(x, y - 1) && (ladderAt(x, y) || ladderAt(x, y - 1))) out.push(idx(x, y - 1));
-  if (isDug(x, y + 1) && (ladderAt(x, y) || ladderAt(x, y + 1))) out.push(idx(x, y + 1));
+  if (isDug(x, y - 1) && (holdAt(x, y) || holdAt(x, y - 1))) out.push(idx(x, y - 1));
+  if (isDug(x, y + 1) && (holdAt(x, y) || holdAt(x, y + 1))) out.push(idx(x, y + 1));
   return out;
 }
 /** 너비 우선: start에서 goal(n) 참인 곳까지 노드 목록 (start 제외). 못 가면 null */
@@ -1220,6 +1268,7 @@ function syncRound() {                                     // 세계 → 저장
   if (!W || !S.round) return;
   S.round.grid = W.g.map((r) => r.join(''));
   S.round.ladder = W.ladder.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
+  S.round.climb = W.climb.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
   S.round.rail = W.rail.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
   S.round.water = W.water.map((r) => r.map((v) => (v ? '1' : '0')).join(''));
   S.round.piles = piles;
@@ -1246,14 +1295,16 @@ function claimVeinsNear(gx, gy) {
     tutorialDone(4);
   }
 }
-function breakCell(gx, gy, from) {
+function breakCell(gx, gy, from, job) {
   const t = W.g[gy][gx];
   W.g[gy][gx] = '.';
   W.rail[gy][gx] = true;                                   // 뚫린 길엔 레일이 깔림
-  // 세로로 들어간 칸(위·아래에서, 또는 지상에서 0줄)엔 사다리
-  if (from === 'S' || (from != null && cxy(from)[0] === gx)) {
+  if (job?.ladder) {                                       // 플레이어가 세로로 그린 경로 → 사다리 (이 칸 + 경로 앞 칸)
     W.ladder[gy][gx] = true;
-    if (from !== 'S') { const [fx, fy] = cxy(from); W.ladder[fy][fx] = true; }
+    if (job.prev && job.prev !== 'S') { const [px, py] = job.prev; if (isDug(px, py)) W.ladder[py][px] = true; }
+  } else if (job?.vein != null || !job) {                  // 광맥·폭발로 생긴 빈 공간은 사다리 없이 기어오름
+    W.climb[gy][gx] = true;
+    if (from != null && from !== 'S' && cxy(from)[0] === gx) { const [fx, fy] = cxy(from); W.climb[fy][fx] = W.climb[fy][fx] || !W.ladder[fy][fx]; }
   }
   const x0 = GX + gx * T, y0 = GY + gy * T;
   sfx('break', true);
@@ -1344,7 +1395,7 @@ function collapse() {
   }
   if (!runs.length) return false;
   const [x0, y0] = runs[Math.floor(Math.random() * runs.length)];
-  for (let k = 0; k < len; k++) { W.g[y0][x0 + k] = 'd'; W.rail[y0][x0 + k] = false; W.water[y0][x0 + k] = false; }
+  for (let k = 0; k < len; k++) { W.g[y0][x0 + k] = 'd'; W.rail[y0][x0 + k] = false; W.water[y0][x0 + k] = false; W.climb[y0][x0 + k] = false; }
   for (let k = 0; k < len; k++) refreshAround(x0 + k, y0, 1);
   drawEdges(); drawSolid(); drawProps(); syncRound();
   fx('fx_collapse', cellX(x0) + (len - 1) * T / 2, GY + y0 * T + 6);
@@ -1447,7 +1498,9 @@ function commitPath() {
     if (isDug(gx, gy)) { from = idx(gx, gy); continue; }
     const t = W.g[gy][gx];
     if (!canDig(t)) { markX(gx, gy); sfx('clink', true); toast(t === 'a' ? '고대석은 곡괭이 3등급부터예요' : '단단한 바위는 곡괭이 2등급부터예요'); break; }   // 못 뚫는 칸에서 끊고 나머지 취소
-    if (!queued.has(`${gx},${gy}`)) { S.round.jobs.push({ x: gx, y: gy, from: from ?? (gy === 0 ? 'S' : null) }); added++; }
+    const prev = i > 0 ? p[i - 1] : (gy === 0 ? 'S' : null);
+    const vertical = prev === 'S' || (prev && prev[0] === gx);
+    if (!queued.has(`${gx},${gy}`)) { S.round.jobs.push({ x: gx, y: gy, from: from ?? (gy === 0 ? 'S' : null), ladder: vertical, prev }); added++; }
     from = idx(gx, gy);
   }
   if (added) { sfx('stash', true); tutorialDone(3); }
@@ -1512,7 +1565,7 @@ function updateDigger(a, dt) {
     if (a.digT >= need) {
       a.digT = 0;
       rd.jobs = rd.jobs.filter((j) => !(j.x === x && j.y === y));
-      breakCell(x, y, nodeOf(a));
+      breakCell(x, y, nodeOf(a), a.job);
       a.job = null;
     }
     return;
@@ -1577,7 +1630,7 @@ function updateCarrier(a, dt) {
 const cartY = (gy) => GY + gy * T + 14;
 const gyOf = (n) => (n === 'S' ? -1 : cxy(n)[1]);
 const blockedForCart = (gx, gy) => waterAt(gx, gy) || (S.round?.monsters ?? []).some((m) => m.gx === gx && m.gy === gy && m.until > time);
-const cartSupported = (gx, gy) => gy + 1 >= W.rows || !isDug(gx, gy + 1) || ladderAt(gx, gy);
+const cartSupported = (gx, gy) => gy + 1 >= W.rows || !isDug(gx, gy + 1) || holdAt(gx, gy);
 function cartNeighbors(n, out) {
   out.length = 0;
   if (n === 'S') { for (let gx = 0; gx < GW; gx++) if (isDug(gx, 0) && !blockedForCart(gx, 0)) out.push(idx(gx, 0)); return out; }
@@ -1734,8 +1787,8 @@ function checkFall(a) {
   }
   if (supported(gx, gy)) return;
   let land = gy;
-  while (land + 1 < W.rows && isDug(gx, land + 1) && !ladderAt(gx, land + 1)) land++;
-  if (land + 1 < W.rows && isDug(gx, land + 1) && ladderAt(gx, land + 1)) land++;
+  while (land + 1 < W.rows && isDug(gx, land + 1) && !holdAt(gx, land + 1)) land++;
+  if (land + 1 < W.rows && isDug(gx, land + 1) && holdAt(gx, land + 1)) land++;
   a.fall = { from: gy, to: land, pause: B.fallPause, v: 0 };
   a.path = []; if (a.job) a.job = null;
   a.state = 'fall';
@@ -1781,9 +1834,9 @@ function updateBusy(a, dt) {
     const { climbFrom, climbTo } = a.busy;
     if (climbTo != null && typeof a.node === 'number' && !findPath(a.node, (n) => n === 'S')) {
       const gx = cxy(a.node)[0];
-      for (let y = climbFrom; y <= climbTo; y++) if (isDug(gx, y)) W.ladder[y][gx] = true;
-      if (climbFrom > 0 && isDug(gx, climbFrom - 1)) W.ladder[climbFrom - 1][gx] = true;
-      drawProps(); emote(a, '사다리!', 1); syncRound();
+      for (let y = climbFrom; y <= climbTo; y++) if (isDug(gx, y)) W.climb[y][gx] = true;   // 사다리 대신 벽을 짚고 기어오름 (그림 없음)
+      if (climbFrom > 0 && isDug(gx, climbFrom - 1)) W.climb[climbFrom - 1][gx] = true;
+      emote(a, '영차!', 1); syncRound();
     }
     a.busy = null; a.squash = 1; a.state = 'idle';
   }
@@ -1864,7 +1917,9 @@ function tutorialDone(stepN) {
   if (t.step >= TUTORIAL.length || S.stats.rounds > 0) return;
   if (t.step === stepN - 1) { t.step = stepN; save(); buildUI(); }
 }
+let tutorialH = 0;
 function makeTutorial() {
+  tutorialH = 0;
   const t = S.tutorial;
   if (t.step >= TUTORIAL.length || S.stats.rounds > 0) return null;
   const st = state();
@@ -1879,8 +1934,9 @@ function makeTutorial() {
   c.addChild(frame('paper', w, h, 'panel'));
   const pf = portraitFrame(tex(NPC.momo), 34, 'wood'); pf.position.set(3, 3); c.addChild(pf);
   msg.position.set(42, Math.round((h - msg.height) / 2)); c.addChild(msg);
-  // 경매·결과 카드와 겹치지 않게: 경매 땐 아래쪽, 그 밖엔 격자 위쪽
-  const top = st === 'AUCTION' ? u(v.y1) - h - 4 : u(v.y0) + 24;
+  // 하단 시트(가로 화면은 화면 아래) 바로 위. 경매 카드는 이 높이만큼 짧아진다 (tutorialH)
+  const top = u(v.y1) - h - 4;
+  tutorialH = h + 4;
   c.position.set(u(v.x0) + Math.round((u(v.x1 - v.x0) - w) / 2), top);
   return c;
 }
@@ -1920,7 +1976,7 @@ window.addEventListener('pointerup', (e) => {
 window.addEventListener('pointercancel', () => { drag = null; drawing.on = false; drawPreview(); });
 
 // ================================================================ 매 프레임
-let fpsT = 0, fpsN = 0, shotWaiter = null;
+let fpsT = 0, fpsN = 0, shotWaiter = null, slowT = 0;
 const lights = [];
 function addLight(x, y, z, r, color, power) { if (lights.length < MAX_LIGHTS) lights.push([x, y, z, r, color, power]); }
 const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23 + seed * 2) + 0.15 * Math.sin(t * 41 + seed * 3);
@@ -1929,7 +1985,12 @@ const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23
 app.ticker.add((tk) => {
   const real = Math.min(tk.deltaMS / 1000, 0.05);
   fpsT += real; fpsN++;
-  if (fpsT >= 0.5) { if (ui.fps) ui.fps.text = `${VERSION} · ${Math.round(fpsN / fpsT)} fps · 칸 ${Math.round(L.cell)}px`; fpsT = 0; fpsN = 0; }
+  if (fpsT >= 0.5) {
+    const fps = fpsN / fpsT;
+    if (!low && !S.settings.autoLowDone && document.visibilityState === 'visible' && fps < 45) {
+      slowT += fpsT;
+      if (slowT >= 5) { setLow(true); S.settings.autoLowDone = true; save(); toast('화면이 버거워 보여서 저사양으로 바꿨어요 ([설정]에서 끌 수 있어요)'); if (sheetTab === 'set') buildUI(); }
+    } else slowT = 0; if (ui.fps) ui.fps.text = `${VERSION} · ${Math.round(fpsN / fpsT)} fps · 칸 ${Math.round(L.cell)}px`; fpsT = 0; fpsN = 0; }
 
   let dt = real;
   if (hitstop > 0) { hitstop -= real; dt = 0; }
@@ -1944,7 +2005,7 @@ app.ticker.add((tk) => {
 
   // 상태별
   const st = state();
-  if (st === 'AUCTION') updateAuction(real);
+  if (st === 'AUCTION') { updateAuction(real); if (AU.say.some((q) => q && time - q.t < 0.3) && fpsN % 2 === 0) buildUI(); }
   if (st === 'SURVEY') updateSurvey(dt);
   updateMole(dt);
   updateCrew(dt);
@@ -2059,7 +2120,7 @@ else {
 
 window.__kod = {
   get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart, endRound, askRetreat, nextAuction, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, cart, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });

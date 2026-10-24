@@ -2,16 +2,26 @@
 // 비주얼 가이드 §5-1-2: 최근접 축소 → pxl 팔레트(shaft.px.js + office.px.js의 pal 합집합)로 양자화
 //                        → 외곽선을 장면 잉크색 #1a1220 1px로 재추적 → 마젠타 제거. 디더링 없음.
 // 실행: npm run portraits
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
 
 const SIZE = 48;
 const INK = [0x1a, 0x12, 0x20];
+// 길드 3곳 초상: art/raw/guild_*.png 가 들어오면 이름(abyss·tower·shield 또는 1·2·3)이나 이름순으로 guild_0~2
+const GUILD_KEYS = [['abyss', 'fish', '1', '심연'], ['tower', 'climb', '2', '탑'], ['shield', '3', '방패']];
+const guildRaw = readdirSync('art/raw').filter((f) => /^guild_.*\.png$/i.test(f)).sort();
+const guildOut = [null, null, null];
+for (const f of guildRaw) {
+  let i = GUILD_KEYS.findIndex((keys) => keys.some((k) => f.toLowerCase().includes(k)));
+  if (i < 0 || guildOut[i]) i = guildOut.indexOf(null);
+  if (i >= 0) guildOut[i] = f;
+}
 const SHEETS = {
   'mine_halabeoji.png': ['halabeoji'],
   'mine_miners3.png': ['miner_red', 'miner_brown', 'miner_blonde'],
   'mine_mole_momo.png': ['mole', 'momo'],
   'mine_brok_merchant.png': ['brok', 'merchant'],
+  ...Object.fromEntries(guildOut.map((f, i) => [f, [`guild_${i}`]]).filter(([f]) => f)),
 };
 
 // ---- 팔레트: 두 .px.js 파일의 pal({...}) 안 #rrggbb 전부 (중복 제거)
@@ -82,3 +92,7 @@ for (const [file, names] of Object.entries(SHEETS)) {
     console.log(`${name}: ${SIZE}×${SIZE}, ${used}색 (팔레트 ${palette.length}색 중)`);
   });
 }
+
+// 게임이 읽는 길드 초상 목록 (없으면 이름 카드)
+writeFileSync('public/assets/portraits/guilds.json', JSON.stringify(guildOut.map((f, i) => (f ? `guild_${i}.png` : null))));
+console.log('guilds:', guildOut);
