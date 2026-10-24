@@ -44,4 +44,6 @@ for (const n of ['lot_site_a', 'lot_site_b', 'lot_site_locked', 'lot_site_locked
 for (const n of ['bush_white', 'bush_pink', 'bush_orange']) cpSync(`art/yard/out/sprites/${n}.png`, `public/art/sprites/yd_${n}.png`);
 for (const f of readdirSync('art/yard/out/sprites')) if (f.startsWith('g64_')) cpSync(`art/yard/out/sprites/${f}`, `public/art/sprites/${f}`);
 for (const n of ['yard_ripple', 'yard_fire']) for (const ext of ['png', 'json']) cpSync(`art/yard/out/anims/${n}.${ext}`, `public/art/anims/${n}.${ext}`);
+// PATCH_V14 §3-1: 갱도 타일은 Fan-tasy 그림체(public/art/yard5/shaft)로 — pxl 빌드가 덮어쓰지 않게 맨 끝에
+for (const f of readdirSync('public/art/yard5/shaft')) if (f.endsWith('.png') && !f.startsWith('shaft_')) cpSync(`public/art/yard5/shaft/${f}`, `public/art/sprites/${f}`);
 console.log('→ public/art');

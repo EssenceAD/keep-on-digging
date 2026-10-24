@@ -116,7 +116,8 @@ export function portraitFrame(texture, size = 52, style = 'wood') {
   const s = new Sprite(texture);
   const place = () => {                                   // 작은 틀이면 머리 쪽(위)을, 넉넉하면 발밑을 맞춘다
     const tw = s.texture.frame.width, th = s.texture.frame.height;
-    s.position.set(Math.round((size - tw) / 2), th > size - 4 ? 2 : size - th - 2);
+    if (s.texture.fit) { const k = (size - 4) / tw; s.scale.set(k); s.position.set(2, Math.round(size - 2 - th * k)); return; }   // V14 초상: 상반신을 틀 폭에 맞춤
+    s.scale.set(1); s.position.set(Math.round((size - tw) / 2), th > size - 4 ? 2 : size - th - 2);
   };
   place();
   const mask = new Graphics().rect(2, 2, size - 4, size - 4).fill(0xffffff);

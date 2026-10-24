@@ -118,16 +118,18 @@ const SPRITES = [...GPT_SPRITES, ...YARD_SPRITES, 'lot_site_a', 'lot_site_b', 'l
 const NORMALS = ['dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'ancient', 'pocket_water', 'pocket_gas', 'relic_chest'];
 const FX = ['fx_hit', 'fx_dirt', 'fx_rock', 'fx_vein', 'fx_vein_glow', 'fx_daebak', 'fx_gas', 'fx_water', 'fx_collapse', 'fx_cart', 'fx_pulse'];
 const ANIMS = ['ore_glow', 'gold_shimmer', 'lantern', 'red_idle', 'red_walk', 'red_swing', 'brown_swing', 'brown_idle', 'brown_walk',
-  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', 'office_fire', 'yard_ripple', 'yard_fire', ...FX];
+  'blonde_idle', 'blonde_walk', 'mole_sniff', 'cart_roll', 'cart_roll_empty', 'cart_roll_glow', 'slime', 'deco_fire', 'deco_flag', 'ui_hand', ...FX];
 const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
-  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'), A('scenes/office_day.png'), A('scenes/yard_day.png'), A('scenes/yard_dusk.png'), A('scenes/yard_night.png'),
+  ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
 ];
 // 부지 v5 (PATCH_V14): public/art/yard5 — The Fan-tasy Tileset (Free) 기반
 const [Y5, Y5A] = await Promise.all([fetch(A('yard5/yard_v5.json')).then((r) => r.json()), fetch(A('yard5/bld/anchors.json')).then((r) => r.json())]);
+const Y5_PEOPLE = ['brick', 'tumba', 'elin', 'grun', 'dor', 'fin', 'marta', 'ugle'].map((n) => `miner_${n}`).concat(['halabeoji', 'momo', 'brok', 'merchant', 'guild_abyss', 'guild_tower', 'guild_shield'].map((n) => `npc_${n}`));
 const Y5_FILES = [...[0, 1, 2, 3].map((i) => `yard_ground_f${i}.png`), ...[...new Set(Y5.objects.map((o) => o.n))].map((n) => `props/${n}.png`), ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `props/campfire_f${i}.png`),
   ...Object.keys(Y5A).filter((n) => !/smoke|lot_site/.test(n)).map((n) => `bld/${n}.png`), 'bld/lot_site_a.png', 'bld/lot_site_b.png', 'bld/lot_site_locked.png', ...[0, 1, 2, 3, 4, 5].map((i) => `bld/smoke_f${i}.png`),
-  ...['brick', 'tumba', 'elin', 'grun'].flatMap((w) => [`chars/miner_${w}_walk.png`, `chars/miner_${w}_idle.png`])];
+  ...Y5_PEOPLE.flatMap((w) => [`chars/${w}_walk.png`, `chars/${w}_idle.png`]),
+  ...['mole_idle', 'mole_walk', 'cart_empty', 'cart_ore', 'cart_gold', 'cart_glow', 'cart_roll', 'cart_roll_ore', 'cart_roll_gold', 'cart_roll_glow'].map((n) => `critters/${n}.png`)];
 urls.push(...Y5_FILES.map((f) => A(`yard5/${f}`)));
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
 const y5tex = (p) => { const t = loaded[A(`yard5/${p}`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
@@ -137,8 +139,11 @@ const Y5_SHADE = { day: 0xffffff, dusk: 0xffc8a0, night: 0x8890c8 };
 const Y5_BLD = { office: 'office', smelter: 'smelter', warehouse: 'warehouse', cartShed: 'cartshed', lodge: 'lodge', lanternShop: 'lanternshop', pumpRoom: 'pump', turretShop: 'turretshop', moleHouse: 'molehome' };
 const y5Step = (lv) => (lv >= 5 ? 5 : lv >= 3 ? 3 : 1);
 /** V14 광부 (가로 4프레임 × [오른, 왼, 뒤, 앞], 40×48, 발 (20,41)) — 게임 광부 id → 그림 */
-const Y5_MINER = { red: 'brick', brown: 'tumba', blonde: 'elin', grun: 'grun' };
-const tex = (n) => loaded[A(`sprites/${n}.png`)];
+const Y5_MINER = { red: 'brick', brown: 'tumba', blonde: 'elin', grun: 'grun', dor: 'dor', fin: 'fin', marta: 'marta', ugle: 'ugle' };
+/** 초상 (V14 §3): 그 인물 _idle 앞모습 0프레임의 위 32px (상반신) */
+const faceTex = (who) => { const b = y5tex(`chars/${who}_idle.png`); if (!b) return null; const t = new Texture({ source: b.source, frame: new Rectangle(4, 3 * 48 + 2, 32, 30) }); t.fit = true; return t; };
+const TEX_V14 = { ...Object.fromEntries(Y5_PEOPLE.filter((n) => n.startsWith('npc_')).map((n) => [n, faceTex(n)])), cart_empty: y5tex('critters/cart_empty.png'), cart_gold: y5tex('critters/cart_gold.png') };
+const tex = (n) => TEX_V14[n] ?? loaded[A(`sprites/${n}.png`)];
 const ntex = (n) => loaded[A(`sprites/${n}_n.png`)];
 /** 애니 프레임 텍스처 + 프레임별 길이(ms) */
 function frames(n) {
@@ -150,6 +155,18 @@ function frames(n) {
   return out;
 }
 const F = Object.fromEntries(ANIMS.map((n) => [n, frames(n)]));
+/** V14: 시트 한 줄 → 프레임 (ay = 발 높이 비율) */
+function y5Row(file, row, ms, fw = 40, fh = 48, ay = 41 / 48) {
+  const b = y5tex(file), n = Math.round(b.width / fw);
+  const out = [...Array(n)].map((_, i) => new Texture({ source: b.source, frame: new Rectangle(i * fw, row * fh, fw, fh) }));
+  out.dur = out.map(() => ms); out.ay = ay; return out;
+}
+/** 게임 광부 id → V14 그림 (옛 red·brown·blonde + 숙소 신입 4) */
+const Y5_ACTOR = { red: 'miner_brick', brown: 'miner_tumba', blonde: 'miner_elin', dor: 'miner_dor', fin: 'miner_fin', marta: 'miner_marta', ugle: 'miner_ugle', grun: 'miner_grun' };
+for (const [id, nm] of Object.entries(Y5_ACTOR)) { F[`${id}_idle`] = y5Row(`chars/${nm}_idle.png`, 0, 250); F[`${id}_walk`] = y5Row(`chars/${nm}_walk.png`, 0, 125); F[`${id}_swing`] = y5Row(`chars/${nm}_walk.png`, 0, 90); }
+F.mole_sniff = y5Row('critters/mole_idle.png', 0, 250, 24, 18, 1); F.mole_walk = y5Row('critters/mole_walk.png', 0, 125, 24, 18, 1);
+F.cart_roll_empty = y5Row('critters/cart_roll.png', 0, 100, 28, 22, 1); F.cart_roll = y5Row('critters/cart_roll_ore.png', 0, 100, 28, 22, 1);
+F.cart_roll_glow = y5Row('critters/cart_roll_glow.png', 0, 100, 28, 22, 1); F.cart_roll_gold = y5Row('critters/cart_roll_gold.png', 0, 100, 28, 22, 1);
 const ICON = { g: 'icon_gold', c: 'icon_glow', s: 'icon_silver', C: 'icon_copper', j: 'icon_gem' };
 const NPC = { brok: 'npc_brok', merchant: 'npc_merchant', momo: 'npc_momo', halabeoji: 'npc_halabeoji' };
 const HINT_ICON = { rock: 'hint_rock', water: 'hint_water', relic: 'hint_relic', glow: 'hint_glow' };
@@ -413,7 +430,7 @@ const lanternFlame = () => {
 };
 
 // ---------------------------------------------------------------- 캐릭터 · 광차 (치비 32×40 → 월드 16×20) + 긴 그림자
-const ANCHOR_X = { red_swing: 16 / 46, brown_swing: 16 / 46 };
+const ANCHOR_X = {};                                       // V14: 새 그림은 가운데 기준
 const actors = [];
 function actor(o) {
   const s = new Sprite(); s.anchor.set(0.5, 1);
@@ -429,7 +446,7 @@ function drawActor(a, dt, lx, ly) {
   const tx = step(a.p, dt);
   a.s.visible = a.visible !== false;
   a.s.texture = tx;
-  a.s.anchor.set(ANCHOR_X[a.p.name] ?? 0.5, 1);
+  a.s.anchor.set(ANCHOR_X[a.p.name] ?? 0.5, a.p.fr.ay ?? 1);
   a.s.scale.set(a.face * a.scale, a.scale * (a.squash ?? 1));
   a.s.position.set(Math.round(a.x * DENS) / DENS, Math.round(a.y * DENS) / DENS);
   a.s.tint = a.y < GY + 1 ? 0xe0a890 : a.tint;              // 지상(구운 해 질 녘 빛)에선 노을 색
@@ -455,7 +472,8 @@ function ensureCrew(walk = false) {
   while (crew.length < CF.miners) {
     const k = crew.length, rc = B.recruits[k - MINERS.length] ?? { name: `광부 ${k + 1}`, trait: ['hasty', 'calm', 'careful', 'diligent'][k % 4], body: k % 2 ? 'brown' : 'blonde', tint: 0xe0e0ff };
     const base = MINERS.find((m) => m.id === rc.body);
-    const a = actor({ ...base, name: rc.name, role: '운반', trait: rc.trait, who: '숙소에 새로 온 광부', anim: `${base.id}_idle`, x: walk ? 2 : 100 + k * 12, y: SURFACE_Y + 0.5, hp: B.minerHp, state: 'idle', face: 1, tint: rc.tint });
+    const rid = ['dor', 'fin', 'marta', 'ugle'][k - MINERS.length] ?? base.id;   // V14: 신입마다 자기 그림
+    const a = actor({ ...base, id: rid, name: rc.name, role: '운반', trait: rc.trait, who: '숙소에 새로 온 광부', anim: `${rid}_idle`, x: walk ? 2 : 100 + k * 12, y: SURFACE_Y + 0.5, hp: B.minerHp, state: 'idle', face: 1 });
     applyTrait(a); crew.push(a);
     if (walk) { a.walkIn = 100 + k * 12; recruitCard(a); }
   }
@@ -761,7 +779,6 @@ function makeWelcome() {
     const hw = Math.floor((bw - 4) / 2);
     const st = button('paper', hw, 18, '창고에 두기', () => idleStore(false), { small: true }); st.position.set(8, y); c.addChild(st);
     const pk = button('paper', hw, 18, '골라 팔기 ▸', () => idleStore(true), { small: true }); pk.position.set(12 + hw, y); c.addChild(pk); y += 22;
-    const ad = button('stone', bw, 16, '광고 보고 방치 2배 받기 · 준비 중', () => toast('곧 열려요'), { small: true }); ad.alpha = 0.6; ad.position.set(8, y); c.addChild(ad); y += 20;
   } else { const ok = button('wood', bw, 20, '확인', closeWelcome); ok.position.set(8, y); c.addChild(ok); y += 24; }
   const foot = label('오늘 경매 준비됐어요', { ...ink, small: true, color: 0x8a7a68 });
   foot.position.set(Math.round((w - foot.width) / 2), y); c.addChild(foot); y += 14;
@@ -872,7 +889,7 @@ function makeCoCard() {
     items.slice(0, 8).forEach((k, i) => {
       const cost = isLot ? canUp(S, k).cost : B.company.decos[k].cost, can = cost != null && S.gold >= cost;
       const cell = new Container(); cell.position.set(4 + (i % cols) * cw, 24 + Math.floor(i / cols) * (iconH + 14)); c.addChild(cell);
-      const art = yardArt(k, 1); art.anchor.set(0.5, 1); art.scale.set(1 / L.uiS); art.position.set(Math.round((cw - 2) / 2), iconH); if (!can) art.alpha = 0.45; cell.addChild(art);
+      const art = yardArt(k, 1, iconH - 2); art.position.set(Math.round((cw - 2) / 2), iconH); if (!can) art.alpha = 0.45; cell.addChild(art);
       const p = label(`💰${cost}`, { ...ink, small: true, color: can ? 0x46702e : 0x8a7a68 }); fitText(p, cw - 2); p.position.set(Math.round((cw - 2 - p.width) / 2), iconH); cell.addChild(p);
       cell.eventMode = 'static'; cell.cursor = 'pointer'; cell.hitArea = new Rectangle(0, 0, cw - 2, iconH + 14);
       cell.on('pointertap', () => (isLot ? buildAt(k, upCard.lot) : placeDecoAt(k, upCard.spot)));
@@ -880,7 +897,7 @@ function makeCoCard() {
     return box;
   }
   const k = upCard.key, deco = upCard.kind === 'deco', lv = deco ? 0 : lvOf(S, k), have = deco ? S.company.decos.some((d) => d.kind === k) : k === 'office' || lv > 0;
-  const art = yardArt(k, Math.max(1, lv)); art.anchor.set(0, 0); art.scale.set(1 / L.uiS); art.position.set(6, 6); c.addChild(art);   // 그림 크게 (64px 원본)
+  const art = yardArt(k, Math.max(1, lv), iconH); art.anchor.set(0, 0); art.position.set(6, 6); c.addChild(art);   // V14 그림
   const nm = label(`${nameOf(k)}${deco ? '' : have ? ` Lv${lv}` : ''}`, ink); nm.position.set(iconH + 12, 8); fitText(nm, w - iconH - 34); c.addChild(nm);
   const hs = B.company.harmonies.filter((q) => !q.hidden && (q.a === k || q.b === k));
   const line = deco ? (hs.map((q) => `${nameOf(q.a === k ? q.b : q.a)} 곁: ${q.text}`)[0] ?? '꾸미기') : effectText(S, k);
@@ -1077,7 +1094,7 @@ function tutTick(dt) {
     if (tutShakeT > 0) { tutShakeT -= dt; tutBubble.scale.set(1 + Math.max(0, tutShakeT) * 0.06); } else tutBubble.scale.set(1);
   }
 }
-// ---- [0] 인수인계 장면 (§1 · v0.9): 사무소 GPT 원본(office_day) · 할아범은 책상 뒤에 앉음 · 붉은 수염은 처음 한 번만 걸어 들어옴 · 대사 4 · [건너뛰기]
+// ---- [0] 인수인계 장면 (V14 §3-2): 부지 상회 문 앞(밤) · 할아범·모모가 문 앞 · 브릭은 처음 한 번만 걸어 들어옴 · [건너뛰기]
 // 장면은 uiRoot 밖 한 층에 한 번만 만든다 — 대사를 넘길 때는 대사 틀만 바꿈 (v0.9 §1: 넘길 때마다 처음부터 다시 걸어오던 버그). 화면 배율은 정수(기기 픽셀 기준), 남는 곳은 어두운 테두리
 const introLayer = new Container(); app.stage.addChild(introLayer);
 let introTick = null;
@@ -1100,21 +1117,31 @@ function buildIntroLayer() {
   app.stage.addChild(introLayer);                                  // 늘 맨 위
   const v = introView; if (!v) return;
   const Wc = L.W, Hc = L.H, dpr = L.dpr;
-  const sDev = Math.max(1, Math.floor(Math.min((Wc * dpr) / 256, (Hc * dpr) / 224))), sc = sDev / dpr;   // 정수 배율 (4×·5× …)
-  const ox = Math.round(((Wc - 256 * sc) / 2) * dpr) / dpr, oy = Math.round(((Hc - 224 * sc) / 2 - (Hc > 224 * sc + 120 ? 40 : 0)) * dpr) / dpr;
+  // V14 §3-2: 사무실 통그림 대신 부지 — 상회(lot 1) 문 앞, 밤. 할아범·모모가 문 앞에 서 있고 브릭이 길 따라 걸어 들어옴
+  const lot = Y5.lots[1], VW = 400, VH = 240, X0 = lot.cx - VW / 2, Y0 = lot.by - 150;
+  const sDev = Math.max(1, Math.floor(Math.min((Wc * dpr) / VW, (Hc * dpr) / VH))), sc = sDev / dpr;   // 정수 배율
+  const ox = Math.round(((Wc - VW * sc) / 2) * dpr) / dpr, oy = Math.round(((Hc - VH * sc) / 2 - (Hc > VH * sc + 120 ? 40 : 0)) * dpr) / dpr;
   const hit = new Graphics().rect(0, 0, Wc, Hc).fill(0x0b0910); hit.eventMode = 'static'; hit.on('pointertap', () => introNext()); introLayer.addChild(hit);
-  const room = new Container(); room.position.set(ox, oy); room.scale.set(sc); introLayer.addChild(room);
-  const bgT = loaded[A('scenes/office_day.png')];
-  room.addChild(new Sprite(bgT));
-  const fire = new Sprite(F.office_fire[0]); fire.position.set(177, 68); room.addChild(fire);
-  // 할아범: 책상 뒤 의자 — 다리는 책상 앞판이 가림 (원본에서 잘라 위에 덮는다)
-  const old = new Sprite(tex(NPC.halabeoji)); old.anchor.set(0.5, 1); old.position.set(124, 112); room.addChild(old);
-  const deskFront = new Sprite(new Texture({ source: bgT.source, frame: new Rectangle(82, 100, 88, 42) })); deskFront.position.set(82, 100); room.addChild(deskFront);
-  // 장부·열쇠 (2번째 줄에서 한 번 밀려옴, 2프레임)
-  const items = new Graphics().rect(0, 0, 7, 5).fill(0x7a2e48).rect(1, 1, 5, 1).fill(0xf4ecd2).rect(9, 1, 4, 2).fill(0xf5cf6a).rect(12, 0, 2, 4).fill(0xf5cf6a);
-  items.position.set(v.slid ? 150 : 128, 95); room.addChild(items);
-  // 붉은 수염: 장면에 처음 들어올 때만 걸어 들어오고, 그 뒤엔 제자리 숨쉬기
-  const me = new Sprite(F.red_walk[0]); me.anchor.set(0.5, 1); me.scale.set(-1, 1); me.position.set(v.walked ? 186 : 272, 150); room.addChild(me);
+  const frameC = new Container(); frameC.position.set(ox, oy); frameC.scale.set(sc); introLayer.addChild(frameC);
+  const mk = new Graphics().rect(0, 0, VW, VH).fill(0xffffff); frameC.addChild(mk);
+  const room = new Container(); room.mask = mk; room.position.set(-X0, -Y0); frameC.addChild(room);
+  const NIGHT = Y5_SHADE.night;
+  const g0 = new Sprite(y5tex('yard_ground_f0.png')); g0.tint = NIGHT; room.addChild(g0);
+  const wd = new Container(); wd.sortableChildren = true; room.addChild(wd);
+  const put = (t, x, by) => { if (!t) return null; const sp = new Sprite(t); sp.position.set(Math.round(x), Math.round(by - t.height)); sp.tint = NIGHT; sp.zIndex = by; wd.addChild(sp); return sp; };
+  for (const o of Y5.objects) if (o.x > X0 - 120 && o.x < X0 + VW + 20 && o.by > Y0 - 10 && o.by < Y0 + VH + 140) put(y5tex(`props/${o.n === 'animation_campfire_f0' ? 'campfire_f0' : o.n}.png`), o.x, o.by);
+  for (const l of Y5.lots) if (Math.abs(l.cx - lot.cx) < 400 && l.by < Y0 + VH + 140) {
+    if (l.id === 1) { const nm = `office_${y5Step(S.company.coreLv ?? 1)}`, t = y5tex(`bld/${nm}.png`), [ax, ay] = Y5A[nm]; const b = put(t, l.cx - ax, l.by - ay + t.height); if (b) b.zIndex = l.by; }
+    else { const [sx, sy] = Y5A.lot_site; const b = put(y5tex(`bld/${l.id % 2 ? 'lot_site_b' : 'lot_site_a'}.png`), l.cx - sx, l.by - sy + 64); if (b) b.zIndex = l.by - 20; }
+  }
+  const glowS = (x, y, r, col, a) => { const g = new Sprite(glowTex()); g.anchor.set(0.5); g.width = g.height = r * 2; g.position.set(x, y); g.tint = col; g.alpha = a; g.blendMode = 'add'; room.addChild(g); };
+  const person = (who, x, y, row) => { const sp = new Sprite(y5Frames(who, 'idle')[row][0]); sp.anchor.set(0.5, 41 / 48); sp.position.set(x, y); sp.tint = NIGHT; sp.zIndex = y; wd.addChild(sp); return sp; };
+  const old = person('npc_halabeoji', lot.cx - 16, lot.by + 14, 3), momo = person('npc_momo', lot.cx + 18, lot.by + 16, 3);
+  const MEY = Y5.spine.find((p) => p[0] >= lot.cx)?.[1] ?? lot.by + 58, ME_STOP = lot.cx + 40;
+  const me = person('brick', v.walked ? ME_STOP : X0 + VW + 24, MEY, 1);
+  for (const [lx, ly] of Y5.lamps) glowS(lx, ly, 18, 0xffd58a, 0.55);
+  glowS(lot.cx, lot.by - 40, 50, 0xffc070, 0.25);                                 // 상회 창문 불빛
+  const items = { x: 0 };                                                           // (옛 장부·열쇠 연출 자리)
   // 대사 틀 (UI 배율)
   const uW = Math.round(Wc / L.uiS), uH = Math.round(Hc / L.uiS);
   const ui0 = new Container(); ui0.scale.set(L.uiS); introLayer.addChild(ui0);
@@ -1140,11 +1167,11 @@ function buildIntroLayer() {
     if (me.destroyed) return;
     tt += dt;
     if (!v.walked) {
-      me.x = Math.max(186, me.x - dt * 40); me.texture = F.red_walk[Math.floor(tt * 8) % F.red_walk.length];
-      if (me.x <= 186) v.walked = true;
-    } else me.texture = F.red_idle[Math.floor(tt * 2) % F.red_idle.length];   // 숨쉬기 2f
-    if (v.slideT != null && !v.slid) { v.slideT += dt; items.x = v.slideT < 0.4 ? 139 : 150; if (v.slideT >= 0.4) v.slid = true; }
-    fire.texture = F.office_fire[Math.floor(tt * 10) % F.office_fire.length];
+      me.x = Math.max(ME_STOP, me.x - dt * 40); me.texture = y5Frames('brick', 'walk')[1][Math.floor(tt * 8) % 4];
+      if (me.x <= ME_STOP) v.walked = true;
+    } else me.texture = y5Frames('brick', 'idle')[1][Math.floor(tt * 4) % 4];
+    old.texture = y5Frames('npc_halabeoji', 'idle')[3][Math.floor(tt * 4) % 4]; momo.texture = y5Frames('npc_momo', 'idle')[3][Math.floor(tt * 4 + 2) % 4];
+    if (v.slideT != null && !v.slid) { v.slideT += dt; items.x = v.slideT; if (v.slideT >= 0.4) v.slid = true; }
     if (nx && !nx.destroyed) nx.alpha = 0.5 + 0.5 * Math.sin(tt * 4);
   };
 }
@@ -1537,7 +1564,7 @@ function makeCoGrid(w, h) {
     const chk = canUp(S, k), cost = chk.cost ?? (deco ? null : upCost(S, k));
     const cell = new Container(); cell.position.set(x0, y0); c.addChild(cell);
     if (chk.ok) cell.addChild(new Graphics().roundRect(0, 0, cw - 2, rh - 1, 3).stroke({ width: 1, color: 0xf5cf6a }));
-    const art = new Sprite(y5tex(`bld/${Y5_BLD[k]}_${y5Step(Math.max(1, lv))}.png`)); art.anchor.set(0.5, 1); art.scale.set(Math.min((iconH - 2) / art.texture.height, (cw - 6) / art.texture.width)); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);   // V14 그림을 칸(48px)에 맞춤
+    const art = yardArt(k, lv, iconH - 2); art.scale.set(Math.min(art.scale.x, (cw - 6) / art.texture.width)); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);   // V14 그림을 칸(48px)에 맞춤
     const tx = label(deco ? (have ? '놓음' : `💰${cost}`) : `${have ? `Lv${lv}` : ''}${have && cost != null ? '·' : ''}${cost != null ? `💰${cost}` : have ? '' : '최대'}`, { ...ink, small: true, color: chk.ok ? 0x46702e : 0x8a7a68 });   // Lv·💰 만
     if (!deco && have && cost != null && tx.width > cw - 2) {           // 폰처럼 칸이 좁으면 Lv 는 아이콘 왼쪽 위 뱃지로, 줄에는 💰만
       tx.text = `💰${cost}`; const lb = label(`Lv${lv}`, { small: true, color: COLOR.gold }); const bg = new Graphics().rect(0, 0, Math.ceil(lb.width) + 4, 11).fill({ color: 0x1a1220, alpha: 0.7 }); lb.position.set(2, -1); cell.addChild(bg, lb);
@@ -1568,7 +1595,7 @@ const yardScale = () => (L.portrait ? 1 : Math.max(1, Math.min(2, Math.round((L.
 const _y5Sheet = {};
 function y5Frames(who, act) {
   const key = `${who}_${act}`; if (_y5Sheet[key]) return _y5Sheet[key];
-  const base = y5tex(`chars/miner_${who}_${act}.png`);
+  const base = y5tex(`chars/${who.startsWith('npc_') ? who : `miner_${who}`}_${act}.png`);
   return (_y5Sheet[key] = [0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((f) => new Texture({ source: base.source, frame: new Rectangle(f * 40, r * 48, 40, 48) }))));
 }
 /** 길 그래프 (spine + branches): 걷기는 길 중심선을 따라 */
@@ -1705,7 +1732,8 @@ function makeSite(sw, sh) {
   };
   // 두더지 (두더지 집 앞)
   const mh = S.company.buildings.moleHouse, ml = mh && lotUser(S, mh.lot) === 'moleHouse' ? Y5.lots[mh.lot] : null;
-  const moleS = new Sprite(F.mole_sniff[0]); moleS.anchor.set(0.5, 1); moleS.scale.set(0.5); moleS.tint = shade;
+  const moleS = new Sprite(F.mole_sniff[0]); moleS.anchor.set(0.5, 1); moleS.tint = shade;
+  { const cs = new Sprite(tex('cart_ore')); cs.texture = y5tex('critters/cart_ore.png'); cs.anchor.set(0.5, 1); cs.position.set(Y5.entrance[0] - 44, Y5.entrance[1] + 14); cs.zIndex = cs.y; cs.tint = shade; world.addChild(cs); }   // 갱도 입구 옆 광차
   moleS.position.set(ml ? ml.cx + 60 : Y5.campfire[0] - 30, ml ? ml.by + 10 : Y5.campfire[1] + 14); moleS.zIndex = moleS.y; world.addChild(moleS);
   // 탭 자리 (그림 위 투명 판)
   for (const l of Y5.lots) { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(l.cx - 90, l.by - 140, 180, 150); hit.on('pointertap', () => onLot(l.id)); sc.addChild(hit); }
@@ -1730,11 +1758,9 @@ function makeSite(sw, sh) {
   return c;
 }
 /** 부지 장면 그림 (PATCH_V10 · 형철 ③): 64×64 원본 1× — 축소 없음. Lv1·2 → _1, 중간 → _3, 최대 → _5 */
-function yardArt(kind, lv) {
-  const deco = DECO_ART[kind];
-  if (deco) { const sp = new Sprite(tex(`g64_${deco}`)); sp.anchor.set(0.5, 1); return sp; }
-  const r = lv / bldMax(kind), step = kind === 'office' ? (lv >= 5 ? 5 : lv >= 3 ? 3 : 1) : r >= 1 ? 5 : r >= 0.5 ? 3 : 1;
-  const sp = new Sprite(tex(`g64_${BLD_ART[kind]}_${step}`)); sp.anchor.set(0.5, 1); return sp;
+function yardArt(kind, lv, box = 48 / L.uiS) {
+  const sp = new Sprite(y5tex(`bld/${Y5_BLD[kind] ?? 'office'}_${y5Step(Math.max(1, lv))}.png`)); sp.anchor.set(0.5, 1);
+  sp.scale.set(Math.min(box / sp.texture.height, (box * 1.4) / sp.texture.width)); return sp;
 }
 /** 부지 그림: GPT 시트 먼저(Lv1·2 → _1, Lv3·4 → _3, Lv5 → _5), 없으면 buildings.px.js */
 function coArt(kind, lv, ss) {
@@ -2691,12 +2717,7 @@ function makeSell(w, h) {
   const sub = label(`${likes} +${Math.round(b.bonus * 100)}%`, { small: true, color: 0x8a7a68, shadow: false }); sub.position.set(fx0, face < 30 ? 13 : 18); c.addChild(sub);
   const sw = button('paper', 40, 16, '바꾸기', () => { S.settings.buyer = by === 'brok' ? 'merchant' : 'brok'; sfx('stash', true); save(); buildUI(); }, { small: true });
   sw.position.set(w - 44, 4); c.addChild(sw); ui.refs.buyerSwap = sw;
-  if (!CF.preview) {                                               // 광고 자리 (명세3 §7 — SDK 없음)
-    const wideAd = !L.portrait;                                    // PC: 판매 창 아래쪽 넓은 자리
-    const ad = button('stone', wideAd ? w - 8 : 38, wideAd ? 14 : 10, wideAd ? '광고 보고 시세 1분 미리보기' : '광고 1분', () => toast('곧 열려요'), { small: true });
-    ad.alpha = 0.65; ad.position.set(wideAd ? 4 : w - 86, wideAd ? h - 54 : 2);
-    if (wideAd || fx0 + nm.width < w - 90) c.addChild(ad); else ad.destroy();   // 좁으면 이름과 안 겹칠 때만
-  }
+  // V14: 광고 자리 없앰 (상업 이용 안 함)
   if (CF.smeltSlots) {
     const tg = button(sellMode === 'ingot' ? 'wood' : 'paper', 28, 16, sellMode === 'ingot' ? '광석' : '괴', () => { sellMode = sellMode === 'ingot' ? 'ore' : 'ingot'; sfx('stash', true); buildUI(); }, { small: true });
     tg.position.set(4, w - 112 < 64 ? h - 36 : h - 18); c.addChild(tg);
@@ -2768,7 +2789,7 @@ function makeCrew(w, h) {
   const rowH = Math.max(18, Math.min(44, Math.floor(h / crew.length)));
   crew.forEach((m, i) => {
     const r = new Container(); r.y = i * rowH;
-    const pf = portraitFrame(animOf(`${m.id}_idle`)[0], rowH - 2, 'wood'); r.addChild(pf);
+    const pf = portraitFrame(faceTex(Y5_ACTOR[m.id] ?? 'miner_brick'), rowH - 2, 'wood'); r.addChild(pf);
     const compact = rowH < 28;                                // 광부가 많으면 한 줄 (이름 · 상태)
     const nm = label(m.name, { color: m.color, small: compact }); nm.position.set(rowH + 4, compact ? Math.round((rowH - 10) / 2) : 1); r.addChild(nm);
     if (!compact) { const tr = B.traits[m.trait]; const role = label(tr ? `${tr.name} · ${tr.text.split(" · ")[0]}` : m.role, { small: true, color: COLOR.dim }); role.position.set(rowH + 8 + Math.round(nm.width), 3); fitText(role, w - role.x); r.addChild(role); }
@@ -3022,7 +3043,6 @@ function toast(msg, who, secs) {
 function setLow(v) { low = v; S.settings.low = v; save(); }
 document.getElementById('ref').onclick = () => document.getElementById('ref').classList.remove('show');
 document.getElementById('ref-shaft').src = A('scenes/shaft_night.png');
-document.getElementById('ref-office').src = A('scenes/office_night.png');
 const uiFx = [];
 market.onTick = () => { refreshUI(); };
 // 급등: 30초 전 모모 편지 → 그 광종 행이 UI 펄스 → 40초 동안 ×1.8
