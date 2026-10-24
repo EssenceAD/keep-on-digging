@@ -120,3 +120,6 @@ daybook:{ date, tasks:[{id,done}] }, account:{ userId?, nickname? }, floorUnlock
 - GPT 「채굴하실게요 그림」에서 **64×64 칸 × 10(5×2 시트)**로 Lv1 외형 → `art/raw/mine_buildings_lv1.png`. `png2pxl.py --cols 320 --rows 128 --clean`으로 통째 변환 후 64칸씩 잘라 `art/buildings_gpt.px.js`. Lv3·Lv5는 같은 시트 규격으로 추가 생성(간판 커지고 층 올라감). 장식 6종은 10번 칸을 소품 단위로 분리.
 - pxl이 얹는 것: 창문 빛 `lamp` · 굴뚝 연기 `anim` · 모닥불·깃발 anim · 밤 lighting. 건물 본체 픽셀은 손대지 않는다.
 - 미리보기 `docs/preview/yard_day.png`·`yard_night.png`는 **배치·조명 참고용**으로만.
+
+### 2-3-2. 건물 시트 도착 (10:20) — 사무실 PC 다운로드 → `art/raw/`
+`mine_buildings_lv1.png` · `mine_buildings_lv3.png` · `mine_buildings_lv5.png` — 각 5×2 시트(순서: 사무소·창고·광차 차고·숙소·제련소 / 랜턴 공방·펌프실·포탑 공방·두더지 집·장식 묶음). 원본 1983×793 ≈ 칸당 397×397 → `png2pxl.py --cols 320 --rows 128 --clean`(칸 64×64)으로 변환 후 64칸 단위로 자름. 장식 칸은 모닥불·깃발·우물·꽃밭·저울·레일 소품 6개를 바운딩 박스로 분리. Lv2·Lv4 = Lv1·Lv3 재사용. 창문·불·굴뚝 위치는 변환 결과에서 색(L·h)으로 찾아 `lamp`·연기 anim 자동 배치.
