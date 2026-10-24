@@ -17,7 +17,7 @@ export const milestones = (lv) => E().milestones.filter((m) => lv >= m).length;
 export const nextMilestone = (lv) => E().milestones.find((m) => m > lv) ?? null;
 export const pickRate = (lv) => E().pickBase * (1 + E().pickPerLv * (lv - 1)) * 2 ** milestones(lv);
 export const minersOf = (lv) => 1 + lv;
-export const mineSlotsOf = (lv) => Math.min(E().maxMines, 1 + Math.floor(lv / E().minesEvery));
+export const mineSlotsOf = (lv) => Math.min(E().maxMines, E().minesBase + Math.floor((lv - 1) / E().minesEvery));
 export const cartOf = (lv) => {
   const [a, b] = E().cartLoad, [t0, dt, tMin] = E().trip;
   const load = (a + b * lv) * 2 ** milestones(lv), n = 1 + Math.floor(lv / E().cartsEvery), trip = Math.max(tMin, t0 - dt * lv);
@@ -64,7 +64,10 @@ export function ensureEngine(S) {
   return en;
 }
 export const pileOf = (S) => sum(S.engine.pileT);
-export const minersTotal = (S) => minersOf(S.engine.lv.lodge);
+/** 원정대 (명세6-2 §4): 숙소 Lv 구간별 인원 — 원정(탐사·시추) 중엔 엔진 광부에서 빠짐 */
+export const crewOf = (lv) => { const t = B.expedition.crew; return t[Math.min(t.length - 1, Math.max(0, lv - 1))]; };
+export const onExpedition = (S) => ['SURVEY', 'DIG'].includes(S.round?.state);
+export const minersTotal = (S) => Math.max(0, minersOf(S.engine.lv.lodge) - (onExpedition(S) ? crewOf(S.engine.lv.lodge) : 0));
 export const liveMines = (S) => S.engine.mines.filter((m) => m.reserve > 0);
 /** 광부 배치: 다 캔 갱도는 0, 모자라면 덜어 내고, 남으면 적은 곳부터 고르게 */
 export function balanceMiners(S) {
@@ -73,7 +76,7 @@ export function balanceMiners(S) {
   let left = minersTotal(S) - ms.reduce((a, m) => a + m.miners, 0);
   while (left < 0) { const m = [...ms].sort((p, q) => q.miners - p.miners)[0]; m.miners--; left++; }
   const live = ms.filter((m) => m.reserve > 0);
-  while (left > 0 && live.length) { live.sort((p, q) => p.miners - q.miners)[0].miners++; left--; }
+  while (left > 0 && live.length) { live.sort((p, q) => p.miners - q.miners || q.depth - p.depth)[0].miners++; left--; }   // 적은 곳부터 · 같으면 깊은 곳
 }
 /** ± 로 광부 옮기기: d = +1 이면 다른 갱도에서 하나 데려옴 */
 export function moveMiner(S, id, d) {
@@ -106,6 +109,7 @@ export function bottleneck(S, whTotal, whCap) {
  */
 export function engineStep(S, dt, wh, cap) {
   const en = S.engine, out = { dug: 0, carried: null };
+  if (en.mines.reduce((a, m) => a + m.miners, 0) !== minersTotal(S)) balanceMiners(S);   // 원정대가 나가고 들어올 때
   // 1) 캐기 → 입구 더미
   const pcap = pileCapOf(en.lv.warehouse);
   let room = pcap - pileOf(S);
@@ -162,5 +166,6 @@ export const mineSlots = (S) => mineSlotsOf(S.engine.lv.lodge);
 export function addMine(S, mine, replaceId = null) {
   const ms = S.engine.mines;
   if (replaceId != null) { const i = ms.findIndex((m) => m.id === replaceId); if (i >= 0) ms.splice(i, 1); }
-  ms.push(mine); balanceMiners(S);
+  ms.push(mine);
+  for (const m of ms) m.miners = 0; balanceMiners(S);                 // 새 갱도: 광부를 고르게 다시 (남는 사람은 깊은 갱도로)
 }

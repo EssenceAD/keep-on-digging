@@ -3,7 +3,7 @@
 // 건물 Lv = 장비 Lv − min (명세5 §3, upgrades 한 표). 어울림 = 같은 구역(위/아래)에 둘 다 있으면.
 import { B } from './balance.js';
 import YARD from '../art/yard/yard_lots.json';
-import { ENGINE_BLD, ENGINE_UP, engineCost, engineText, ensureEngine, smeltOf, whCapOf } from './engine.js';
+import { ENGINE_BLD, ENGINE_UP, crewOf, engineCost, engineText, ensureEngine, smeltOf, whCapOf } from './engine.js';
 export { YARD };
 
 const C = B.company;
@@ -159,7 +159,7 @@ export function companyFx(S) {
     guildMul: 1 + add.guildMul,
     sellMul: 1 + add.sellMul + (tr >= 4 ? TL.sellAdd[1] : tr >= 1 ? TL.sellAdd[0] : 0),
     plotSizes: S.company.coreLv >= C.lPlotLv ? ['S', 'M', 'L'] : ['S', 'M'],
-    ...(S.engine ? { whCap: whCapOf(S.engine.lv.warehouse), smeltSlots: smeltOf(S.engine.lv.smelter).slots, smeltSec: smeltOf(S.engine.lv.smelter).sec / (1 + add.smeltMul) } : {}),   // 명세6-1 엔진
+    ...(S.engine ? { miners: crewOf(S.engine.lv.lodge) + (dg >= 8 ? TL.crewAdd : 0), diggers: Math.max(2, Math.ceil(crewOf(S.engine.lv.lodge) / 2)) + (dg >= 8 ? 1 : 0), whCap: whCapOf(S.engine.lv.warehouse), smeltSlots: smeltOf(S.engine.lv.smelter).slots, smeltSec: smeltOf(S.engine.lv.smelter).sec / (1 + add.smeltMul) } : {}),   // 명세6-1 엔진
   };
 }
 

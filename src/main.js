@@ -27,7 +27,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.5';
+const VERSION = 'v1.6';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -590,6 +590,54 @@ let time = 0;
 const state = () => S.round?.state ?? 'AUCTION';
 const AU = { phase: 'pick', card: null, high: 0, holder: null, log: [], timer: 0, queue: [], say: [null, null, null], me: null };   // 경매 진행(저장 안 함)
 
+// ================================================================ 원정 (명세6-2): 지도 후보 3곳 · 원정 표 · 길드 성장
+const XP = () => B.expedition;
+const GKEY = ['abyss', 'tower', 'shield'];
+const r10 = (v) => Math.round(v / 10) * 10;
+const rndIn = ([a, b]) => a + Math.random() * (b - a);
+function ensureExp() {
+  S.exp ??= { day: -1, cands: [], tickets: XP().tickets, guilds: GKEY.map(() => ({ ...XP().guildStart })), replaceId: null, n: 0 };
+  if (S.exp.day !== S.day) newExpDay();
+  return S.exp;
+}
+function newExpDay() {
+  const e = S.exp;
+  for (const c of e.cands) if (c.status === 'guild') {                     // 어제 길드가 가져간 땅 → 오늘 소식
+    const g = B.guilds[c.owner], ore = ['구리', '은', '금'][Math.floor(Math.random() * 3)], n = Math.round(rndIn(XP().newsOre));
+    mail(`${g.name}이(가) ${c.name}에서 ${ore} ${n}개를 캤대요!`, '광산 소식');
+  }
+  e.day = S.day; e.tickets = XP().tickets;
+  const pool = (z) => makeCards(newSeed(), [z, z, z], 2, false).sort((p, q) => cardValue(p).mid - cardValue(q).mid);   // 크기마다 3장 → 싼 땅 = 가장 싼 S · 보통 = 가운데 M · 노른자 = 가장 비싼 L
+  const P = { S: pool('S')[0], M: pool('M')[1], L: pool('L')[2] }, bySize = (z) => P[z];
+  const pickG = (n) => [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, n);
+  const cheap = { ...bySize('S'), kind: 'cheap', hints: bySize('S').hints.slice(0, XP().cheap.hints), guilds: [] };
+  const normal = { ...bySize('M'), kind: 'normal', hints: bySize('M').hints.slice(0, XP().normal.hints), guilds: e.n === 0 ? [1] : pickG(XP().normal.guilds) };   // 첫날 보통 땅은 신중한 탑오르는중
+  const pr = XP().prime, aband = S.floorUnlocked >= 2 && Math.random() < pr.abandonedChance;
+  const prime = { ...bySize('L'), kind: 'prime', glow: true, hints: [...bySize('L').hints.slice(0, pr.hints), 'glow'].filter((h, i, a) => a.indexOf(h) === i), guilds: pickG(Math.round(rndIn([pr.guilds[0], pr.guilds[1] + 0.99]) - 0.49)) };
+  if (aband) Object.assign(prime, { name: prime.name.replace('뒷산', '폐광'), floor: 2 });
+  e.cands = [cheap, normal, prime];
+  for (const c of e.cands) {
+    const mid = cardValue(c).mid;
+    c.price = c.kind === 'cheap' ? Math.max(10, r10(mid * XP().cheap.priceMul)) : Math.max(10, r10(mid * XP().auction.startShare));
+    if (c.kind === 'cheap' && e.n === 0) c.price = Math.min(c.price, Math.max(10, Math.floor(S.gold / 10) * 10));   // 첫 원정: 싼 땅은 무조건 살 수 있게
+    c.status = 'open';
+  }
+  save();
+}
+const guildRate = (i) => (S.exp?.guilds[i]?.mines ?? 1) * XP().guildRatePerMine;
+/** 원정 시작: 처음이면 튜토리얼 원정 · 원정 표 · 갱도 자리가 꽉 찼으면 넘길 갱도 먼저 고르기 → 지도 */
+function openMap() {
+  const e = ensureExp(), en = S.engine;
+  if (en.mines.length >= mineSlots(S) && !en.mines.some((m) => m.id === e.replaceId)) {
+    const worst = [...en.mines].sort((p, q) => p.reserve / p.reserveMax - q.reserve / q.reserveMax)[0];
+    openPanel('⛏ 갱도 자리가 꽉 찼어요', `<p>새 땅을 갱도로 삼으면 하나를 넘겨야 해요. 어느 갱도를 넘길까요?</p>${en.mines.map((m) => `<div class="krow"><button class="kpick" data-id="${m.id}">${m.id === worst.id ? '★ ' : ''}${m.name} · 남은 ${Math.ceil(m.reserve)}/${m.reserveMax}</button></div>`).join('')}<p class="kmuted">★ = 가장 많이 캔 곳 · 숙소 Lv를 올리면 자리가 늘어요</p>`, (b, close) => {
+      b.querySelectorAll('.kpick').forEach((x) => (x.onclick = () => { e.replaceId = +x.dataset.id; save(); close(); openMap(); }));
+    });
+    return;
+  }
+  AU.card = null; S.round = null;
+  closeCompany();
+}
 function todayCards() {
   if (!S.auction || S.auction.day !== S.day) {
     S.auction = { day: S.day, cards: makeCards(newSeed(), CF.plotSizes, CF.hints, S.floorUnlocked >= 2) };
@@ -670,18 +718,24 @@ function endRound(reason = 'retreat') {
   count('rounds'); if (rd.stats.stars >= 2) count('star2');
   save(); buildUI(); cloudSoon();
 }
+/** 되팔기 = 낙찰가 × 0.5 + 남은 광맥 가치 × 0.3 */
+function resaleValue() {
+  let left = 0; if (W) for (const row of W.g) for (const ch of row) if (ORE_KEYS.has(ch)) left += B.basePrice[ch];
+  return Math.round((S.round?.bid ?? 0) * XP().resaleMul + left * XP().resaleVeinMul);
+}
 /** 원정 땅 → 갱도 (§3): 자리가 없으면 가장 고갈된 갱도와 바꿀지 묻기 */
 function makeMineFromRound(replaceOk = false) {
   const rd = S.round, st = rd.stats, en = S.engine;
   const mine = mineFromRound(S, rd.card.name.replace(/ ?구획.*/, '') || `갱도 ${en.nextId}`, st.oreCells ?? {}, st.maxDepth ?? 0, GH);
   let rep = null;
+  if (en.mines.length >= mineSlots(S) && en.mines.some((m) => m.id === S.exp?.replaceId)) { replaceOk = true; }
   if (en.mines.length >= mineSlots(S)) {
-    const worst = [...en.mines].sort((p, q) => p.reserve / p.reserveMax - q.reserve / q.reserveMax)[0];
+    const worst = en.mines.find((m) => m.id === S.exp?.replaceId) ?? [...en.mines].sort((p, q) => p.reserve / p.reserveMax - q.reserve / q.reserveMax)[0];
     if (!replaceOk) { openPanel('⛏ 갱도 자리가 꽉 찼어요', `<p>갱도 ${en.mines.length}/${mineSlots(S)}곳 (숙소 Lv를 올리면 늘어요)</p><p>가장 많이 캔 <b>${worst.name}</b>(남은 ${Math.ceil(worst.reserve)})와 바꿀까요?</p><div class="krow"><button class="kyes">바꾸기</button><button class="kno">그만두기</button></div>`, (b, close) => { b.querySelector('.kyes').onclick = () => { close(); makeMineFromRound(true); }; b.querySelector('.kno').onclick = close; }); return; }
     rep = worst.id;
   }
   en.nextId = Math.max(en.nextId, mine.id + 1);
-  addMine(S, mine, rep); rd.mineMade = mine.name;
+  addMine(S, mine, rep); rd.mineMade = mine.name; if (S.exp) S.exp.replaceId = null;
   toast(`새 갱도 「${mine.name}」! 남은 양 ${mine.reserveMax} · 깊이 ×${mine.depth.toFixed(2)}`, 'halabeoji', 3); sfx('build');
   save(); buildUI();
 }
@@ -690,8 +744,9 @@ function nextAuction() {
   const rd = S.round;
   if (rd?.card?.tutorial) finishTutorial();
   S.stats.rounds++; S.stats.profitTotal += rd.stats.profit; S.stats.bestVein = Math.max(S.stats.bestVein, rd.stats.maxVein);
-  S.auction = null;                                                // 라운드가 끝나면 바로 새 경매
-  startAuction();
+  S.auction = null; S.round = null; AU.card = null; AU.phase = 'pick';   // 명세6-2: 원정 끝 → 부지 (지도는 [새 원정]으로)
+  W = null; buildWorld(); for (const a of crew) resetCrewMember(a); piles = [];
+  save(); openCompany();
 }
 
 // ---------------------------------------------------------------- 방치 정산 + 「돌아오셨군요」 카드 (명세3 §1)
@@ -1057,7 +1112,7 @@ const TUT_STEPS = [                                        // PATCH_V12 §6: 12�
 ];
 const tutStep = () => (tutOn() ? TUT_STEPS[S.tutorial.step] : null);
 /** 마지막 단계: [특성 찍기] → 칸 → [닫기] → [다음 경매] 순서로 손가락 */
-const tutResultTarget = () => (talentView ? (talentSpent(S) > 0 ? ui.refs.talentClose : ui.refs.talent_dig) : talentLeft(S) > 0 && talentSpent(S) === 0 ? ui.refs.resultTalent : ui.refs.next);
+const tutResultTarget = () => (talentView ? (talentSpent(S) > 0 ? ui.refs.talentClose : ui.refs.talent_dig) : talentLeft(S) > 0 && talentSpent(S) === 0 ? ui.refs.resultTalent : S.round?.mineMade || S.round?.resold != null ? ui.refs.next : ui.refs.makeMine);
 let tutT = 0, tutShakeT = 0, tutNudged = false, tutIdleSaid = false;
 function startTutorialRound() {
   Object.assign(S.tutorial, { active: true, step: 0, sniffed: false, merchantGold: false, goldSold: false, mark: 0 });
@@ -1983,19 +2038,21 @@ function cardValue(card) {
 }
 /** 길드 한도 = 예상 가치 × 눈대중 × 성향 계수 (사무소+깃발 어울림이면 −5%) */
 function guildCap(card, g) {
-  const v = cardValue(card).mid * CF.guildMul * (1 + (Math.random() * 2 - 1) * B.guildSpread);
-  return Math.round(v * (g.style === 'random' ? g.capMin + Math.random() * (g.capMax - g.capMin) : g.cap));
+  const i = B.guilds.indexOf(g), v = cardValue(card).mid * CF.guildMul * (1 + (Math.random() * 2 - 1) * XP().guildEye);   // 명세6-2 §3-1: 성격 범위 × 눈대중 ±10%
+  return Math.round(v * rndIn(XP().guildCap[GKEY[i]]));
 }
-const nextBid = () => (AU.holder == null ? AU.card.price : Math.round(AU.high * (1 + B.auction.raiseStep)));
+const nextBid = () => (AU.holder == null ? AU.card.price : Math.round(AU.high * (1 + XP().auction.raiseStep)));
+const reactSec = () => rndIn(XP().auction.react);
 /** 경매 건너뛰고 공짜 자투리 구획 (힌트 없음) */
 function goFreePlot() { auctionSettings = false; AU.card = null; startRound(freeCard(newSeed(), CF.freeHint ? 1 : 0), 0); }
 let auctionSettings = false;                                // 경매 고르기 화면에서 [설정]을 눌렀을 때만 아래 시트를 보임
 function pickCard(card) {
   auctionSettings = false;
-  Object.assign(AU, { card, phase: 'bid', high: card.price, holder: null, me: null, endAt: null, react: 0, count: 0, out: [false, false, false], bids: [null, null, null] });
-  AU.say = GUILD_LINES.map((l, i) => ({ text: l.enter, line: true, t: time + 0.15 + i * 0.45, intro: true }));   // 등장 한마디 (차례로)
+  if (ensureExp().tickets <= 0) { toast('오늘 원정 표를 다 썼어요 · 내일 06:00에 새로'); return; }
+  const part = card.guilds ?? [0, 1, 2];
+  Object.assign(AU, { card, phase: 'bid', high: card.price, holder: null, me: null, endAt: null, react: 0, count: 0, out: [0, 1, 2].map((i) => !part.includes(i)), part, bids: [null, null, null] });
+  AU.say = GUILD_LINES.map((l, i) => (part.includes(i) ? { text: l.enter, line: true, t: time + 0.15 + part.indexOf(i) * 0.45, intro: true } : null));   // 참가 길드만 등장 한마디
   AU.caps = B.guilds.map((g) => guildCap(card, g));
-  setTimeout(() => { if (AU.card === card) toast('다른 두 구획은 길드들이 가져갔어요', null, 1); }, 1500);
   buildUI();
 }
 /** [올리기 +10%] — 처음 누르면 시작가로 입찰 */
@@ -2003,16 +2060,16 @@ function playerRaise() {
   if (AU.phase !== 'bid' || AU.holder === 'me') return;
   const price = nextBid();
   if (price > S.gold) { toast('금화가 모자라요'); return; }
-  AU.high = price; AU.holder = 'me'; AU.me = price; AU.react = B.auction.guildReact; AU.count = 0;
+  AU.high = price; AU.holder = 'me'; AU.me = price; AU.react = reactSec(); AU.count = 0;
   AU.say = AU.say.map((t) => (t ? { ...t, old: true, intro: false } : t));
   sfx('bid');
   buildUI();
 }
 /** 길드가 따라온다: 한도 안이면 한 곳이 +10% (공격적인 순서로), 한도를 넘은 곳은 포기 */
 function guildRespond() {
-  const next = Math.round(AU.high * (1 + B.auction.raiseStep));
+  const next = Math.round(AU.high * (1 + XP().auction.raiseStep));
   let raised = false;
-  for (const i of [0, 2, 1]) {
+  for (const i of [0, 2, 1].filter((q) => AU.part?.includes(q) ?? true)) {
     if (AU.out[i]) continue;
     if (next > AU.caps[i]) { AU.out[i] = true; AU.say[i] = { text: pick(GUILD_LINES[i].pass), pass: true, t: time }; sfx('pass', true); continue; }
     if (raised) continue;
@@ -2020,14 +2077,14 @@ function guildRespond() {
     AU.high = next; AU.holder = i; AU.bids[i] = next;
     AU.say[i] = { text: fill(pick(GUILD_LINES[i].raise), { g: next }), price: next, pass: false, t: time }; sfx('bid');
   }
-  if (!raised) { AU.phase = 'count'; AU.count = B.auction.hammerSeconds; }   // 아무도 안 따라옴 → 3·2·1
+  if (!raised) { AU.phase = 'count'; AU.count = XP().auction.hammer; }   // 아무도 안 따라옴 → 3·2·1
   buildUI();
 }
 function playerFold() {
   if (AU.phase !== 'bid') return;
   AU.me = '포기';
   if (AU.holder == null) {                                        // 아직 아무도 안 불렀으면: 한도가 가장 높은 길드가 시작가에
-    const i = AU.caps.indexOf(Math.max(...AU.caps)); AU.holder = i; AU.bids[i] = AU.high;
+    const live = (AU.part ?? [0, 1, 2]); const i = live.reduce((m, q) => (AU.caps[q] > AU.caps[m] ? q : m), live[0]); AU.holder = i; AU.bids[i] = AU.high;
   }
   auctionLost();
 }
@@ -2035,8 +2092,9 @@ function playerFold() {
 function auctionWon() {
   count('wins');
   AU.phase = 'won'; AU.timer = 1.3; AU.endAt = time;
-  const i = Math.floor(Math.random() * 3);
+  const pp = AU.part?.length ? AU.part : [0, 1, 2], i = pp[Math.floor(Math.random() * pp.length)];
   AU.say = AU.say.map((q) => (q ? { ...q, old: true } : q)); AU.say[i] = { text: pick(GUILD_LINES[i].lose), line: true, t: time + 0.5 };
+  AU.card.status = 'mine'; ensureExp().tickets--; S.exp.n++; save();
   toast(fill(AUCTIONEER.won, { p: AU.high }), 'halabeoji', 2.5);
   sfx('gavel'); setTimeout(() => sfx('stamp'), 220); shake = 0.25; shakeAmp = 2;
   buildUI();
@@ -2047,23 +2105,42 @@ function auctionLost() {
   const w = typeof AU.holder === 'number' ? AU.holder : null;
   AU.say = AU.say.map((q) => (q ? { ...q, old: true } : q));
   if (w != null) AU.say[w] = { text: pick(GUILD_LINES[w].win), line: true, t: time + 0.4 };
-  toast(AUCTIONEER.lost, 'halabeoji', 3);
+  if (w != null) { AU.card.status = 'guild'; AU.card.owner = w; const g = ensureExp().guilds[w]; g.asset += cardValue(AU.card).mid; g.mines++; save(); }   // §3-2: 길드 깃발 · 내일 소식
+  toast('길드가 가져갔어요 · 남은 땅으로 원정할 수 있어요', 'halabeoji', 3);
   if (w != null) { sfx('gavel'); setTimeout(() => sfx('stamp'), 220); shake = 0.2; shakeAmp = 1.5; }
   buildUI();
+}
+/** 낙찰 뒤: 노른자 땅이면 25%로 길드가 되사겠다고 — [팔기]면 차익 · 원정 표 돌려받음 */
+function afterWin(card, paid) {
+  if (card.kind === 'prime' && Math.random() < XP().rebuyChance) {
+    const gi = (card.guilds ?? [0])[Math.floor(Math.random() * (card.guilds?.length || 1))], offer = r10(paid * rndIn(XP().rebuyMul)), g = B.guilds[gi];
+    openPanel('🤝 되사겠다는 제안', `<p><b>${g.name}</b>: "그 땅, ${offer}금에 넘기지 않겠나?"</p><p>낙찰가 ${paid} → 차익 <b>+${offer - paid}</b> · 원정 표는 돌려받아요</p><div class="krow"><button class="ksell">팔기 +${offer - paid}</button><button class="kgo">원정 떠나기</button></div>`, (b, close) => {
+      b.querySelector('.ksell').onclick = () => { close(); S.gold += offer - paid; S.exp.tickets++; card.status = 'guild'; card.owner = gi; const gg = S.exp.guilds[gi]; gg.asset += cardValue(card).mid; gg.mines++; AU.card = null; AU.phase = 'pick'; sfx('coin_big'); toast(`되팔았어요 +${offer - paid}`, 'halabeoji', 2.5); bumpCounter('coin'); save(); buildUI(); };
+      b.querySelector('.kgo').onclick = () => { close(); startRound(card, paid); };
+    });
+    S.gold -= 0; return;
+  }
+  startRound(card, paid);
+}
+function buyCheap(card) {
+  if (ensureExp().tickets <= 0) { toast('오늘 원정 표를 다 썼어요 · 내일 06:00에 새로'); return; }
+  if (S.gold < card.price) { toast('금화가 모자라요'); return; }
+  card.status = 'mine'; S.exp.tickets--; S.exp.n++; sfx('stamp'); startRound(card, card.price);
 }
 let countShown = -1;
 function updateAuction(dt) {
   if (AU.phase === 'bid' && AU.holder === 'me' && AU.react > 0) { AU.react -= dt; if (AU.react <= 0) guildRespond(); }
+  else if (AU.phase === 'bid' && AU.holder === 'me' && !AU.react) AU.react = reactSec();
   else if (AU.phase === 'count') {
     AU.count -= dt;
-    const n = Math.ceil((AU.count / B.auction.hammerSeconds) * 3);   // 3·2·1
+    const n = Math.ceil(AU.count);   // 3·2·1
     if (n !== countShown) { countShown = n; if (n > 0) sfx('ui_tap'); buildUI(); }
     if (AU.count <= 0) auctionWon();
   } else if (AU.phase === 'won' || AU.phase === 'lost') {
     AU.timer -= dt;
     if (AU.timer <= 0) {
-      if (AU.phase === 'won') startRound(AU.card, AU.high);
-      else startRound(freeCard(newSeed(), CF.freeHint ? 1 : 0), 0);
+      if (AU.phase === 'won') afterWin(AU.card, AU.high);
+      else { AU.card = null; AU.phase = 'pick'; buildUI(); }                 // 졌으면 지도로 (헛걸음 없음)
     }
   }
 }
@@ -2510,8 +2587,9 @@ function makeAuction(x, y, w, h) {
   c.addChild(frame('paper', w, h, 'panel'));
   setOverlayRect(x, y, w, h);
   const ink = { color: COLOR.paperInk, shadow: false };
-  const cards = todayCards();
-  if (!AU.card) {                                   // 고르기: 카드 3장만 (이름 · 그림 · 크기 · 힌트 · 시작가)
+  const cards = [];
+  if (!AU.card) return makeMap(c, w, h, ink);
+  if (false) {
     const title = label(`${S.day}일차 경매`, ink); title.position.set(8, 6); c.addChild(title);
     const gold = label(`금화 ${S.gold}`, { ...ink, small: true, color: 0x8a5a24 }); gold.position.set(w - 8 - Math.ceil(gold.width), 8); c.addChild(gold);
     const top0 = 24, gap = 5, n = cards.length, foot = 26;
@@ -2537,7 +2615,7 @@ function makeAuction(x, y, w, h) {
   }
   // 망치 카운트 · 낙찰 도장 "낙찰! 303금" (그림 가운데)
   if (AU.phase === 'count') {
-    const n = Math.max(1, Math.ceil((AU.count / B.auction.hammerSeconds) * 3));
+    const n = Math.max(1, Math.ceil(AU.count));
     const cl = label(`${n}`, { color: 0xb84a62, shadow: false }); cl.scale.set(3); cl.position.set(Math.round(pc[0] - cl.width / 2), Math.round(pc[1] - cl.height / 2)); c.addChild(cl);
   }
   if ((AU.phase === 'won' || AU.phase === 'lost') && AU.endAt != null) {
@@ -2552,6 +2630,52 @@ function makeAuction(x, y, w, h) {
       c.addChild(st);
     }
   }
+  return c;
+}
+/** 지도 (명세6-2 §2): 부지 바닥 그림 위 깃발 3 · 깃발 톡 → 아래 카드 1장 (글자 덩어리 3개 이하) */
+let mapSel = 0;
+function makeMap(c, w, h, ink) {
+  const e = ensureExp();
+  const hd = label(`${S.day}일차 원정 지도 · 원정 표 ${e.tickets}/${XP().tickets}`, ink); hd.position.set(8, 6); fitText(hd, w - 70); c.addChild(hd);
+  const back = button('stone', 54, 16, '부지로', () => { AU.card = null; openCompany(); }, { small: true }); back.position.set(w - 60, 5); c.addChild(back); ui.refs.mapBack = back;
+  const cardH = Math.min(96, Math.max(78, Math.floor(h * 0.34))), mapY = 26, mapH = h - mapY - cardH - 10;
+  // 지도 그림: 부지 바닥을 가운데 기준으로 잘라 (정수 배율 · 흐림 없이)
+  const gT = y5tex('yard_ground_f0.png'), ks = Math.max(1, Math.floor(Math.min((w - 16) * L.uiS / 960 * 2, mapH * L.uiS / 540 * 2))) / 2;
+  const mv = new Container(); mv.position.set(8, mapY); c.addChild(mv);
+  const mk = new Graphics().rect(0, 0, w - 16, mapH).fill(0xffffff); mv.addChild(mk);
+  const gs = new Sprite(gT); gs.scale.set(ks / L.uiS); gs.position.set(Math.round((w - 16 - 960 * ks / L.uiS) / 2), Math.round((mapH - 540 * ks / L.uiS) / 2)); gs.tint = 0xd8e0c8; gs.mask = mk; mv.addChild(gs);
+  mv.addChild(new Graphics().rect(0, 0, w - 16, mapH).stroke({ width: 1, color: 0x5c3832 }));
+  const spots = [[0.2, 0.62], [0.5, 0.34], [0.8, 0.6]], KC = { cheap: 0x6a9a3a, normal: 0xd39a3a, prime: 0x9a5ac8 }, KN = { cheap: '싼 땅', normal: '보통 땅', prime: '노른자 땅' };
+  e.cands.forEach((cd, i) => {
+    const fx = Math.round((w - 16) * spots[i][0]), fy = Math.round(mapH * spots[i][1]), col = cd.status === 'guild' ? GUILD_COLOR[cd.owner] : cd.status === 'mine' ? 0x8a8a8a : KC[cd.kind];
+    const f = new Container(); f.position.set(fx, fy); mv.addChild(f);
+    const g = new Graphics().rect(-1, -22, 2, 24).fill(0x4a3020).poly([1, -22, 15, -17, 1, -12]).fill(col);
+    if (i === mapSel) g.circle(0, 2, 8).stroke({ width: 1, color: 0xf5cf6a });
+    f.addChild(g);
+    const nl = label(cd.status === 'guild' ? B.guilds[cd.owner].name.split(' ')[0] : cd.status === 'mine' ? '샀음' : KN[cd.kind] + (cd.glow ? ' ✨' : ''), { small: true, color: 0xf4ecd2 }); nl.position.set(-Math.round(nl.width / 2), 4); f.addChild(nl);
+    f.eventMode = 'static'; f.cursor = 'pointer'; f.hitArea = new Rectangle(-24, -26, 48, 44); f.on('pointertap', () => { mapSel = i; sfx('ui_tap'); buildUI(); });
+    ui.refs[`flag_${cd.kind}`] = f;
+  });
+  // 아래 카드 1장: 그림 · 예상 가치 막대 · 힌트 · 가격/상태 + 버튼
+  const cd = e.cands[mapSel] ?? e.cands[0]; if (!cd) return c;
+  const k = new Container(); k.position.set(8, h - cardH - 4); c.addChild(k);
+  k.addChild(frame('wood', w - 16, cardH, 'panel'));
+  const ts = Math.max(0.5, Math.min(1.5, (cardH - 10) / 64)), th = new Sprite(plotThumb(cd)); th.scale.set(ts); th.position.set(5, 5); k.addChild(th);
+  const tx = Math.round(10 + 96 * ts), tw = w - 16 - tx - 8;
+  const nm = label(`${KN[cd.kind]} · ${cd.name} · ${cd.size}${cd.floor === 2 ? ' · 폐광' : ''}`, { small: true, color: KC[cd.kind] === 0x9a5ac8 ? 0xd8b0ff : COLOR.gold }); fitText(nm, tw); nm.position.set(tx, 5); k.addChild(nm);
+  const val = cardValue(cd), bx = tx, by = 24, bw = tw;
+  const bar = new Graphics().rect(bx, by, bw, 6).fill(0x3a2a22).rect(bx, by, bw, 6).fill({ color: 0x6a9a3a, alpha: 0.6 }).rect(bx + Math.round(bw / 2) - 1, by - 2, 2, 10).fill(0xf4ecd2);
+  k.addChild(bar);
+  const vl = label(`예상 가치 ${val.lo}~${val.hi}`, { small: true, color: 0xc8e8a8 }); vl.position.set(bx, by + 8); k.addChild(vl);
+  let hx = bx + Math.ceil(vl.width) + 8; for (const hnt of cd.hints) { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, by + 9); k.addChild(ic); hx += 12; }
+  const st = cd.status === 'guild' ? `${B.guilds[cd.owner].name}이(가) 가져갔어요` : cd.status === 'mine' ? '오늘 산 땅이에요' : cd.kind === 'cheap' ? `고정가 ${cd.price}금 · 길드 관심 없음` : `시작가 ${cd.price}금 · 길드 ${cd.guilds.length}팀`;
+  const sl = label(st, { small: true, color: COLOR.dim }); fitText(sl, tw); sl.position.set(bx, by + 22); k.addChild(sl);
+  if (cd.status === 'open') {
+    const can = e.tickets > 0 && (cd.kind !== 'cheap' || S.gold >= cd.price);
+    const b = button(can ? 'wood' : 'stone', Math.min(tw, 140), 20, cd.kind === 'cheap' ? `사기 💰${cd.price}` : '경매 ▶', () => { unlockAudio(); cd.kind === 'cheap' ? buyCheap(cd) : pickCard(cd); }, { small: true });
+    b.setDisabled(!can); b.position.set(bx, cardH - 26); k.addChild(b); ui.refs.mapGo = b;
+  }
+  if (/debug=auction/.test(location.search) && cd.kind !== 'cheap') { const dl = label(`[debug] 중간 ${val.mid}`, { small: true, color: 0xff8a7a }); dl.position.set(bx + 150, cardH - 22); k.addChild(dl); }
   return c;
 }
 /** 입찰: 구획 그림(정수 배율) + 이름·힌트 + 예상 가치·이익 막대. 그림 가운데 [x,y] 돌려줌 */
@@ -2581,7 +2705,7 @@ function bidPeople(c, w, h, yy, ppl) {
   const btnH = 22, btnY = h - btnH - 6, priceY = btnY - 18;
   ppl = Math.max(40, ppl);
   const meS = Math.min(Math.floor(w * 0.3), ppl - 14, 64);
-  const mf = portraitFrame(F.red_idle[0], meS, 'wood'); mf.position.set(8, yy + 2); c.addChild(mf);
+  const mf = portraitFrame(faceTex('miner_brick'), meS, 'wood'); mf.position.set(8, yy + 2); c.addChild(mf);
   const badge = new Container(); const bl = label('나', { small: true, color: 0x5c3832, shadow: false }); const bbg = new Graphics().rect(0, 0, Math.ceil(bl.width) + 8, 11).fill(0xf5cf6a).stroke({ width: 1, color: 0x8a5a24 }); badge.addChild(bbg, bl); bl.position.set(4, 0);
   badge.position.set(8 + Math.round((meS - bbg.width) / 2), yy + 2 + meS - 6); c.addChild(badge);
   const mine = AU.holder === 'me';
@@ -2590,6 +2714,7 @@ function bidPeople(c, w, h, yy, ppl) {
   const fh = Math.max(20, Math.min(40, ppl - 26, Math.floor((rw - 2) / 0.8)));
   const latest = AU.say.map((q, i) => ({ q, i })).filter(({ q }) => q && time >= q.t && time - q.t < 2.2 && !q.old).reduce((m, e) => (!m || e.q.t > m.q.t ? e : m), null);
   B.guilds.forEach((g, i) => {
+    if (AU.part && !AU.part.includes(i)) return;                         // 명세6-2: 참가 길드만
     const gx = rx0 + i * rw + rw / 2, say = AU.say[i], age = say ? time - say.t : 99, lead = AU.holder === i;
     const fig = new Sprite(tex(GUILD_SPR[i])); fig.anchor.set(0.5, 1); fig.scale.set(fh / fig.texture.height);
     let jx = 0; if (say && !say.pass && !say.line && age >= 0 && age < 0.5) jx = Math.round(Math.sin(age * 70) * 1.5);
@@ -2599,6 +2724,8 @@ function bidPeople(c, w, h, yy, ppl) {
     const bid = AU.bids[i];
     const nl = label(AU.out[i] ? '포기' : bid ? String(bid) : '—', { small: true, color: lead ? COLOR.gold : AU.out[i] ? 0x8a7a68 : COLOR.paperInk, shadow: lead });
     nl.position.set(Math.round(gx - nl.width / 2), yy + 16 + fh); c.addChild(nl);
+    if (!AU.out[i] && AU.phase === 'bid') { const r0 = AU.high / AU.caps[i], ex = XP().auction; if (r0 >= ex.hesitate) { const mood = label(r0 >= ex.sweat ? '💦' : '음…', { small: true, color: 0x5c3832, shadow: false }); mood.position.set(Math.round(gx + fh * 0.25), yy + 12); c.addChild(mood); } }   // 한도는 숨기고 표정으로
+    if (/debug=auction/.test(location.search)) { const dl = label(`한도 ${AU.caps[i]}`, { small: true, color: 0xb84a62, shadow: false }); dl.position.set(Math.round(gx - dl.width / 2), yy + 28 + fh); c.addChild(dl); }
     c.addChild(new Graphics().rect(Math.round(gx - rw / 2 + 2), yy + 2, rw - 4, 2).fill({ color: GUILD_COLOR[i], alpha: 0.9 }));
   });
   if (latest) {                                       // 말풍선 1줄 · 한 번에 하나
@@ -2786,10 +2913,14 @@ function makeResult(x, y, w, h) {
     line('사건', evs);
     if (S.daybook?.tasks?.length) line('오늘 과제', `${S.daybook.tasks.filter((t) => t.done).length}/${S.daybook.tasks.length}`, 0x46702e);
   }
-  const b = button('wood', 80, 22, '다음 경매', nextAuction); ui.refs.next = b;
+  const done = rd.mineMade || rd.resold != null;
+  const b = button(done ? 'wood' : 'stone', 80, 22, '부지로 ▶', () => { if (!done) { toast('갱도로 삼거나 되팔아요'); return; } nextAuction(); }); ui.refs.next = b;
   b.position.set(w - 88, h - 28); c.addChild(b);
-  if (!rd.mineMade) { const mb = button('wood', w - 16, 22, '⛏ 갱도로 삼기', () => makeMineFromRound(), { small: true }); mb.position.set(8, h - 56); c.addChild(mb); ui.refs.makeMine = mb; }
-  else { const ml = label(`⛏ 갱도 「${rd.mineMade}」 — 광부들이 캐요`, { ...ink, small: true, color: 0x46702e }); fitText(ml, w - 16); ml.position.set(8, h - 50); c.addChild(ml); }
+  if (!done) {
+    const hw = Math.floor((w - 20) / 2), rv = resaleValue();
+    const mb = button('wood', hw, 22, '⛏ 갱도로 삼기', () => makeMineFromRound(), { small: true }); mb.position.set(8, h - 56); c.addChild(mb); ui.refs.makeMine = mb;
+    const sb = button('paper', hw, 22, `되팔기 💰${rv}`, () => { rd.resold = rv; S.gold += rv; count('soldGold', rv); sfx('coin_big'); toast(`땅을 되팔았어요 +${rv}`, 'halabeoji', 2.5); save(); buildUI(); }, { small: true }); sb.position.set(12 + hw, h - 56); c.addChild(sb);
+  } else { const ml = label(rd.mineMade ? `⛏ 갱도 「${rd.mineMade}」 — 광부들이 캐요` : `땅을 되팔았어요 +${rd.resold}`, { ...ink, small: true, color: 0x46702e }); fitText(ml, w - 16); ml.position.set(8, h - 50); c.addChild(ml); }
   if (talentLeft(S) > 0) { const tb = button('paper', 80, 22, `특성 찍기 ${talentLeft(S)}`, openTalents, { small: true }); tb.position.set(w - 172, h - 28); c.addChild(tb); ui.refs.resultTalent = tb; }
   return c;
 }
@@ -4141,15 +4272,20 @@ function openMines() {
   const en = S.engine, oreName = Object.fromEntries(ORES.map((o) => [o.key, o.name]));
   const row = (m) => { const pct = Math.round((m.reserve / m.reserveMax) * 100), mix = Object.entries(m.oreMix).filter(([, v]) => v >= 0.02).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${oreName[k]} ${Math.round(v * 100)}%`).join(' · ');
     return `<div class="kitem"${m.reserve <= 0 ? ' style="opacity:.5"' : ''}><b>${m.name}${m.reserve <= 0 ? ' — 다 캤어요' : ''}</b><div style="height:6px;background:#3a2e28;border-radius:3px;margin:4px 0"><div style="height:6px;width:${pct}%;background:#d39a3a;border-radius:3px"></div></div><small>남은 양 ${Math.ceil(m.reserve)}/${m.reserveMax} · 깊이 ×${m.depth.toFixed(2)} · ${mix}</small><div class="krow" style="margin-top:4px"><button class="kmn" data-id="${m.id}" data-d="-1">−</button><b style="padding:0 8px">광부 ${m.miners}</b><button class="kmn" data-id="${m.id}" data-d="1">+</button></div></div>`; };
-  openPanel('⛏ 갱도', `<p>광부 <b>${minersTotal(S)}명</b> · 갱도 ${en.mines.length}/${mineSlots(S)}곳 · 캐기 <b>${digRate(S).toFixed(2)}/초</b></p>${en.mines.map(row).join('')}<div class="krow"><button class="kgo">새 원정 ▶</button></div><p class="kmuted">원정에서 판 땅을 [갱도로 삼기]하면 여기에 늘어요</p>`, (b, close) => {
+  openPanel('⛏ 갱도', `<p>광부 <b>${minersTotal(S)}명</b> · 갱도 ${en.mines.length}/${mineSlots(S)}곳 · 캐기 <b>${digRate(S).toFixed(2)}/초</b></p>${en.mines.map(row).join('')}<div class="krow"><button class="kgo">새 원정 ▶</button></div><p class="kmuted">원정에서 판 땅을 [갱도로 삼기]하면 여기에 늘어요</p>${rankHtml()}`, (b, close) => {
     b.querySelectorAll('.kmn').forEach((x) => (x.onclick = () => { if (moveMiner(S, +x.dataset.id, +x.dataset.d)) { sfx('ui_tap'); save(); close(); openMines(); } else sfx('pass', true); }));
     b.querySelector('.kgo').onclick = () => { close(); startExpedition(); };
   });
 }
+/** 주간 순위 (명세6-2 §5): 나 vs 길드 3팀 생산/초 */
+function rankHtml() {
+  const rows = [['나 (돌망치 상회)', engineRate()], ...B.guilds.map((g, i) => [g.name, guildRate(i)])].sort((a, b) => b[1] - a[1]);
+  return `<p><b>생산 순위</b></p>${rows.map(([n, v], i) => `<div class="kitem"><small>${i + 1}. ${n} — ${v.toFixed(1)}/초</small></div>`).join('')}`;
+}
 /** 새 원정: 처음이면 튜토리얼 원정, 아니면 경매 */
 function startExpedition() {
   if (!S.tutorial.done) { closeCompany(); startTutorialRound(); return; }
-  closeCompany();
+  openMap();
 }
 function onTickError(e, where) {
   const msg = `${where}: ${e?.message ?? e}`.slice(0, 160), stack = String(e?.stack ?? '').split('\n').slice(1, 4).map((l) => l.trim().replace(/https?:\/\/[^\s)]+\//g, '')).join(' | ');
@@ -4308,7 +4444,7 @@ function tickMain(tk) {
 const bootIdle = settleOffline(true);
 buildWorld();
 layout();
-if (!S.round) startAuction();
+if (!S.round) { W = null; buildWorld(); }   // 명세6-2: 경매 화면은 지도에서만
 else {
   piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= []; S.round.stakes ??= []; setTimeout(() => { for (const q of S.round.stakes ?? []) if (q.text === '…' || q.text === '?') resolveStake(q, true); }, 0);
   (S.round.cartCargos ?? [S.round.cartCargo, S.round.cartCargo2]).forEach((cg, i) => cg && carts[i] && Object.assign(carts[i].cargo, cg));
@@ -4321,7 +4457,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, openMines, engineBuy, startExpedition, makeMineFromRound, get engRate() { return engineRate(); }, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, set yardHour(h) { S.tick = (h / 24) * TICK_PER_DAY; }, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, openMines, openMap, buyCheap, playerFold, get AU() { return AU; }, engineBuy, startExpedition, makeMineFromRound, get engRate() { return engineRate(); }, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, set yardHour(h) { S.tick = (h / 24) * TICK_PER_DAY; }, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });

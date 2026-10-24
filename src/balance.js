@@ -280,9 +280,23 @@ export const B = {
     cartLoad: [4, 2], cartsEvery: 8, trip: [10, 0.2, 4],
     whBase: 60, whMul: 1.22, pileDiv: 3,
     smelt: { slotsEvery: 5, sec: [12, 0.3, 3] },
-    maxMines: 6, minesEvery: 3,
+    maxMines: 6, minesBase: 2, minesEvery: 3,          // 갱도 자리 = minesBase + ⌊(숙소Lv−1)/minesEvery⌋ (6-3 해금 #6: 숙소 전에 갱도 2개)
     reservePerCell: 30, depthMul: 0.8,              // 원정 → 갱도: reserve = 캔 광맥 칸 × 30 · depth = 1 + 최대깊이/줄 × 0.8
     idleCapHours: 2, idleCapPerLodge: 0.25, idleCapMax: 12,
     awayCardSeconds: 60,                            // 이만큼 넘게 떠나 있으면 돌아왔을 때 카드
+  },
+
+  // ---------------------------------------------------------------- 원정 (명세6-2): 지도 후보 3 · 이길 수 있는 경매 · 되사기 · 원정 → 갱도
+  expedition: {
+    tickets: 2, candidates: 3, rebuyChance: 0.25, rebuyMul: [1.3, 1.6], resaleMul: 0.5, resaleVeinMul: 0.3,
+    cheap: { size: 'S', hints: 1, priceMul: 0.45 },                 // 고정가 = 예상 가치 중간 × 0.45 (경매 없음)
+    normal: { size: 'M', hints: 2, guilds: 1 },
+    prime: { size: 'L', hints: 2, glow: true, guilds: [2, 3], abandonedChance: 0.3 },
+    auction: { startShare: 0.35, raiseStep: 0.10, hammer: 3, react: [0.8, 1.6], hesitate: 0.7, sweat: 0.9 },
+    guildCap: { abyss: [0.55, 0.75], tower: [0.40, 0.55], shield: [0.35, 0.80] }, guildEye: 0.10,
+    crew: [3, 3, 4, 4, 5],                                          // 숙소 Lv 1·2·3·4·5+ 원정대 인원 (그만큼 엔진 광부가 빠짐)
+    guildStart: { asset: 2000, mines: 1 },                           // 길드 자산·갱도 (땅을 가져갈 때마다 + 예상 가치 · +1)
+    guildRatePerMine: 1.2,                                           // 길드 생산/초 = 갱도 수 × 이것 (순위용)
+    newsOre: [8, 30],                                                // 길드가 가져간 땅 소식: 광석 n개
   },
 };
