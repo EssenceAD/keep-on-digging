@@ -1,7 +1,9 @@
-// 회사 (명세3 §2): 지상 부지 슬롯 · 건물 Lv · 장식 · 어울림 → 게임 숫자. 숫자는 balance.js B.company.
-// 저장 모양 (S.company): { coreLv, buildings: { office:{x,y}, warehouse:{lv,x,y}, ... }, decos:[{kind,x,y}], harmoniesFound:[] }
-// 어울림 판정은 체크인 src/world/harmony.ts 의 gap()(발자국 가장자리 사이 빈칸, 대각선 포함) 그대로 — 슬롯은 1×1 발자국.
+// 회사 (명세3 §2 · PATCH_V10 §2): 부지 장면(art/yard/yard.px.js)의 빈 터 10곳 · 소품 자리 12곳 · 건물 Lv · 장식 · 어울림 → 게임 숫자.
+// 저장 모양 (S.company): { coreLv, buildings: { office:{lot}, warehouse:{lot}, ... }, decos:[{kind,spot}], harmoniesFound:[] }
+// 건물 Lv = 장비 Lv − min (명세5 §3, upgrades 한 표). 어울림 = 같은 구역(위/아래)에 둘 다 있으면.
 import { B } from './balance.js';
+import YARD from '../art/yard/yard_lots.json';
+export { YARD };
 
 const C = B.company;
 export const BUILDINGS = Object.keys(C.buildings);
@@ -12,8 +14,13 @@ export const nameOf = (k) => (k === 'office' ? '사무소' : C.buildings[k]?.nam
 export function ensureCompany(S) {
   const co = S.company;
   co.coreLv ??= 1; co.buildings ??= {}; co.decos ??= []; co.harmoniesFound ??= [];
-  co.buildings.office ??= { x: 0, y: C.rows - 1 };
   ensureUpgrades(S);
+  // 격자 슬롯(x,y) → 빈 터(lot) · 소품 자리(spot)로 옮김 (PATCH_V10 §2)
+  for (const b of Object.values(co.buildings)) if (b && b.lot == null) { delete b.x; delete b.y; }
+  co.buildings.office ??= {}; co.buildings.office.lot ??= YARD.lots.find((l) => l.default === 'office')?.id ?? 0;
+  co.decos = co.decos.filter((d) => d && C.decos[d.kind]);
+  for (const d of co.decos) if (d.spot == null) { const used = new Set(co.decos.map((q) => q.spot)); d.spot = YARD.decoSpots.findIndex((_, i) => !used.has(i)); delete d.x; delete d.y; }
+  autoPlace(S);
   if (S.talents.v !== 2) {                 // 명세5 §4: 5단 → 8단으로 바뀜 — 찍은 것 돌려주고, 지난 라운드 수만큼 포인트
     Object.assign(S.talents, { survey: 0, dig: 0, trade: 0, v: 2, earned: S.talents.earned ?? (S.stats?.rounds ?? 0) * B.talents.minPerRound });
   }
@@ -51,49 +58,59 @@ export function upText(S, k) {
   return '';
 }
 export const lvOf = (S, k) => (k === 'office' ? S.company.coreLv : BUILD_UP[k] && S.upgrades ? upLv(S, BUILD_UP[k]) - UP[BUILD_UP[k]].min : S.company.buildings[k]?.lv ?? 0);
-export const cols = (S) => C.baseCols + S.company.coreLv - 1;
+/** 열린 빈 터: 처음 6곳 + 사무소 Lv2·3·4·5마다 덤불 걷힌 곳 1곳씩 */
+export function openLots(S) {
+  const locked = YARD.lots.filter((l) => l.locked);
+  const opened = new Set(locked.slice(0, Math.max(0, S.company.coreLv - 1)).map((l) => l.id));
+  return YARD.lots.filter((l) => !l.locked || opened.has(l.id));
+}
+export const lotOf = (id) => YARD.lots.find((l) => l.id === id);
+export const lotUser = (S, id) => Object.entries(S.company.buildings).find(([k, b]) => b?.lot === id && (k === 'office' || lvOf(S, k) > 0))?.[0] ?? null;
+export const spotUser = (S, i) => S.company.decos.find((d) => d.spot === i)?.kind ?? null;
+export const spotZone = (i) => (YARD.decoSpots[i]?.[1] ?? 0) < 120 ? 'upper' : 'lower';
+/** 장비 탭에서 올린 건물이 터가 없으면 빈 터에 */
+export function autoPlace(S) {
+  for (const k of Object.keys(C.buildings)) {
+    if (lvOf(S, k) <= 0) continue;
+    const b = (S.company.buildings[k] ??= {});
+    if (b.lot != null && lotUser(S, b.lot) === k) continue;
+    const free = openLots(S).find((l) => !lotUser(S, l.id));
+    b.lot = free ? free.id : null;
+  }
+}
 
 /** 다음 Lv 비용 (최대면 null) */
 export function upCost(S, k) {
   const lv = lvOf(S, k);
   if (k === 'office') return lv >= 5 ? null : C.officeCost[lv - 1];
   if (C.decos[k]) return S.company.decos.some((d) => d.kind === k) ? null : C.decos[k].cost;
-  return lv >= 5 ? null : Math.round(C.buildings[k].cost * C.costMul[lv]);
+  return BUILD_UP[k] ? upCostOf(S, BUILD_UP[k]) : null;              // 건물 = 장비 (같은 값)
 }
-/** 올릴 수 있나: { ok, why } — 다른 건물 Lv ≤ 사무소 Lv */
+export const bldMax = (k) => (BUILD_UP[k] ? UP[BUILD_UP[k]].max - UP[BUILD_UP[k]].min : 5);
+/** 올릴 수 있나: { ok, why } */
 export function canUp(S, k) {
   const cost = upCost(S, k);
   if (cost == null) return { ok: false, why: '최대' };
-  if (k !== 'office' && !C.decos[k] && lvOf(S, k) + 1 > S.company.coreLv) return { ok: false, why: `사무소 Lv${lvOf(S, k) + 1}` };
   if (S.gold < cost) return { ok: false, why: '금화 부족' };
   return { ok: true, cost };
 }
 
-/** 부지 위 모든 것: [{kind, x, y, deco}] */
+/** 부지 위 모든 것: [{kind, lot|spot, zone, deco}] */
 export function placed(S) {
   const out = [];
-  for (const [k, b] of Object.entries(S.company.buildings)) if (b && b.x != null && (k === 'office' || b.lv > 0)) out.push({ kind: k, x: b.x, y: b.y, deco: false });
-  for (const d of S.company.decos) out.push({ kind: d.kind, x: d.x, y: d.y, deco: true });
+  for (const [k, b] of Object.entries(S.company.buildings)) {
+    if (!b || b.lot == null || (k !== 'office' && lvOf(S, k) <= 0)) continue;
+    const l = lotOf(b.lot); if (l) out.push({ kind: k, lot: b.lot, zone: l.zone, deco: false });
+  }
+  for (const d of S.company.decos) if (d.spot != null && d.spot >= 0) out.push({ kind: d.kind, spot: d.spot, zone: spotZone(d.spot), deco: true });
   return out;
 }
-export const at = (S, x, y) => placed(S).find((p) => p.x === x && p.y === y) ?? null;
-export function firstEmpty(S) {
-  for (let y = C.rows - 1; y >= 0; y--) for (let x = 0; x < cols(S); x++) if (!at(S, x, y)) return { x, y };
-  return null;
-}
-
-/** 체크인 harmony.ts gap(): 발자국 사이 빈칸 (붙어 있으면 0, 대각선은 큰 쪽) */
-export function gap(a, b) {
-  const gx = Math.max(0, b.x - (a.x + 1), a.x - (b.x + 1));
-  const gy = Math.max(0, b.y - (a.y + 1), a.y - (b.y + 1));
-  return Math.max(gx, gy);
-}
-/** 지금 성립한 어울림 (전역 효과는 조합마다 한 번) */
+/** 지금 성립한 어울림: 둘이 같은 구역(위 줄 / 아래 줄)에 있으면 */
 export function harmonies(S) {
   const p = placed(S);
   return C.harmonies.filter((h) => {
     const as = p.filter((q) => q.kind === h.a), bs = p.filter((q) => q.kind === h.b);
-    return as.some((a) => bs.some((b) => gap(a, b) <= C.harmonyRange));
+    return as.some((a) => bs.some((b) => a.zone === b.zone));
   });
 }
 
@@ -141,10 +158,11 @@ export function companyFx(S) {
 
 /** 목록 한 줄 설명: 지금 → 다음 */
 export function effectText(S, k) {
+  if (BUILD_UP[k]) return upText(S, BUILD_UP[k]);                  // 건물 = 장비 (같은 표)
   const lv = lvOf(S, k), b = C.buildings[k], n = Math.min(5, lv + 1);
   const arrow = (arr, unit = '') => (lv >= 5 ? `${arr[lv]}${unit}` : `${arr[lv]}${unit} → ${arr[n]}${unit}`);
   switch (k) {
-    case 'office': return lv >= 5 ? '부지 10열 · 모든 구획' : `부지 ${cols(S)}열 → ${cols(S) + 1}열${lv + 1 === C.lPlotLv ? ' · L 구획' : lv + 1 === C.mineLv ? ' · 폐광' : ''}`;
+    case 'office': return lv >= 5 ? '빈 터 10곳 · 모든 구획' : `빈 터 ${openLots(S).length}→${openLots(S).length + 1}곳${lv + 1 === C.lPlotLv ? ' · L 구획' : lv + 1 === C.mineLv ? ' · 폐광' : ''}`;
     case 'warehouse': return `창고 ${arrow(b.cap)}`;
     case 'cartShed': return `적재 ${arrow(b.load)} · 광차 ${b.carts[lv]}대${b.carts[n] > b.carts[lv] ? ` → ${b.carts[n]}대` : ''}`;
     case 'lodge': return `광부 ${arrow(b.miners, '명')} · 방치 ${b.capHours[lv]}h`;
