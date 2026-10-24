@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.3.3';
+const VERSION = 'v1.4';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -123,7 +123,21 @@ const urls = [
   ...SPRITES.map((n) => A(`sprites/${n}.png`)), ...NORMALS.map((n) => A(`sprites/${n}_n.png`)),
   ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'), A('scenes/office_night.png'), A('scenes/office_day.png'), A('scenes/yard_day.png'), A('scenes/yard_dusk.png'), A('scenes/yard_night.png'),
 ];
+// 부지 v5 (PATCH_V14): public/art/yard5 — The Fan-tasy Tileset (Free) 기반
+const [Y5, Y5A] = await Promise.all([fetch(A('yard5/yard_v5.json')).then((r) => r.json()), fetch(A('yard5/bld/anchors.json')).then((r) => r.json())]);
+const Y5_FILES = [...[0, 1, 2, 3].map((i) => `yard_ground_f${i}.png`), ...[...new Set(Y5.objects.map((o) => o.n))].map((n) => `props/${n}.png`), ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `props/campfire_f${i}.png`),
+  ...Object.keys(Y5A).filter((n) => !/smoke|lot_site/.test(n)).map((n) => `bld/${n}.png`), 'bld/lot_site_a.png', 'bld/lot_site_b.png', 'bld/lot_site_locked.png', ...[0, 1, 2, 3, 4, 5].map((i) => `bld/smoke_f${i}.png`),
+  ...['brick', 'tumba', 'elin', 'grun'].flatMap((w) => [`chars/miner_${w}_walk.png`, `chars/miner_${w}_idle.png`])];
+urls.push(...Y5_FILES.map((f) => A(`yard5/${f}`)));
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
+const y5tex = (p) => { const t = loaded[A(`yard5/${p}`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
+/** 시간대 곱하기 색 (V14 §4): 바닥·소품·건물·사람 모두 같은 값 */
+const Y5_SHADE = { day: 0xffffff, dusk: 0xffc8a0, night: 0x8890c8 };
+/** V14 건물 그림: Lv1~2 → _1, Lv3~4 → _3, Lv5 → _5 */
+const Y5_BLD = { office: 'office', smelter: 'smelter', warehouse: 'warehouse', cartShed: 'cartshed', lodge: 'lodge', lanternShop: 'lanternshop', pumpRoom: 'pump', turretShop: 'turretshop', moleHouse: 'molehome' };
+const y5Step = (lv) => (lv >= 5 ? 5 : lv >= 3 ? 3 : 1);
+/** V14 광부 (가로 4프레임 × [오른, 왼, 뒤, 앞], 40×48, 발 (20,41)) — 게임 광부 id → 그림 */
+const Y5_MINER = { red: 'brick', brown: 'tumba', blonde: 'elin', grun: 'grun' };
 const tex = (n) => loaded[A(`sprites/${n}.png`)];
 const ntex = (n) => loaded[A(`sprites/${n}_n.png`)];
 /** 애니 프레임 텍스처 + 프레임별 길이(ms) */
@@ -1253,6 +1267,7 @@ function makeManual() {
   const hd = label(m.title, { ...ink, color: 0x8a5a24 }); hd.position.set(8 + isz + 6, y + 8); c.addChild(hd);
   y += isz + 6;
   for (const ln of m.lines) { const l = label(`· ${ln}`, { ...ink, small: true, wrap: w - 20 }); l.position.set(10, y); c.addChild(l); y += Math.ceil(l.height) + 4; }
+  { const cr = label(Y5.credit_line, { ...ink, small: true, color: 0x8a7a68, wrap: w - 16 }); cr.position.set(8, h - Math.ceil(cr.height) - 4); c.addChild(cr); }   // V14 §5 크레딧 한 줄
   ui.overlayRect = { x: 0, y: 0, w: L.W, h: L.H };
   return box;
 }
@@ -1478,7 +1493,7 @@ function makeCompany(x, y, w, h) {
   const c = new Container();
   const iconH = Math.round(48 / L.uiS), listH = placing ? 30 : 2 * (iconH + 13) + 24;
   const areaH = h - listH;
-  { const ff = new TilingSprite({ texture: tex('forest_fill'), width: w, height: areaH }); const kf = yardScale() / L.uiS; ff.tileScale.set(kf); ff.position.set(x, y); ff.tint = YARD_SHADE[yardPhase()]; c.addChild(ff); ui.forestFill = ff; }   // §3-7 장면 밖 = 숲 (검정 대신)
+  c.addChild(new Graphics().rect(x, y, w, areaH).fill(0x2f6a34).rect(x, y, w, areaH).fill({ color: Y5_SHADE[yardPhase()] === 0xffffff ? 0x2f6a34 : 0x1a2440, alpha: yardPhase() === 'day' ? 0 : 0.5 }));   // V14: 장면 밖 = 숲 짙은 초록 (옛 forest_fill 대신)
   const site = makeSite(w, areaH); site.position.set(x, y); c.addChild(site);
   ui.overlayRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS };
   const tag = label(`🏗 ${openLots(S).length}/${YARD.lots.length}`, { small: true, color: COLOR.gold }); const tg = new Graphics().rect(x + 2, y + 2, Math.ceil(tag.width) + 8, 13).fill({ color: 0x0b0910, alpha: 0.55 }); tag.position.set(x + 6, y + 3); c.addChild(tg, tag);   // 빈 터 n/10 (작게)
@@ -1501,7 +1516,8 @@ function makeCoGrid(w, h) {
   const c = new Container();
   c.addChild(frame('paper', w, h, 'panel'));
   const ink = { color: COLOR.paperInk, shadow: false };
-  const tabs = [['build', '건물'], ['deco', '장식'], ['harmony', `어울림 ${S.company.harmoniesFound.length}/${B.company.harmonies.length}`]];
+  coTab = 'build';                                                       // V14: 장식·어울림은 이번엔 숨김 (명세6 재설계 때 다시)
+  const tabs = [['build', '건물']];
   const tw = Math.floor((w - 12) / 3);
   tabs.forEach(([key, name], i) => { const tb = tab(tw, name, () => { coTab = key; sfx('stash', true); buildUI(); }); tb.setOn(coTab === key); tb.position.set(6 + i * tw, 3); c.addChild(tb); });
   const top = 20, iconH = Math.round(48 / L.uiS);   // V13 §3-9: 48px 아이콘
@@ -1521,11 +1537,12 @@ function makeCoGrid(w, h) {
     const chk = canUp(S, k), cost = chk.cost ?? (deco ? null : upCost(S, k));
     const cell = new Container(); cell.position.set(x0, y0); c.addChild(cell);
     if (chk.ok) cell.addChild(new Graphics().roundRect(0, 0, cw - 2, rh - 1, 3).stroke({ width: 1, color: 0xf5cf6a }));
-    const art = yardArt(k, Math.max(1, lv)); art.anchor.set(0.5, 1); art.scale.set(0.75 / L.uiS); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);   // 64px 그림 → 48px
+    const art = new Sprite(y5tex(`bld/${Y5_BLD[k]}_${y5Step(Math.max(1, lv))}.png`)); art.anchor.set(0.5, 1); art.scale.set(Math.min((iconH - 2) / art.texture.height, (cw - 6) / art.texture.width)); art.position.set(Math.round((cw - 2) / 2), iconH + 1); if (!have) art.alpha = 0.45; cell.addChild(art);   // V14 그림을 칸(48px)에 맞춤
     const tx = label(deco ? (have ? '놓음' : `💰${cost}`) : `${have ? `Lv${lv}` : ''}${have && cost != null ? '·' : ''}${cost != null ? `💰${cost}` : have ? '' : '최대'}`, { ...ink, small: true, color: chk.ok ? 0x46702e : 0x8a7a68 });   // Lv·💰 만
     if (!deco && have && cost != null && tx.width > cw - 2) {           // 폰처럼 칸이 좁으면 Lv 는 아이콘 왼쪽 위 뱃지로, 줄에는 💰만
       tx.text = `💰${cost}`; const lb = label(`Lv${lv}`, { small: true, color: COLOR.gold }); const bg = new Graphics().rect(0, 0, Math.ceil(lb.width) + 4, 11).fill({ color: 0x1a1220, alpha: 0.7 }); lb.position.set(2, -1); cell.addChild(bg, lb);
     }
+    if (cost != null && tx.width > cw - 2) tx.text = String(cost);           // 그래도 넘치면 💰 빼고 숫자만
     fitText(tx, cw - 2); tx.position.set(Math.round((cw - 2 - tx.width) / 2), iconH + 1); cell.addChild(tx);
     cell.eventMode = 'static'; cell.cursor = 'pointer'; cell.hitArea = new Rectangle(0, 0, cw - 2, rh);
     cell.on('pointertap', () => { upCard = { kind: deco ? 'deco' : 'bld', key: k }; sfx('ui_tap'); buildUI(); });
@@ -1546,33 +1563,58 @@ function glowTex() {
 }
 const yardWalkers = new Map();                               // 부지 광부 자리 (화면을 다시 그려도 이어서)
 let siteDragged = false, yardPan = null, yardPanY = null;   // 끌기 (CSS px, 처음 = 사무소 터 가운데)
-/** 장면 배율 (정수만): 폰도 최소 2× — 넘치는 폭은 좌우로 끌어 봄 */
-const yardScale = () => (L.portrait ? 3 : Math.max(2, Math.min(3, Math.floor((L.full.x1 - L.full.x0) / YARD.scene.w))));   // V12 §4: 세로 폰 3× · 가로·PC 2~3× 꽉 차게 (넘치면 끌어 봄)
-const yardTex = (n) => { const t = loaded[A(`scenes/${n}.png`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
-/** 길(폴리라인) 위 점: d = 처음부터 거리 */
-const polyLen = (p) => p.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
-function polyAt(p, d) {
-  for (let i = 0; i < p.length - 1; i++) { const l = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); if (d <= l) { const f = d / l; return [p[i][0] + (p[i + 1][0] - p[i][0]) * f, p[i][1] + (p[i + 1][1] - p[i][1]) * f]; } d -= l; }
-  return p[p.length - 1];
+/** 장면 배율 (V14 §1, 정수만): 960×540 — PC 2×(1920×1080) · 세로 폰 1× · 가로 폰 1~2× (넘치면 끌어 봄) */
+const yardScale = () => (L.portrait ? 1 : Math.max(1, Math.min(2, Math.round((L.full.x1 - L.full.x0) / Y5.size[0]))));
+const _y5Sheet = {};
+function y5Frames(who, act) {
+  const key = `${who}_${act}`; if (_y5Sheet[key]) return _y5Sheet[key];
+  const base = y5tex(`chars/miner_${who}_${act}.png`);
+  return (_y5Sheet[key] = [0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((f) => new Texture({ source: base.source, frame: new Rectangle(f * 40, r * 48, 40, 48) }))));
 }
-/** 부지 장면 (PATCH_V10 §2~4): art/yard/yard.px.js 낮·밤 그림 1장 위에 건물(빈 터) · 장식(소품 자리) · 길 따라 걷는 광부 · 레일 광차 · 두더지
- *  배율은 정수만 (화면 폭·높이에 들어가는 가장 큰 정수, 최소 1 — 남는 곳은 어두운 테두리, 넘치면 가운데 기준으로 잘림) */
+/** 길 그래프 (spine + branches): 걷기는 길 중심선을 따라 */
+let _y5Graph = null;
+function y5Graph() {
+  if (_y5Graph) return _y5Graph;
+  const nodes = [], edges = [];
+  const add = (line) => { const ids = line.map((p) => nodes.push(p) - 1); for (let i = 1; i < ids.length; i++) edges.push([ids[i - 1], ids[i]]); return ids; };
+  const sp = add(Y5.spine);
+  for (const br of Y5.branches) { const ids = add(br); let best = sp[0], bd = 1e9; for (const s of sp) { const d = Math.hypot(nodes[s][0] - br[0][0], nodes[s][1] - br[0][1]); if (d < bd) { bd = d; best = s; } } edges.push([best, ids[0]]); }
+  const nb = nodes.map(() => []);
+  for (const [a, b] of edges) { const d = Math.hypot(nodes[a][0] - nodes[b][0], nodes[a][1] - nodes[b][1]); nb[a].push([b, d]); nb[b].push([a, d]); }
+  return (_y5Graph = { nodes, nb });
+}
+/** a → b 길 따라 가는 점들 (가까운 길 점에 올라타서 내려옴) */
+function y5Route(a, b) {
+  const { nodes, nb } = y5Graph();
+  const near = (p) => nodes.reduce((bi, q, i) => (Math.hypot(q[0] - p[0], q[1] - p[1]) < Math.hypot(nodes[bi][0] - p[0], nodes[bi][1] - p[1]) ? i : bi), 0);
+  const s = near(a), t = near(b);
+  if (Math.hypot(a[0] - b[0], a[1] - b[1]) < Math.hypot(nodes[s][0] - a[0], nodes[s][1] - a[1]) + Math.hypot(nodes[t][0] - b[0], nodes[t][1] - b[1])) return [b];   // 길보다 바로 가는 게 가까우면
+  const dist = nodes.map(() => Infinity), prev = nodes.map(() => -1), done = new Set(); dist[s] = 0;
+  while (done.size < nodes.length) {
+    let u = -1; for (let i = 0; i < nodes.length; i++) if (!done.has(i) && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0 || dist[u] === Infinity || u === t) break; done.add(u);
+    for (const [v, d] of nb[u]) if (dist[u] + d < dist[v]) { dist[v] = dist[u] + d; prev[v] = u; }
+  }
+  const out = []; for (let v = t; v >= 0; v = prev[v]) { out.unshift(nodes[v]); if (v === s) break; }
+  return [...out, b];
+}
+/** 부지 장면 (PATCH_V14): yard5 바닥 4프레임 위에 소품·건물(빈 터)·광부를 바닥 y로 정렬. 장식·어울림은 이번엔 숨김 */
 function makeSite(sw, sh) {
-  const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', SW = YARD.scene.w, SH = YARD.scene.h;
-  const k = yardScale();                                    // 기기 px 배율 (정수)
+  const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', [SW, SH] = Y5.size;
+  const k = yardScale(), shade = Y5_SHADE[phase];
   const view = new Container(); c.addChild(view);
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
   const sc = new Container(); view.addChild(sc);
   sc.scale.set(k / L.uiS);
   const PW = sw * L.uiS, PH = sh * L.uiS;                    // 장면 자리 (CSS px)
   const minX = Math.min(0, PW - SW * k), centerX = Math.round((PW - SW * k) / 2), minY = Math.min(0, PH - SH * k), centerY = Math.round((PH - SH * k) / 2);
-  const ol = lotOf(S.company.buildings.office?.lot ?? 0);
-  if (yardPan == null) yardPan = Math.round(PW / 2 - (ol.x + ol.w / 2) * k);
-  if (yardPanY == null) yardPanY = Math.round(PH / 2 - (ol.y + ol.h / 2) * k);
+  const ol = Y5.lots[S.company.buildings.office?.lot ?? 1] ?? Y5.lots[1];
+  if (yardPan == null) yardPan = Math.round(PW / 2 - ol.cx * k);
+  if (yardPanY == null) yardPanY = Math.round(PH / 2 - (ol.by - 50) * k);
   const clampPanX = (v) => (minX < 0 ? Math.max(minX, Math.min(0, v)) : centerX);
   const clampPanY = (v) => (minY < 0 ? Math.max(minY, Math.min(0, v)) : centerY);
   yardPan = clampPanX(yardPan); yardPanY = clampPanY(yardPanY);
-  const placeSc = () => { sc.position.set(Math.round(yardPan) / L.uiS, Math.round(yardPanY) / L.uiS); if (ui.forestFill && !ui.forestFill.destroyed) ui.forestFill.tilePosition.set(sc.x, sc.y); };
+  const placeSc = () => { sc.position.set(Math.round(yardPan) / L.uiS, Math.round(yardPanY) / L.uiS); };
   placeSc();
   if (minX < 0 || minY < 0) {                                  // 끌기 (탭과 구분: 4px 넘게 움직이면 끌기)
     c.eventMode = 'static'; c.hitArea = new Rectangle(0, 0, sw, sh);
@@ -1582,126 +1624,107 @@ function makeSite(sw, sh) {
     const end = () => { d0 = null; setTimeout(() => { siteDragged = false; }, 0); };
     c.on('pointerup', end); c.on('pointerupoutside', end);
   }
-  const bg = new Sprite(yardTex(`yard_${phase}`)); sc.addChild(bg);
-  { const ed = new Graphics(); for (let i = 0; i < 4; i++) { const a = 0.22 - i * 0.05; ed.rect(i * 2, 0, 2, SH).fill({ color: 0x0a0812, alpha: a }).rect(SW - (i + 1) * 2, 0, 2, SH).fill({ color: 0x0a0812, alpha: a }).rect(0, SH - (i + 1) * 2, SW, 2).fill({ color: 0x0a0812, alpha: a }); } sc.addChild(ed); sc.edge = ed; }   // 가장자리 안쪽 8px 어둡게
+  // 1) 바닥 (개울 물결 4프레임 4fps)
+  const ground = [0, 1, 2, 3].map((i) => y5tex(`yard_ground_f${i}.png`));
+  const bg = new Sprite(ground[0]); bg.tint = shade; sc.addChild(bg);
   bg.eventMode = 'static'; bg.on('pointertap', () => { if (siteDragged) return; if (upCard && !placing) { upCard = null; buildUI(); } });
-  const ripple = new Sprite(F.yard_ripple[0]); ripple.tint = night ? 0x9090c8 : dusk ? 0xe0b8a0 : 0xffffff; sc.addChild(ripple);                 // yard.px.js _ripple 자리 (0,0)
-  const fireBg = new Sprite(F.yard_fire[0]); fireBg.position.set(230, 184); sc.addChild(fireBg);                                 // _fire 자리 (그림 속 모닥불)
-  const open = new Set(openLots(S).map((l) => l.id)), pl = placed(S);
-  const shade = YARD_SHADE[phase];
-  // 어울림 잇는 선
-  const anchorOf = (p) => { if (p.deco) { const [dx, dy] = YARD.decoSpots[p.spot]; return [dx + 8, dy + 10]; } const l = lotOf(p.lot); return [l.x + l.w / 2, l.y + l.h - 4]; };
-  const links = new Graphics();
-  for (const hm of harmonies(S)) {
-    const a = pl.find((p) => p.kind === hm.a), b = pl.find((p) => p.kind === hm.b);
-    if (a && b) { const [ax, ay] = anchorOf(a), [bx, by] = anchorOf(b); links.moveTo(ax, ay).lineTo(bx, by).stroke({ width: 1, color: 0xf5cf6a, alpha: 0.45 }); }
+  // 2) y정렬 한 무리: 소품 + 건물(빈 터) + 사람 — 키 = 바닥 y
+  const world = new Container(); world.sortableChildren = true; sc.addChild(world);
+  const put = (t, x, by) => { const sp = new Sprite(t); sp.position.set(Math.round(x), Math.round(by - t.height)); sp.tint = shade; sp.zIndex = by; world.addChild(sp); return sp; };
+  const fireFr = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => y5tex(`props/campfire_f${i}.png`));
+  let fireSp = null;
+  for (const o of Y5.objects) {
+    if (o.n === 'animation_campfire_f0') { fireSp = put(fireFr[0], o.x, o.by); continue; }
+    const t = y5tex(`props/${o.n}.png`); if (t) put(t, o.x, o.by);
   }
-  sc.addChild(links);
-  // 짓기·옮기기 중: 빈 터(또는 소품 자리) 반짝
-  const marks = new Graphics(); sc.addChild(marks);
-  const drawMarks = (t) => {
-    marks.clear(); if (!placing) return;
-    const a = 0.45 + 0.4 * Math.sin(t * 6);
-    if (!placing.deco) for (const l of YARD.lots) if (open.has(l.id) && !lotUser(S, l.id)) marks.roundRect(l.x - 1, l.y - 1, l.w + 2, l.h + 2, 6).fill({ color: 0x9cc45a, alpha: a * 0.35 }).stroke({ width: 1, color: 0xf4ecd2, alpha: a });
-    if (placing.deco) YARD.decoSpots.forEach(([dx, dy], i) => { if (!spotUser(S, i)) marks.circle(dx + 8, dy + 8, 8).fill({ color: 0x9cc45a, alpha: a * 0.35 }).stroke({ width: 1, color: 0xf4ecd2, alpha: a }); });
-  };
-  // 건물·장식: 뒤(위)에서 앞(아래) 순서
-  const things = [];
-  for (const p of pl) {
-    if (p.deco) { const [dx, dy] = YARD.decoSpots[p.spot]; things.push({ p, y: dy + 16, x: dx + 8 }); }
-    else { const l = lotOf(p.lot); things.push({ p, y: l.y + l.h, x: l.x + l.w / 2, l }); }
-  }
-  for (const l of YARD.lots) if (!lotUser(S, l.id)) things.push({ site: true, l, y: l.y + l.h });   // §3-3 빈 터 = 공사 예정지 (잠긴 터는 잡초 터)
-  things.sort((a, b) => a.y - b.y);
-  const glows = new Container(), animated = [], smoke = [];
-  const glow = (x, y, r, color, a) => { const g = new Sprite(glowTex()); g.anchor.set(0.5); g.width = g.height = r * 2; g.position.set(x, y); g.tint = color; g.alpha = a; g.blendMode = 'add'; glows.addChild(g); };
-  for (const th of things) {
-    if (th.site) {                                               // 공사터 a/b · 잠긴 터 — (lot.x-4, lot.y-20), 짓는 순간 사라짐
-      const l = th.l, n = open.has(l.id) ? (l.id % 2 ? 'lot_site_b' : 'lot_site_a') : (l.id % 2 ? 'lot_site_locked_b' : 'lot_site_locked');
-      const sp = new Sprite(tex(n)); sp.position.set(l.x + YARD.site.dx, l.y + YARD.site.dy); sp.tint = shade; sc.addChild(sp);
+  const open = new Set(openLots(S).map((l) => l.id));
+  const glows = new Container(), smokes = [];
+  const glow = (x, y, r, color, a) => { const g = new Sprite(glowTex()); g.anchor.set(0.5); g.width = g.height = r * 2; g.position.set(x, y); g.tint = color; g.alpha = a; g.blendMode = 'add'; glows.addChild(g); return g; };
+  const [sax, say] = Y5A.lot_site;
+  const smokeFr = [0, 1, 2, 3, 4, 5].map((i) => y5tex(`bld/smoke_f${i}.png`));
+  for (const l of Y5.lots) {
+    const user = lotUser(S, l.id);
+    if (!user) {                                                 // 빈 터 a(짝수)/b(홀수) · 잠긴 터 — 짓는 순간 사라짐
+      put(y5tex(`bld/${open.has(l.id) ? (l.id % 2 ? 'lot_site_b' : 'lot_site_a') : 'lot_site_locked'}.png`), l.cx - sax, l.by - say + 64).zIndex = l.by - 20;
       continue;
     }
-    const { p } = th, sel = (upCard?.kind === 'bld' || upCard?.kind === 'deco') && upCard.key === p.kind;
-    if (!p.deco) {
-      const l = th.l, cx = Math.round(l.x + l.w / 2);
-      const by = l.y + Math.round(l.h / 2) + 4;                    // 바닥 = 터 가운데 (형철 ③: 64×64 원본 1×, 축소 없음)
-      sc.addChild(new Graphics().ellipse(cx, by - 3, 34, 6).fill({ color: 0x1a1220, alpha: 0.35 }));   // §3-4 그림자 68×12
-      const art = yardArt(p.kind, lvOf(S, p.kind)); art.position.set(cx, by); art.tint = shade; sc.addChild(art);
-      const sg = SIGN_OF[p.kind] && tex(`sign_${SIGN_OF[p.kind]}`);   // §3-5 간판 판자: 건물 그림의 글자 간판을 덮음
-      if (sg) { const s1 = new Sprite(sg); s1.position.set(cx + YARD.signAt.dx, by + YARD.signAt.dy); s1.tint = shade; sc.addChild(s1); }
-      if (art.anim) animated.push(art);
-      if (night || dusk) for (const [fx, fy] of [[0.35, 0.62], [0.65, 0.62]]) glow(l.x + l.w / 2 + (fx - 0.5) * art.width, by - art.height * (1 - fy), 9, 0xffd58a, 0.6);   // 창문 빛
-      if (p.kind === 'smelter') smoke.push([l.x + l.w / 2 + 6, by - art.height + 2]);
-      if (sel) sc.addChild(new Graphics().roundRect(l.x + l.w / 2 - art.width / 2 - 2, by - art.height - 2, art.width + 4, art.height + 4, 4).stroke({ width: 1, color: 0xf5cf6a }));
-    } else {
-      const [dx, dy] = YARD.decoSpots[p.spot];
-      const art = yardArt(p.kind, 0); art.position.set(dx + 8, dy + 16); art.tint = shade; sc.addChild(art);
-      if (art.anim) animated.push(art);
-      if (night && p.kind === 'campfire') glow(dx + 8, dy + 10, 24, 0xffb27a, 0.6);
-      if (sel) sc.addChild(new Graphics().circle(dx + 8, dy + 8, 11).stroke({ width: 1, color: 0xf5cf6a }));
-    }
+    const nm = `${Y5_BLD[user]}_${y5Step(lvOf(S, user))}`, t = y5tex(`bld/${nm}.png`), [ax, ay] = Y5A[nm];
+    const sp = put(t, l.cx - ax, l.by - ay + t.height); sp.zIndex = l.by;
+    if (user === 'smelter') { const [ox, oy] = Y5A[`${nm}_smoke`]; const sm = new Sprite(smokeFr[0]); sm.position.set(sp.x + ox, sp.y + oy); sm.tint = shade; sm.zIndex = l.by + 0.5; world.addChild(sm); smokes.push(sm); }
+    if (night || dusk) for (const fx of [0.3, 0.7]) glow(sp.x + t.width * fx, sp.y + t.height * 0.68, 9, 0xffd58a, 0.6);   // 창문 빛
+    if ((upCard?.kind === 'bld') && upCard.key === user) { const sel = new Graphics().roundRect(sp.x - 2, sp.y - 2, t.width + 4, t.height + 4, 4).stroke({ width: 1, color: 0xf5cf6a }); sel.zIndex = 9999; world.addChild(sel); }
   }
-  if (night || dusk) glow(YARD.campfire[0], YARD.campfire[1] - 6, 26, 0xffb27a, night ? 0.5 : 0.3);
-  const lampGlows = night || dusk ? YARD.lamps.map(([lx, ly], i) => { glow(lx, ly, 10, 0xffd58a, 0.5); const g = glows.children[glows.children.length - 1]; g.seed = i * 1.7; return g; }) : [];
-  // 탭 자리 (그림 위 투명 판)
-  for (const l of YARD.lots) { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(l.x - 8, l.y - 40, l.w + 16, l.h + 42); hit.on('pointertap', () => onLot(l.id)); sc.addChild(hit); }
-  YARD.decoSpots.forEach(([dx, dy], i) => { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(dx - 2, dy - 4, 20, 22); hit.on('pointertap', () => onSpot(i)); sc.addChild(hit); });
-  // 사람·움직임 (PATCH_V10 §3): 광부는 흙길 따라 · 밤엔 둘이 모닥불 곁 · 레일 광차 · 두더지
-  const path = YARD.path, plen = polyLen(path), chars = new Container(); sc.addChild(chars);
+  // 짓기·옮기기 중: 빈 터 반짝
+  const marks = new Graphics(); marks.zIndex = 9998; world.addChild(marks);
+  const drawMarks = (t) => {
+    marks.clear(); if (!placing || placing.deco) return;
+    const a = 0.45 + 0.4 * Math.sin(t * 6);
+    for (const l of Y5.lots) if (open.has(l.id) && !lotUser(S, l.id)) marks.roundRect(l.cx - 84, l.by - 50, 168, 56, 8).fill({ color: 0x9cc45a, alpha: a * 0.35 }).stroke({ width: 1, color: 0xf4ecd2, alpha: a });
+  };
+  // 3) 사람: 광부(브릭·툼바·엘린 + 그룬 할아범)는 V14 그림, 나머지는 옛 그림
   const inRound = ['SURVEY', 'DIG'].includes(state());
-  const whLot = lotOf(S.company.buildings.warehouse?.lot ?? -1), door = YARD.entrance.door;
-  const runA = [door[0] - 6, door[1] + 8], runB = whLot ? [whLot.x + whLot.w / 2, whLot.y + whLot.h / 2 + 10] : [200, 120];
-  const spots = YARD.idleSpots;
-  const walkers = crew.slice(0, 6).map((m, i) => {
-    const sp = new Sprite(animOf(`${m.id}_idle`)[0]); sp.anchor.set(0.5, 1); sp.scale.set(0.5); sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; chars.addChild(sp);
+  const whL = Y5.lots[S.company.buildings.warehouse?.lot ?? -1];
+  const runA = [Y5.entrance[0] - 10, Y5.entrance[1] + 10], runB = whL && lotUser(S, whL.id) === 'warehouse' ? [whL.cx, whL.by + 8] : [Y5.campfire[0], Y5.campfire[1]];
+  const spots = Y5.idleSpots;
+  const people = [...crew.slice(0, 6).map((m) => ({ id: m.id, tint: m.tint })), { id: 'grun' }];
+  const walkers = people.map((m, i) => {
+    const who = Y5_MINER[m.id];
+    const sp = new Sprite(who ? y5Frames(who, 'idle')[3][0] : animOf(`${m.id}_idle`)[0]);
+    if (who) sp.anchor.set(20 / 40, 41 / 48); else { sp.anchor.set(0.5, 1); sp.scale.set(0.5); }
+    sp.tint = (m.tint ?? 0xffffff) === 0xffffff ? shade : m.tint; world.addChild(sp);
     let w = yardWalkers.get(m.id);
-    if (!w || w.round !== inRound) {                                       // 처음 · 라운드 들어가고 나올 때만 자리 다시
-      const home = inRound ? (i % 2 ? runA : runB) : spots[i % spots.length];
-      w = { x: home[0], y: home[1], tx: home[0], ty: home[1], wait: inRound ? i * 1.5 : 5 + Math.random() * 20, spot: i % spots.length, round: inRound, leg: i % 2 };
+    if (!w || w.round !== inRound || !w.v5) {                              // 처음 · 라운드 들어가고 나올 때만 자리 다시
+      const home = inRound && m.id !== 'grun' ? (i % 2 ? runA : runB) : spots[i % spots.length];
+      w = { x: home[0], y: home[1], route: [], wait: inRound ? i * 1.5 : 3 + Math.random() * 15, spot: i % spots.length, round: inRound && m.id !== 'grun', leg: i % 2, dir: 3, v5: true };
       yardWalkers.set(m.id, w);
     }
-    return { sp, id: m.id, w, f: Math.random() * 4 };
+    return { sp, id: m.id, who, w, f: Math.random() * 4 };
   });
   const freeSpot = (me) => { const used = new Set(walkers.filter((o) => o.w !== me).map((o) => o.w.spot)); const c0 = spots.map((_, j) => j).filter((j) => !used.has(j) && j !== me.spot); return c0[Math.floor(Math.random() * c0.length)] ?? me.spot; };
   const stepWalker = (wk, dt) => {
-    const w = wk.w, dx = w.tx - w.x, dy = w.ty - w.y, d = Math.hypot(dx, dy);
-    if (d > 0.5) {                                                       // 걷기
-      const v = Math.min(d, 14 * dt); w.x += (dx / d) * v; w.y += (dy / d) * v;
-      wk.f += dt * 8; const fr = animOf(`${wk.id}_walk`); wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (Math.abs(dx) > 0.3) wk.sp.scale.x = 0.5 * Math.sign(dx);
-    } else {                                                             // 멈춘 행동 (앉기·기대기·물 긷기 = idle 프레임)
-      const fr = animOf(`${wk.id}_idle`); wk.f += dt * 2; wk.sp.texture = fr[Math.floor(wk.f) % fr.length];
+    const w = wk.w, tg = w.route[0];
+    if (tg) {                                                            // 걷기 (길 따라)
+      const dx = tg[0] - w.x, dy = tg[1] - w.y, d = Math.hypot(dx, dy);
+      if (d < 0.6) w.route.shift();
+      else { const v = Math.min(d, 26 * dt); w.x += (dx / d) * v; w.y += (dy / d) * v; w.dir = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 1) : dy < 0 ? 2 : 3; }
+      wk.f += dt * 8;
+      if (wk.who) wk.sp.texture = y5Frames(wk.who, 'walk')[w.dir][Math.floor(wk.f) % 4];
+      else { const fr = animOf(`${wk.id}_walk`); wk.sp.texture = fr[Math.floor(wk.f) % fr.length]; if (w.dir < 2) wk.sp.scale.x = w.dir === 0 ? 0.5 : -0.5; }
+    } else {                                                             // 멈춤 = idle
+      wk.f += dt * 4;
+      if (wk.who) wk.sp.texture = y5Frames(wk.who, 'idle')[w.dir][Math.floor(wk.f) % 4];
+      else { const fr = animOf(`${wk.id}_idle`); wk.sp.texture = fr[Math.floor(wk.f / 2) % fr.length]; }
       if ((w.wait -= dt) <= 0) {
-        if (w.round) { w.leg = 1 - w.leg; const p = w.leg ? runA : runB; w.tx = p[0] + (Math.random() - 0.5) * 8; w.ty = p[1] + (Math.random() - 0.5) * 4; w.wait = 1 + Math.random() * 2; }   // 라운드 중: 입구 ↔ 창고
-        else { w.spot = freeSpot(w); [w.tx, w.ty] = spots[w.spot]; w.wait = 20 + Math.random() * 20; }                          // 20~40초마다 다른 자리
+        let to;
+        if (w.round) { w.leg = 1 - w.leg; const p = w.leg ? runA : runB; to = [p[0] + (Math.random() - 0.5) * 10, p[1] + (Math.random() - 0.5) * 4]; w.wait = 1 + Math.random() * 2; }   // 라운드 중: 입구 ↔ 창고
+        else { w.spot = freeSpot(w); to = spots[w.spot]; w.wait = 20 + Math.random() * 20; }                                                 // 20~40초마다 다른 자리
+        w.route = y5Route([w.x, w.y], to);
       }
     }
-    wk.sp.position.set(Math.round(w.x), Math.round(w.y));
+    wk.sp.position.set(Math.round(w.x), Math.round(w.y)); wk.sp.zIndex = w.y;
   };
-  const mh = pl.find((p) => p.kind === 'moleHouse'), ml = mh ? lotOf(mh.lot) : null;
+  // 두더지 (두더지 집 앞)
+  const mh = S.company.buildings.moleHouse, ml = mh && lotUser(S, mh.lot) === 'moleHouse' ? Y5.lots[mh.lot] : null;
   const moleS = new Sprite(F.mole_sniff[0]); moleS.anchor.set(0.5, 1); moleS.scale.set(0.5); moleS.tint = shade;
-  moleS.position.set(ml ? ml.x + ml.w - 4 : 58, ml ? ml.y + ml.h + 4 : 134); chars.addChild(moleS);
-  const zz = label('z', { small: true, color: COLOR.paper }); zz.scale.set(L.uiS / k); chars.addChild(zz);
-  const cartS = new Sprite(F.cart_roll_empty[0]); cartS.anchor.set(0.5, 1); cartS.scale.set(0.5); cartS.tint = shade; chars.addChild(cartS);
-  const rail = YARD.rails; let cx = rail.x0 + 20, cdir = 1, cwait = 0;
-  const puffs = new Graphics(); sc.addChild(puffs);
-  { const fr = new Sprite(tex('yard_front')); fr.tint = shade; sc.addChild(fr); }   // §3-6 앞 수풀 — 건물·캐릭터 위
+  moleS.position.set(ml ? ml.cx + 60 : Y5.campfire[0] - 30, ml ? ml.by + 10 : Y5.campfire[1] + 14); moleS.zIndex = moleS.y; world.addChild(moleS);
+  // 탭 자리 (그림 위 투명 판)
+  for (const l of Y5.lots) { const hit = new Container(); hit.eventMode = 'static'; hit.cursor = 'pointer'; hit.hitArea = new Rectangle(l.cx - 90, l.by - 140, 180, 150); hit.on('pointertap', () => onLot(l.id)); sc.addChild(hit); }
+  // 4) 밤·해질녘 글로우: 가로등 · 모닥불 · 갱도 입구 (UI 아래, 장면 맨 위)
+  const lampGlows = night || dusk ? Y5.lamps.map(([lx, ly], i) => { const g = glow(lx, ly, 18, 0xffd58a, 0.55); g.seed = i * 1.7; return g; }) : [];
+  if (night || dusk) { glow(Y5.campfire[0], Y5.campfire[1] - 8, 30, 0xffb27a, 0.6); glow(Y5.entrance[0], Y5.entrance[1] - 14, 24, 0xffb27a, 0.5); }
+  if (!night) glows.alpha = 0.6;
   sc.addChild(glows);
-  if (sc.edge) sc.addChild(sc.edge);
   let tt = 0;
   ui.coTick = (dt) => {
     tt += dt; drawMarks(tt);
     if (yardPhase() !== phase) { ui.coTick = null; setTimeout(buildUI, 0); return; }      // 낮 → 해질녘 → 밤 바뀌면 장면 다시
-    if (!ripple.destroyed) { ripple.texture = F.yard_ripple[Math.floor(tt * 3) % F.yard_ripple.length]; fireBg.texture = F.yard_fire[Math.floor(tt * 8) % F.yard_fire.length]; }
-    for (const g of lampGlows) { const f = 0.55 * Math.sin(tt * 6.3 + g.seed) + 0.3 * Math.sin(tt * 18.8 + g.seed * 2); g.alpha = 0.45 + 0.12 * f; g.width = g.height = 20 * (1 + 0.06 * f); }
-    for (const wk of walkers) { if (wk.sp.destroyed) return; stepWalker(wk, dt); }
-    chars.children.sort((a, b) => a.y - b.y);
-    if (cwait > 0) cwait -= dt; else { cx += cdir * 18 * dt; if (cx > rail.x1 - 6 || cx < rail.x0 + 6) { cdir = -cdir; cwait = 1.5; } }
-    const cf = F.cart_roll_empty; cartS.texture = cf[Math.floor(tt * 8) % cf.length]; cartS.scale.x = 0.5 * -cdir; cartS.position.set(Math.round(cx), rail.y + 6);
+    if (bg.destroyed) return;
+    bg.texture = ground[Math.floor(tt * 4) % 4];
+    if (fireSp) fireSp.texture = fireFr[Math.floor(tt * 8) % 8];
+    for (const sm of smokes) sm.texture = smokeFr[Math.floor(tt * 6) % 6];
+    for (const g of lampGlows) { const f = 0.55 * Math.sin(tt * 6.3 + g.seed) + 0.3 * Math.sin(tt * 18.8 + g.seed * 2); g.alpha = 0.5 + 0.1 * f; g.width = g.height = 36 * (1 + 0.05 * f); }
+    for (const wk of walkers) stepWalker(wk, dt);
     moleS.texture = F.mole_sniff[Math.floor(tt * 4) % F.mole_sniff.length];
-    zz.position.set(moleS.x + 3, moleS.y - 12 - Math.round((tt * 4) % 6)); zz.alpha = 1 - ((tt * 4) % 6) / 6;
-    for (const sp of animated) if (!sp.destroyed) sp.texture = sp.anim[Math.floor(tt * sp.fps) % sp.anim.length];
-    puffs.clear();
-    for (const [px, py] of smoke) for (let i = 0; i < 3; i++) { const q = (tt * 0.6 + i / 3) % 1; puffs.circle(px + Math.sin(q * 6 + i) * 2, py - q * 14, 1 + q * 2.5).fill({ color: 0xc8c0d0, alpha: 0.5 * (1 - q) }); }
   };
   drawMarks(0);
   return c;
