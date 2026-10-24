@@ -12,9 +12,9 @@ const NAME_A = ['북쪽', '남쪽', '동쪽', '서쪽', '깊은', '바람 부는
 const NAME_B = ['비탈', '골짜기', '능선', '샘터', '바위굴', '언덕', '벼랑', '오솔길', '옛 갱도'];
 
 /** 오늘의 경매 카드 3장 */
-export function makeCards(seed) {
+export function makeCards(seed, allowed = ['S', 'M', 'L']) {
   const r = rng(seed);
-  const sizes = ['S', 'M', 'L'].sort(() => r() - 0.5);
+  const sizes = (allowed.length >= 3 ? allowed.slice(0, 3) : [...allowed, r.pick(allowed)]).sort(() => r() - 0.5);
   return sizes.map((size, k) => {
     const hints = [];
     while (hints.length < B.hintsPerCard) { const h = r.pick(HINTS); if (!hints.includes(h)) hints.push(h); }

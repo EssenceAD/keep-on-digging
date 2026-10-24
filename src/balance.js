@@ -127,4 +127,44 @@ export const B = {
     minAwaySeconds: 60,             // 이보다 짧게 떠났으면 카드 안 띄움 (체크인 minSecondsForSummary)
     marketMaxHours: 24,             // 떠나 있던 동안 시세 빨리감기 상한 (24h = 8,640틱)
   },
+
+  // ---------------------------------------------------------------- 회사 (§2) — 값 배열은 Lv0(안 지음)~Lv5. 비용 = Lv1 비용 × costMul[다음 Lv-1]
+  company: {
+    baseCols: 6, rows: 4,           // 부지 슬롯 6×4, 사무소 Lv마다 +1열 (Lv5 = 10×4)
+    officeCost: [800, 2000, 5000, 12000],   // 사무소 Lv1→2 · 2→3 · 3→4 · 4→5
+    lPlotLv: 2,                     // 사무소 Lv2부터 L 구획이 경매에
+    mineLv: 3,                      // Lv3 폐광 (명세3 §5)
+    costMul: [1, 2.2, 4.5, 9, 18],
+    harmonyRange: 1,                // 어울림: 슬롯 사이 빈칸 1 이하(대각선 포함) — 체크인 harmony.ts gap()
+    buildings: {
+      warehouse: { name: '창고', cost: 150, cap: [60, 120, 200, 320, 400, 500] },
+      cartShed: { name: '광차 차고', cost: 250, carts: [1, 1, 1, 2, 2, 2], load: [8, 10, 12, 14, 15, 16], speed: [2, 2.1, 2.2, 2.3, 2.4, 2.5] },
+      lodge: { name: '광부 숙소', cost: 300, miners: [3, 4, 5, 5, 6, 6], capHours: [4, 4, 4, 6, 6, 8] },
+      smelter: { name: '제련소', cost: 400, sec: [0, 20, 17, 15, 12, 10], slots: [0, 1, 1, 2, 2, 3] },
+      lanternShop: { name: '랜턴 공방', cost: 200, xray: [2, 3, 4, 4, 5, 6], radius: [1, 1, 1, 2, 2, 2] },   // 반경 1 = 3×3 · 2 = 5×5
+      pumpRoom: { name: '펌프실', cost: 200, pump: [30, 20, 10, 0, 0, 0], auto: [0, 0, 0, 0, 1, 1] },
+      turretShop: { name: '포탑 공방', cost: 350, grade: [0, 1, 2, 3, 4, 5] },            // 몬스터 등급 ≤ 포탑이면 자동 처치
+      moleHouse: { name: '두더지 집', cost: 200, survey: [15, 16, 17, 18, 19, 20], depth: [3, 3, 4, 4, 5, 5], size: [0, 0, 0, 0, 1, 1] },
+    },
+    decos: {                        // 한 종류에 하나씩
+      campfire: { name: '모닥불', cost: 120 },
+      flag: { name: '깃발', cost: 100 },
+      well: { name: '우물', cost: 150 },
+      flowers: { name: '꽃밭', cost: 80 },
+      scales: { name: '저울', cost: 200 },
+      railDeco: { name: '레일 장식', cost: 120 },
+    },
+    harmonies: [
+      { id: 'rest', a: 'lodge', b: 'campfire', name: '모닥불 곁 숙소', text: '방치 속도 +10%', fx: { idleMul: 0.10 } },
+      { id: 'banner', a: 'office', b: 'flag', name: '깃발 단 사무소', text: '경매 평가액 −5%', fx: { guildMul: -0.05 } },
+      { id: 'cool', a: 'smelter', b: 'well', name: '우물가 제련소', text: '제련 속도 +15%', fx: { smeltMul: 0.15 } },
+      { id: 'garden', a: 'moleHouse', b: 'flowers', name: '꽃밭 두더지 집', text: '탐사 +5초', fx: { surveyAdd: 5 } },
+      { id: 'fair', a: 'warehouse', b: 'scales', name: '저울 단 창고', text: '판매가 +3%', fx: { sellMul: 0.03 } },
+      { id: 'rails', a: 'cartShed', b: 'railDeco', name: '레일 깔린 차고', text: '광차 속도 +10%', fx: { cartMul: 0.10 } },
+      { id: 'watch', a: 'turretShop', b: 'flag', name: '망루 포탑', text: '포탑 등급 +1', fx: { turretAdd: 1 }, hidden: true, hint: '포탑 공방 곁에 휘날리는 것' },
+      { id: 'night', a: 'lanternShop', b: 'campfire', name: '불씨 랜턴', text: '투시 랜턴 +1/일', fx: { xrayAdd: 1 }, hidden: true, hint: '랜턴 공방 곁에 꺼지지 않는 불' },
+    ],
+    smeltMul: 1.6,                  // 괴 = 광석 가격 × 1.6
+    ingotVolatility: 0.5,           // 괴는 시세 변동 ½ (안전자산)
+  },
 };
