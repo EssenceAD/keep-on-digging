@@ -40,7 +40,7 @@ export function createMarket(saved) {
     const b = B.buyers[buyer];
     return b.like.includes(key) ? 1 + b.bonus : 1 - (m.penalty ?? b.penalty);
   };
-  m.surgeMul = (key, now) => (m.surge && m.surge.key === key && now >= m.surge.start && now < m.surge.end ? B.surgeMul : 1);
+  m.surgeMul = (key, now) => (m.surge && m.surge.key === key && now >= m.surge.start && now < m.surge.end ? (m.surgeX ?? B.surgeMul) : 1);
   m.coefAt = (key, now) => (m.frozen && now < m.frozen.until ? m.frozen.coef[key] : m.coef[key]);   // 시세 고정 중이면 그때 값
   m.price = (key, buyer, now) => Math.max(1, Math.round(B.basePrice[key] * m.coefAt(key, now) * m.surgeMul(key, now) * m.buyerMul(key, buyer)));
   m.freeze = (now, secs) => { m.frozen = { coef: { ...m.coef }, until: now + secs }; };

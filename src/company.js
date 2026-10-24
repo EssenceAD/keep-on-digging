@@ -14,6 +14,9 @@ export function ensureCompany(S) {
   co.coreLv ??= 1; co.buildings ??= {}; co.decos ??= []; co.harmoniesFound ??= [];
   co.buildings.office ??= { x: 0, y: C.rows - 1 };
   ensureUpgrades(S);
+  if (S.talents.v !== 2) {                 // 명세5 §4: 5단 → 8단으로 바뀜 — 찍은 것 돌려주고, 지난 라운드 수만큼 포인트
+    Object.assign(S.talents, { survey: 0, dig: 0, trade: 0, v: 2, earned: S.talents.earned ?? (S.stats?.rounds ?? 0) * B.talents.minPerRound });
+  }
   return co;
 }
 // ---- 장비 (명세5 §3): S.upgrades[k] = Lv. 회사 건물 Lv = 그 장비 Lv − min (Lv0 = 안 지음)
@@ -102,17 +105,20 @@ export function companyFx(S) {
   const t = S.talents ?? {}, TL = B.talents, sv = t.survey ?? 0, dg = t.dig ?? 0, tr = t.trade ?? 0;
   return {
     // 특성 (§3)
-    hints: sv >= 1 ? 3 : B.hintsPerCard, oreColor: sv >= 3, veinRange: sv >= 4, freeHint: sv >= 5,
-    pick: Math.min(3, upV(S, 'pick', 'tier') + (dg >= 1 ? 1 : 0) + (dg >= 4 ? 1 : 0)), pickSpeed: upV(S, 'pick', 'speed'), pickDouble: !!upV(S, 'pick', 'double'),
-    dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 3 ? TL.stunMul : 1, chainVein: dg >= 5,
-    preview: tr >= 1, surgeWarn: tr >= 3 ? TL.surgeWarnLong : B.surgeWarn, penalty: tr >= 4 ? TL.penaltyLow : null, freeze: tr >= 5,
+    // 특성 (명세5 §4: 3×8)
+    hints: sv >= 1 ? 3 : B.hintsPerCard, vibroAdd: sv >= 3 ? 1 : 0, oreColor: sv >= 4, vibroRangeMinus: sv >= 5 ? 1 : 0, clueTruth: sv >= 6 ? TL.clueTruth : B.tools.clue.truth,
+    veinRange: sv >= 7, silhouette: sv >= 8, freeHint: false,
+    pick: upV(S, 'pick', 'tier'), pickSpeed: upV(S, 'pick', 'speed'), pickDouble: !!upV(S, 'pick', 'double'),
+    digMul: dg >= 5 ? TL.digMul[1] : dg >= 1 ? TL.digMul[0] : 1, dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 4 ? TL.stunMul : 1, chainVein: dg >= 7,
+    preview: tr >= 2, surgeWarn: tr >= 3 ? TL.surgeWarnLong : B.surgeWarn, penalty: tr >= 5 ? TL.penaltyLow : null, surgeMul: tr >= 6 ? TL.surgeMul : B.surgeMul,
+    bigVein: tr >= 7 ? TL.bigVein : B.bigVein, freeze: tr >= 8,
     // 장비 (명세5 §3 — upgrades 표 하나)
     whCap: upV(S, 'warehouse', 'cap'),
-    carts: upV(S, 'cart', 'carts'),
-    cartLoad: upV(S, 'cart', 'load'),
+    carts: Math.min(4, upV(S, 'cart', 'carts') + (dg >= 3 ? 1 : 0)),
+    cartLoad: upV(S, 'cart', 'load') + (dg >= 6 ? TL.cartLoadAdd : 0),
     cartSpeed: upV(S, 'cart', 'speed') * (1 + add.cartMul),
-    miners: upV(S, 'lodge', 'miners'),
-    diggers: Math.max(2, Math.ceil(upV(S, 'lodge', 'miners') / 2)),     // 갱도 조: 광부 절반이 캐고 나머지는 운반
+    miners: upV(S, 'lodge', 'miners') + (dg >= 8 ? TL.crewAdd : 0),
+    diggers: Math.max(2, Math.ceil(upV(S, 'lodge', 'miners') / 2)) + (dg >= 8 ? 1 : 0),     // 갱도 조: 광부 절반이 캐고 나머지는 운반
     capHours: upV(S, 'lodge', 'capHours'),
     smeltSec: (upV(S, 'smelter', 'sec') || 20) / (1 + add.smeltMul),
     smeltSlots: upV(S, 'smelter', 'slots'),
@@ -128,7 +134,7 @@ export function companyFx(S) {
     shafts: upLv(S, 'cart') >= 3 ? 3 : 2,                               // 동시 갱도 (광차 Lv3 → 3개)
     idleMul: 1 + add.idleMul,
     guildMul: 1 + add.guildMul,
-    sellMul: 1 + add.sellMul + (tr >= 2 ? TL.sellAdd : 0),
+    sellMul: 1 + add.sellMul + (tr >= 4 ? TL.sellAdd[1] : tr >= 1 ? TL.sellAdd[0] : 0),
     plotSizes: S.company.coreLv >= C.lPlotLv ? ['S', 'M', 'L'] : ['S', 'M'],
   };
 }
@@ -156,6 +162,6 @@ export function effectText(S, k) {
 
 // ---------------------------------------------------------------- 특성 포인트 (§3)
 export const TALENT_TREES = [['survey', '탐사'], ['dig', '채굴'], ['trade', '장사']];
-export const talentPoints = (S) => S.company.coreLv + Math.floor((S.stats.star3 ?? 0) / B.talents.star3PerPoint);
+export const talentPoints = (S) => S.company.coreLv + (S.talents.earned ?? 0);   // 명세5 §4: 라운드 별 수(최소 1) + 사무소 Lv
 export const talentSpent = (S) => (S.talents.survey ?? 0) + (S.talents.dig ?? 0) + (S.talents.trade ?? 0);
 export const talentLeft = (S) => talentPoints(S) - talentSpent(S);
