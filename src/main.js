@@ -18,14 +18,14 @@ import { BOARDS, initAuth, login, logout, me, online, pullSave, pushSave, recove
 import { computeOffline } from './offline.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
 import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
-import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_SHAFT_X, TUT_TEXT } from './onboard.js';
+import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_GOLD_X, TUT_SHAFT_X, TUT_STOP_Y, TUT_TEXT } from './onboard.js';
 import { BUILDINGS, DECOS, at as coAt, canUp, cols as coCols, companyFx, effectText, ensureCompany, harmonies, lvOf, nameOf, placed, TALENT_TREES, talentLeft, talentPoints, talentSpent } from './company.js';
 import { COLS as GW, ORE_TYPES, findVeins, freeCard, generate, makeCards } from './gen.js';
 const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa09a };
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v0.9';
+const VERSION = 'v1.0-1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -353,7 +353,7 @@ function syncWallLamps() {
   }
 }
 function buildWorld() {
-  setTimeout(syncWallLamps, 0);                              // 구획이 바뀌면 벽 랜턴도 다시
+  setTimeout(() => { syncWallLamps(); drawShafts(); }, 0);                              // 구획이 바뀌면 벽 랜턴도 다시
   const rd = S.round;
   const rows = rd ? rd.grid.length : B.plotSizes.S.rows;
   W = {
@@ -575,7 +575,7 @@ function startRound(card, bid) {
     state: 'SURVEY', card, bid, grid, orig: grid.slice(), ladder: blank(), climb: blank(), rail: blank(), water: blank(),
     startedAt: now(), surveyLeft: CF.surveySec, xrayLeft: CF.xrayPerDay,
     stats: { revenue: 0, maxVein: 0, relics: 0, relicGold: 0, events: [], jackpots: 0 },
-    jobs: [], claimed: [], piles: [], gasUntil: 0,
+    jobs: [], claimed: [], piles: [], gasUntil: 0, shafts: [],
   };
   piles = []; seenCells = new Set();
   for (const a of crew) resetCrewMember(a);
@@ -789,26 +789,24 @@ const unionRect = (...rs) => {
 const veinOf = (type) => W?.veins.list.findIndex((v) => v.type === type) ?? -1;
 const veinRect = (id) => { const c = W?.veins.list[id]?.cells; if (!c?.length) return null; const xs = c.map((q) => q[0]), ys = c.map((q) => q[1]); return cellScreen(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs) + 1, Math.max(...ys) - Math.min(...ys) + 1); };
 const left = (type) => (W ? W.g.flat().filter((ch) => ch === type).length : 0);
-const queuedOrDug = (x, y) => isDug(x, y) || S.round.jobs.some((j) => j.x === x && j.y === y);
 const revealCells = (cells) => { for (const [x, y] of cells) { seenCells.add(`${x},${y}`); refreshAround(x, y, 0); } S.round.seen = [...seenCells]; };
 const X = TUT_SHAFT_X;
 // ---- [1] 튜토리얼 12단계: 강조(focus) · 손가락(hand) · 완료(done) · 시작할 때(enter) · 경로 검사(path)
 const TUT_STEPS = [
   { focus: () => actorRect(mole), hand: () => ({ kind: 'point', at: centerOf(actorRect(mole)) }), done: () => S.tutorial.sniffed },
   { focus: () => boundsOf(ui.refs.surveyEnd), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.surveyEnd)) }), done: () => state() === 'DIG' },
-  { focus: () => cellScreen(X, 0, 1, 3), hand: () => ({ kind: 'drag', pts: [cellCenter(X, 0), cellCenter(X, 2)] }),
-    path: (p) => p.length >= 3 && p.every(([x, y]) => x === X && y <= 2), done: () => [0, 1, 2].every((y) => queuedOrDug(X, y)) },
-  { focus: () => actorRect(crew[0]), hand: () => ({ kind: 'point', at: centerOf(actorRect(crew[0])) }), done: () => [0, 1, 2].every((y) => isDug(X, y)) },
-  { enter: () => revealCells(W.veins.list[veinOf('C')].cells), focus: () => cellScreen(0, 2, X + 1, 3), hand: () => ({ kind: 'drag', pts: [cellCenter(X, 2), cellCenter(1, 2)] }),
-    path: (p) => p.every(([x, y]) => y === 2 && x <= X), done: () => S.round.claimed.includes(veinOf('C')) },
+  { shaftX: X, stopY: TUT_STOP_Y, focus: () => cellScreen(X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(X, -0.4) }), done: () => S.round.shafts?.some((q) => q.x === X) },
+  { focus: () => unionRect(actorRect(crew[0]), cellScreen(X, 0, 1, TUT_STOP_Y + 1)), hand: () => ({ kind: 'point', at: centerOf(actorRect(crew[0])) }), done: () => isDug(X, TUT_STOP_Y) },
+  { enter: () => revealCells(W.veins.list[veinOf('C')].cells), focus: () => unionRect(boundsOf(shaftBtns[`${S.round.shafts[0]?.id}:left`]), veinRect(veinOf('C'))), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(shaftBtns[`${S.round.shafts[0]?.id}:left`])) }),
+    done: () => S.round.claimed.includes(veinOf('C')) },
   { enter: () => { S.tutorial.mark = S.counters?.ores ?? 0; }, focus: () => unionRect(veinRect(veinOf('C')), actorRect(cartA)), hand: () => ({ kind: 'point', at: centerOf(actorRect(cartA)) }),
     done: () => left('C') === 0 && (S.counters?.ores ?? 0) - (S.tutorial.mark ?? 0) >= 5 },
   { focus: () => (L.portrait ? boundsOf(ui.sellAnchor) : null), hand: () => (L.portrait ? { kind: 'tap', at: centerOf(boundsOf(ui.sellAnchor)) } : null),
     done: () => !L.portrait || (sheetTab === 'sell' && !S.settings.sheetFolded) },
   { enter: () => { S.tutorial.mark = S.counters?.soldGold ?? 0; }, focus: () => boundsOf(ui.rows.C?.r), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.rows.C?.btn)) }),
     done: () => (S.counters?.soldGold ?? 0) > (S.tutorial.mark ?? 0) },
-  { enter: () => { revealCells([...W.veins.list[veinOf('g')].cells, [7, 5]]); toast(TUT_CARTS, 'momo', 3); }, focus: () => cellScreen(X, 2, 11 - X, 5), hand: () => ({ kind: 'drag', pts: [cellCenter(X, 2), cellCenter(X, 5), cellCenter(7, 5)] }),
-    path: (p) => p.every(([x, y]) => x >= X && y >= 2), done: () => S.round.claimed.includes(veinOf('g')) },
+  { shaftX: TUT_GOLD_X, enter: () => { revealCells(W.veins.list[veinOf('g')].cells); toast(TUT_CARTS, 'momo', 3); }, focus: () => unionRect(cellScreen(TUT_GOLD_X, -1, 1, 2), veinRect(veinOf('g'))), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }),
+    done: () => S.round.claimed.includes(veinOf('g')) },
   { focus: () => (buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)), hand: () => ({ kind: 'tap', at: centerOf(buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.btn)) }),
     done: () => S.tutorial.merchantGold || (S.tutorial.goldSold && !stash.g && left('g') === 0 && !carts.some((c) => c.cargo.g) && !piles.some((p) => p.type === 'g')) },
   { focus: () => boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(confirmRetreat ? ui.refs.retreatYes : ui.refs.retreat)) }), done: () => state() === 'RESULT' },
@@ -825,7 +823,6 @@ function startTutorialRound() {
 }
 function finishTutorial() { Object.assign(S.tutorial, { active: false, done: true, step: 0 }); save(); }
 function tutEnter() { tutT = 0; tutNudged = false; TUT_STEPS[S.tutorial.step]?.enter?.(); save(); buildUI(); }
-function tutPathOk(p) { const st = tutStep(); return !st || !st.path || st.path(p); }
 function tutShake() { tutShakeT = 0.5; toast(TUT_AGAIN, 'momo', 1); sfx('clink', true); }
 /** 튜토리얼 손가락·어둡게 밖에서 세계 입력 막기 */
 function tutBlocks(sx, sy) {
@@ -1035,7 +1032,7 @@ function onboardWatch() {
     S.tutorial.auctionIntro = true; save();
     showDialog({ who: 'halabeoji', lines: AUCTION_INTRO });
   }
-  if (st === 'RESULT' && !S.round?.card?.tutorial && !S.tutorial.tips.company) {
+  if (SHOW_COMPANY && st === 'RESULT' && !S.round?.card?.tutorial && !S.tutorial.tips.company) {
     tip('company'); S.tutorial.guideCompany = true; save();
   }
   // 회사 안내 손가락: [회사] → 창고 [짓기] (금화 모자라면 "다음에")
@@ -1070,7 +1067,8 @@ function bootOnboarding() {
   else if (!T0.done && (!T0.active || !S.round?.card?.tutorial)) startTutorialRound();
   else if (T0.done) firstScreen();
 }
-function firstScreen() { if (!['SURVEY', 'DIG'].includes(state())) openCompany(); }
+const SHOW_COMPANY = false;                                  // 명세5 §12-8: 부지 장면(pxl 조립본) 오기 전까지 회사 화면 숨김
+function firstScreen() { if (SHOW_COMPANY && !['SURVEY', 'DIG'].includes(state())) openCompany(); }
 function replayTutorial() {
   if (['SURVEY', 'DIG'].includes(state())) { toast('라운드를 끝내고 다시 봐요'); return; }
   S.tutorial.introSeen = false;
@@ -1899,7 +1897,7 @@ function makeHud(w, h) {
   if (!wide) { const t2 = label(sub, { small: true, color: COLOR.dim }); t2.position.set(Math.round(t1.width) + 12, 6); if (t2.x + t2.width < w - 38) c.addChild(t2); else t2.destroy(); }
   const cy = wide ? 19 : 18;                                  // 넓은 HUD(PC 왼쪽 패널)도 두 줄: 제목 / 금화·창고·시계
   const cb = button(view === 'company' ? 'paper' : 'stone', 30, 13, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true });
-  cb.position.set(w - 34, 3); ui.refs.company = cb; if (S.tutorial.done) c.addChild(cb); else cb.destroy();   // 튜토리얼 동안 회사 버튼 숨김
+  cb.position.set(w - 34, 3); ui.refs.company = cb; if (S.tutorial.done && SHOW_COMPANY) c.addChild(cb); else cb.destroy();   // 튜토리얼 동안 · 부지 장면 오기 전까지 숨김
   // 금화 · 창고 n/60 · 날짜/시각 (명세2 §10)
   const items = [['coin', kit('coin'), w < 170 ? 40 : 48], ['wh', tex('icon_gold'), (w < 170 ? 46 : 56) + (whCap() >= 100 ? 10 : 0)], ['clock', null, 72]];
   let xa = 7;
@@ -2172,7 +2170,7 @@ function makeResult(x, y, w, h) {
   const tx = label(say, { ...ink, small: true, wrap: w - ps - 24 }); tx.position.set(ps + 14, by + 2); c.addChild(tx);
   const b = button('wood', 80, 20, '다음 경매', nextAuction); ui.refs.next = b;
   b.position.set(w - 88, h - 26); c.addChild(b);
-  if (!rd.card.tutorial) { const co = button('paper', 56, 20, '회사로', openCompany); co.position.set(w - 148, h - 26); c.addChild(co); }
+  if (!rd.card.tutorial && SHOW_COMPANY) { const co = button('paper', 56, 20, '회사로', openCompany); co.position.set(w - 148, h - 26); c.addChild(co); }
   const tot = label(`누적 ${S.stats.rounds + 1}라운드 · 순이익 ${S.stats.profitTotal + st.profit}`, { ...ink, small: true, color: 0x8a7a68 }); tot.position.set(8, h - 40); if (by + Math.max(ps, Math.ceil(tx.height)) + 2 <= h - 40) c.addChild(tot); else tot.destroy();
   return c;
 }
@@ -2703,11 +2701,12 @@ function collapse() {
   const [x0, y0] = runs[Math.floor(Math.random() * runs.length)];
   for (let k = 0; k < len; k++) { W.g[y0][x0 + k] = 'd'; W.rail[y0][x0 + k] = false; W.water[y0][x0 + k] = false; W.climb[y0][x0 + k] = false; }
   for (let k = 0; k < len; k++) refreshAround(x0 + k, y0, 1);
+  redig(Array.from({ length: len }, (_, k) => [x0 + k, y0]));
   drawEdges(); drawSolid(); drawProps(); syncRound();
   fx('fx_collapse', cellX(x0) + (len - 1) * T / 2, GY + y0 * T + 6);
   shake = 0.3; shakeAmp = 2; sfx('collapse');
   logEvent('collapse');
-  toast('갱도 천장이 무너졌어요! 다시 그리면 돼요 (흙 0.6초)', 'halabeoji', 3); tip('collapse');
+  toast('갱도 천장이 무너졌어요! 광부들이 다시 뚫어요', 'halabeoji', 3);
   return true;
 }
 function updateEvents(dt) {
@@ -2743,81 +2742,129 @@ function updateEvents(dt) {
   }
 }
 
-// ---- 갱도 그리기 (손가락 연속 드래그, 상하좌우만)
-const drawing = { on: false, path: [], from: null, g: new Graphics(), label: null };
-markU.addChild(drawing.g);
+// ---- 시추 (명세5 §2): 지상 탭 → 갱도 입구 · 광부가 알아서 아래로 · [◀][▶] 한 칸 꺾기(그다음 다시 아래) · [▼] 아래로
+// 광맥에 닿으면 덩어리 통째로 캐고 그 갱도는 기다림("다음 어디?") · 못 뚫는 칸이면 멈춤 · 붕괴는 광부가 다시 뚫음
 const cellAtWorld = (wx, wy) => [Math.floor((wx - GX) / T), Math.floor((wy - GY) / T)];
 const inGrid = (gx, gy) => !!W && gx >= 0 && gx < GW && gy >= 0 && gy < W.rows;
-const adjDug = (gx, gy) => isDug(gx - 1, gy) || isDug(gx + 1, gy) || isDug(gx, gy - 1) || isDug(gx, gy + 1);
-/** 그리기 시작점: 지상에 닿은 0줄 · 뚫린 칸 · 뚫린 칸과 맞닿은 칸 */
-const validStart = (gx, gy) => inGrid(gx, gy) && (gy === 0 || isDug(gx, gy) || adjDug(gx, gy));
-function drawPush(gx, gy) {
-  const p = drawing.path, last = p[p.length - 1];
-  if (!inGrid(gx, gy)) return;
-  if (last && last[0] === gx && last[1] === gy) return;
-  const prev = p[p.length - 2];
-  if (prev && prev[0] === gx && prev[1] === gy) { p.pop(); return; }   // 되돌아가면 지움
-  if (last && Math.abs(last[0] - gx) + Math.abs(last[1] - gy) > 1) {   // 빨리 그어 건너뛴 칸은 ㄱ자로 채움
-    let [x, y] = last;
-    while (x !== gx) { x += Math.sign(gx - x); drawPush(x, y); }
-    while (y !== gy) { y += Math.sign(gy - y); drawPush(x, y); }
-    return;
-  }
-  if (p.some(([x, y]) => x === gx && y === gy)) return;
-  p.push([gx, gy]);
+const shaftMax = () => (lvOf(S, 'cartShed') >= 3 ? 3 : 2);
+const shaftNext = (s) => (s.dir === 'left' ? [s.hx - 1, s.hy] : s.dir === 'right' ? [s.hx + 1, s.hy] : [s.hx, s.hy + 1]);
+const nearOre = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ORE_KEYS.has(W.g[y + dy]?.[x + dx]));
+const shaftsG = new Graphics(), shaftHeadG = new Graphics();
+markU.addChild(shaftsG, shaftHeadG);
+const shaftUI = new Container(); worldUI.addChild(shaftUI);
+let shaftBtns = {}, shaftHits = [], shaftKey = '';
+function openShaft(gx) {
+  const rd = S.round;
+  if (!rd || rd.state !== 'DIG' || !inGrid(gx, 0)) return false;
+  rd.shafts ??= [];
+  const st = tutStep();
+  if (st && (st.shaftX == null || gx !== st.shaftX)) { tutShake(); return false; }   // 튜토리얼: 안내한 열만
+  if (rd.shafts.some((q) => q.x === gx)) { toast('여긴 이미 입구가 있어요'); return false; }
+  if (rd.shafts.length >= shaftMax()) { toast(`갱도 입구는 ${shaftMax()}개까지예요${shaftMax() < 3 ? ' · 광차 차고 Lv3이면 3개' : ''}`); sfx('pass', true); return false; }
+  rd.shaftN = (rd.shaftN ?? 0) + 1;
+  rd.shafts.push({ id: rd.shaftN, x: gx, hx: gx, hy: -1, dir: 'down', side: 0, blocked: null, stopY: st?.stopY ?? null });
+  sfx('build'); fx('fx_dirt', cellX(gx), GY - 2);
+  drawShafts(); shaftTick(); syncRound();
+  return true;
 }
-function drawPreview() {
-  const g = drawing.g; g.clear();
-  if (touchFlash) {                                          // 손 댄 칸: 여기서 그릴 수 있어요
-    touchFlash.t -= 1 / 60;
-    const a = Math.max(0, touchFlash.t / 0.45);
-    g.rect(GX + touchFlash.gx * T + 0.5, GY + touchFlash.gy * T + 0.5, T - 1, T - 1).stroke({ width: 1, color: 0xfff4b8, alpha: 0.9 * a });
-    if (touchFlash.t <= 0) touchFlash = null;
-  }
-  if (!drawing.on || !drawing.path.length) { if (drawing.label) drawing.label.visible = false; return; }
-  const p = drawing.path;
-  let total = 0, cut = false;
-  const under = new Set(crew.filter((a) => typeof a.node === 'number').map((a) => { const [x, y] = cxy(a.node); return `${x},${y + 1}`; }));
-  const blink = Math.floor(time * 6) % 2 === 0;
-  p.forEach(([gx, gy], i) => {
-    const x = cellX(gx), y = GY + gy * T + 8;
-    const t = W.g[gy][gx];
-    const shown = revealed(gx, gy) ? t : 'd';
-    if (i > 0) { const [px, py] = p[i - 1]; g.moveTo(cellX(px), GY + py * T + 8).lineTo(x, y); }
-    if (t !== '.' && !cut) { if (revealed(gx, gy) && !canDig(t)) cut = true; else total += digSeconds(shown); }
-  });
-  g.stroke({ width: 3, color: 0xe8702e, alpha: 0.55, cap: 'round', join: 'round' });
-  p.forEach(([gx, gy]) => {
-    const x = GX + gx * T, y = GY + gy * T;
-    const warn = under.has(`${gx},${gy}`);
-    if (warn && blink) g.rect(x + 1, y + 1, T - 2, T - 2).stroke({ width: 1, color: 0xff3a3a });
-    else if (!isDug(gx, gy)) g.rect(x + 5, y + 5, 6, 6).fill({ color: 0xf5cf6a, alpha: 0.5 });
-  });
-  if (!drawing.label) { drawing.label = label('', { small: true, color: COLOR.paper }); worldUI.addChild(drawing.label); }
-  const [lx, ly] = p[p.length - 1];
-  const [sx, sy] = toScreen(cellX(lx), GY + ly * T);
-  drawing.label.text = `${total.toFixed(1)}초`; drawing.label.visible = true;
-  drawing.label.scale.set(L.uiS); drawing.label.position.set(Math.round(sx + 8 * L.uiS), Math.round(sy - 14 * L.uiS));
+/** 방향 버튼: ◀▶ = 그쪽으로 한 칸 (누를 때마다 한 칸 더) 뒤 다시 아래 · ▼ = 아래로 */
+function turnShaft(id, d) {
+  const rd = S.round, s = rd?.shafts?.find((q) => q.id === id); if (!s) return;
+  if (d === 'down') { s.dir = 'down'; s.side = 0; }
+  else { if (s.hy < 0) return; s.side = s.dir === d ? s.side + 1 : 1; s.dir = d; }
+  s.blocked = null; s.askT = null;
+  for (const a of crew) if (a.job?.shaft === id && (a.job.x !== shaftNext(s)[0] || a.job.y !== shaftNext(s)[1])) { a.job = null; a.path = []; }
+  rd.jobs = rd.jobs.filter((j) => j.shaft !== id || crew.some((a) => a.job === j));
+  sfx('ui_tap');
+  shaftTick(); syncRound();
 }
-function commitPath() {
-  const p = drawing.path;
-  drawing.on = false; drawPreview();
-  if (!p.length) return;
-  if (!tutPathOk(p)) { drawing.path = []; drawPreview(); tutShake(); return; }   // 튜토리얼: 안내한 곳만
-  const queued = new Set(S.round.jobs.map((j) => `${j.x},${j.y}`));
-  let from = isDug(p[0][0], p[0][1]) ? idx(p[0][0], p[0][1]) : null, added = 0;
-  for (let i = 0; i < p.length; i++) {
-    const [gx, gy] = p[i];
-    if (isDug(gx, gy)) { from = idx(gx, gy); continue; }
-    const t = W.g[gy][gx];
-    if (!canDig(t)) { markX(gx, gy); sfx('clink', true); toast(t === 'a' ? '고대석은 곡괭이 3등급부터예요' : '단단한 바위는 곡괭이 2등급부터예요'); break; }   // 못 뚫는 칸에서 끊고 나머지 취소
-    const prev = i > 0 ? p[i - 1] : (gy === 0 ? 'S' : null);
-    const vertical = prev === 'S' || (prev && prev[0] === gx);
-    if (!queued.has(`${gx},${gy}`)) { S.round.jobs.push({ x: gx, y: gy, from: from ?? (gy === 0 ? 'S' : null), ladder: vertical, prev }); added++; }
-    from = idx(gx, gy);
+function shaftTick() {
+  const rd = S.round; if (!rd?.shafts?.length || rd.state !== 'DIG' || !W) return;
+  let changed = false;
+  for (const s of rd.shafts) {
+    for (let guard = 0; guard < 6 && s.dir !== 'wait'; guard++) {   // 다음 칸이 뚫렸으면 머리를 옮김
+      const [nx, ny] = shaftNext(s);
+      if (!inGrid(nx, ny)) { s.dir = 'wait'; s.side = 0; changed = true; break; }
+      if (!isDug(nx, ny)) break;
+      s.hx = nx; s.hy = ny; changed = true;
+      if (s.dir !== 'down' && --s.side <= 0) { s.side = 0; s.dir = 'down'; }
+      if (nearOre(nx, ny) || (s.stopY != null && ny >= s.stopY)) { s.dir = 'wait'; s.side = 0; s.stopY = null; }
+    }
+    if (s.dir === 'wait' || rd.jobs.some((j) => j.shaft === s.id)) continue;
+    const [nx, ny] = shaftNext(s), t = W.g[ny][nx];
+    if (ORE_KEYS.has(t)) { claimVeinsNear(s.hx, s.hy); s.dir = 'wait'; s.side = 0; changed = true; continue; }
+    if (!canDig(t)) {
+      s.blocked = t; s.dir = 'wait'; s.side = 0; changed = true;
+      sfx('clink', true); toast(t === 'a' ? '고대석이에요. 곡괭이 3등급이 필요해요' : '단단한 바위예요. 곡괭이 2등급이 필요해요 — [◀][▶]로 돌아가도 돼요', 'momo', 3);
+      continue;
+    }
+    rd.jobs.push({ x: nx, y: ny, from: s.hy < 0 ? 'S' : idx(s.hx, s.hy), ladder: s.dir === 'down', prev: s.hy < 0 ? 'S' : [s.hx, s.hy], shaft: s.id });
   }
-  if (added) sfx('stash', true);
-  syncRound();
+  // 기다리는 갱도: 광맥을 다 캤으면 "다음 어디?"
+  if (!rd.jobs.some((j) => j.vein != null)) rd.shafts.forEach((s, i) => {
+    if (s.dir !== 'wait' || s.blocked || (s.askT != null && time - s.askT < 9)) return;
+    s.askT = time; const a = crew[i % B.diggers]; if (a && !tutOn()) emote(a, '다음 어디?', 2.5);
+  });
+  if (changed) { drawShafts(); syncRound(); }
+}
+/** 입구(나무 드릴탑) — 칸이 바뀔 때만 */
+function drawShafts() {
+  const g = shaftsG; g.clear();
+  for (const s of S.round?.shafts ?? []) {
+    const cx = cellX(s.x), y0 = GY;
+    g.moveTo(cx - 7, y0).lineTo(cx - 1, y0 - 15).moveTo(cx + 7, y0).lineTo(cx + 1, y0 - 15).stroke({ width: 1.5, color: 0x6a4428 });
+    g.moveTo(cx - 5, y0 - 5).lineTo(cx + 5, y0 - 5).moveTo(cx - 3, y0 - 10).lineTo(cx + 3, y0 - 10).stroke({ width: 1, color: 0x8a5a34 });
+    g.circle(cx, y0 - 15, 2.5).stroke({ width: 1, color: 0xc8a070 }).circle(cx, y0 - 15, 0.8).fill(0xc8a070);
+    g.moveTo(cx, y0 - 13).lineTo(cx, y0 - 1).stroke({ width: 0.5, color: 0xd8c8a0, alpha: 0.7 });
+  }
+}
+/** 매 프레임: 머리 칸 테두리 · ◀▶▼ 버튼 자리 */
+function drawShaftUI() {
+  const rd = S.round, show = !!rd?.shafts?.length && rd.state === 'DIG' && view === 'mine' && !introView;
+  shaftHeadG.clear(); shaftHits = [];
+  shaftUI.visible = show;
+  const key = show ? `${L.uiS}|${L.portrait}|${rd.shafts.map((s) => `${s.id}${s.dir}${s.hy < 0 ? 0 : 1}${s.blocked ?? ''}`).join(',')}` : '';
+  if (key !== shaftKey) {
+    shaftKey = key; shaftBtns = {};
+    shaftUI.removeChildren().forEach((c) => c.destroy({ children: true }));
+    if (show) for (const s of rd.shafts) {
+      const bs = Math.round((L.portrait ? 56 : 40) / L.uiS);
+      const box = new Container(); box.sid = s.id; shaftUI.addChild(box);
+      for (const d of s.hy < 0 ? [] : ['left', 'right', 'down']) {
+        const on = s.dir === d;
+        const b = button(on ? 'wood' : 'stone', bs, bs, d === 'left' ? '◀' : d === 'right' ? '▶' : '▼', () => turnShaft(s.id, d));
+        b.alpha = on ? 0.5 : 0.85;
+        b.dir = d; box.addChild(b); shaftBtns[`${s.id}:${d}`] = b;
+      }
+      if (s.blocked) { const l = label(s.blocked === 'a' ? '곡괭이 3등급 필요' : '곡괭이 2등급 필요', { small: true, color: 0xffd0a0 }); l.isNote = true; box.addChild(l); }
+    }
+  }
+  if (!show) return;
+  const half = (toScreen(GX + T, GY)[0] - toScreen(GX, GY)[0]) / 2;
+  for (const box of shaftUI.children) {
+    const s = rd.shafts.find((q) => q.id === box.sid); if (!s) continue;
+    box.scale.set(L.uiS);
+    const [cx, cy] = toScreen(cellX(s.hx), GY + s.hy * T + 8);
+    for (const b of box.children) {
+      if (b.isNote) { b.position.set(Math.round((cx - b.width * L.uiS / 2 - box.x) / L.uiS), Math.round((cy + half + 4 - box.y) / L.uiS)); continue; }
+      const bs = b.width * L.uiS;
+      let [x, y] = b.dir === 'left' ? [cx - half - bs - 2, cy - bs / 2] : b.dir === 'right' ? [cx + half + 2, cy - bs / 2] : [cx - bs / 2, cy + half + 2];
+      x = Math.max(2, Math.min(L.W - bs - 2, x));                // 가장자리 열이면 화면 안쪽으로
+      b.position.set(Math.round(x / L.uiS), Math.round(y / L.uiS));
+      shaftHits.push({ x, y, w: bs, h: bs });
+    }
+    // 다음에 팔 칸: 반짝 테두리 (막혔으면 빨강)
+    const [nx, ny] = s.blocked ? shaftNext({ ...s, dir: 'down' }) : shaftNext(s);
+    if (s.dir !== 'wait' || s.blocked) {
+      const a = 0.45 + 0.35 * Math.sin(time * 6);
+      shaftHeadG.rect(GX + nx * T + 0.5, GY + ny * T + 0.5, T - 1, T - 1).stroke({ width: 1, color: s.blocked ? 0xe05050 : 0xfff4b8, alpha: a });
+    }
+  }
+}
+/** 붕괴로 메워진 칸 → 광부가 다시 뚫음 */
+function redig(cells) {
+  const rd = S.round;
+  for (const [x, y] of cells) if (!rd.jobs.some((j) => j.x === x && j.y === y)) rd.jobs.unshift({ x, y, from: null, ladder: false, prev: null, redig: true });
 }
 
 // ---- 광부 행동: 붉은 수염 = 선두 채굴 / 뚱보·금발 = 운반
@@ -2893,6 +2940,11 @@ function updateDigger(a, dt) {
     if (path) { a.job = j; a.path = path; a.digT = 0; a.state = 'walk'; return; }
   }
   rd.jobs = rd.jobs.filter((j) => W.g[j.y][j.x] !== '.');
+  const sh = rd.shafts?.length ? rd.shafts[crew.indexOf(a) % rd.shafts.length] : null;
+  if (sh && sh.hy >= 0 && nodeOf(a) !== idx(sh.hx, sh.hy)) {
+    if (!a.homePath?.length && time - (a.homeT ?? -9) > 1) { a.homeT = time; a.homePath = findPath(nodeOf(a), (n) => n === idx(sh.hx, sh.hy)) ?? []; }
+    if (a.homePath?.length) { const keep = a.path; a.path = a.homePath; moveAlong(a, dt); a.homePath = a.path; a.path = keep; a.state = 'walk'; return; }
+  } else a.homePath = null;
   a.state = 'idle'; setAnim(a, `${a.id}_idle`);
 }
 /** 운반 광부: 광석 더미 → 광차 (광차가 서 있고 자리가 있을 때) */
@@ -3254,24 +3306,20 @@ const pileSprites = [], slimes = [];
 
 // ================================================================ 입력
 // 경매·결과 카드와 패널은 UI가 받는다. 탐사 중 투시 랜턴 → 톡한 곳 3×3. 랜턴 끌기.
-// 시추 중: 0줄·뚫린 칸·뚫린 칸 옆에서 시작한 드래그 = 갱도 그리기, 그 밖 드래그 = 둘러보기
+// 시추 중: 지상(맨 윗줄 위) 톡 = 갱도 입구 · 드래그는 늘 화면 끌기 (명세5 §2·§11)
 let drag = null;
 const touches = new Map();                                  // 두 손가락이면 늘 화면 끌기
-let touchFlash = null;                                      // 그리기 시작 칸 테두리 반짝 (v0.8 §1)
 app.canvas.addEventListener('pointerdown', (e) => {
   unlockAudio();
   touches.set(e.pointerId, [e.clientX, e.clientY]);
   if (touches.size >= 2 && drag) {                          // 둘째 손가락: 그리던 것 취소 → 끌기
-    if (drag.mode === 'draw') { drawing.on = false; drawing.path = []; drawPreview(); }
     drag.mode = 'pan2'; drag.id = e.pointerId; drag.lx = e.clientX; drag.ly = e.clientY;
     return;
   }
-  if (inPanels(e.clientX, e.clientY)) return;
+  if (inPanels(e.clientX, e.clientY) || shaftHits.some((r) => inRect(r, e.clientX, e.clientY))) return;
   const [wx, wy] = toWorld(e.clientX, e.clientY);
   if (state() === 'SURVEY' && xrayArmed) { xrayAt(wx, wy); return; }
-  let mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
-  const [gx, gy] = cellAtWorld(wx, wy);
-  if (mode === 'maybe' && state() === 'DIG' && validStart(gx, gy)) { mode = 'draw'; drawing.on = true; drawing.path = []; drawPush(gx, gy); touchFlash = { gx, gy, t: 0.45 }; }
+  const mode = Math.hypot(wx - lantern.x, wy - (lantern.y + 4)) < 12 ? 'lantern' : 'maybe';
   drag = { id: e.pointerId, mode, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY };
 });
 app.canvas.addEventListener('pointermove', (e) => {
@@ -3280,7 +3328,6 @@ app.canvas.addEventListener('pointermove', (e) => {
   drag.lx = e.clientX; drag.ly = e.clientY;
   if (drag.mode === 'maybe' && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 8) drag.mode = 'pan';
   if (drag.mode === 'pan' || drag.mode === 'pan2') { cam.panX -= dx; cam.panY -= dy; clampPan(); }
-  if (drag.mode === 'draw') { const [wx, wy] = toWorld(e.clientX, e.clientY); drawPush(...cellAtWorld(wx, wy)); }
   if (drag.mode === 'lantern') {
     lantern.x = Math.max(GX + 4, Math.min(WW - GX - 4, lantern.x + dx));
     lantern.y = Math.max(SURFACE_Y - 30, Math.min(WH - 16, lantern.y + dy));
@@ -3290,10 +3337,13 @@ app.canvas.addEventListener('pointermove', (e) => {
 window.addEventListener('pointerup', (e) => {
   touches.delete(e.pointerId);
   if (!drag || e.pointerId !== drag.id) return;
-  if (drag.mode === 'draw') commitPath();
+  if (drag.mode === 'maybe' && state() === 'DIG') {                 // 톡: 지상 띠(맨 윗줄 포함) → 그 열에 입구
+    const [wx, wy] = toWorld(e.clientX, e.clientY), [gx] = cellAtWorld(wx, wy);
+    if (wy < GY + T && wy > GY - 48 && gx >= 0 && gx < GW) openShaft(gx);
+  }
   drag = null;
 });
-window.addEventListener('pointercancel', (e) => { touches.delete(e.pointerId); drag = null; drawing.on = false; drawPreview(); });
+window.addEventListener('pointercancel', (e) => { touches.delete(e.pointerId); drag = null; });
 // 마우스 휠: 격자가 넘칠 때만 위아래
 app.canvas.addEventListener('wheel', (e) => { if (!L.overY) return; cam.panY += (e.deltaY / L.sc) * 0.6; clampPan(); e.preventDefault(); }, { passive: false });
 /** 스크롤 막대 화살표: 6줄씩 */
@@ -3343,7 +3393,7 @@ app.ticker.add((tk) => {
   if (st === 'SURVEY') updateSurvey(dt);
   updateMole(dt);
   updateCrew(dt);
-  drawPreview();
+  shaftTick(); drawShaftUI();
   if (market.surge && fpsN % 3 === 0) refreshUI();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
 
@@ -3450,7 +3500,7 @@ buildWorld();
 layout();
 if (!S.round) startAuction();
 else {
-  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= [];
+  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= [];
   (S.round.cartCargos ?? [S.round.cartCargo, S.round.cartCargo2]).forEach((cg, i) => cg && carts[i] && Object.assign(carts[i].cargo, cg));
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }
@@ -3460,8 +3510,8 @@ initAuth().then(() => { if (online()) afterLogin(); });
 if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`, 'momo', 3);
 
 window.__kod = {
-  get S() { return S; }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, drawPush, commitPath, drawing, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  get S() { return S; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true }; buildUI(); }, refreshCompany, coAction, onSlot, openRank, openLoginForm, pushNow, learnTalent, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
