@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2-2';
+const VERSION = 'v1.2-3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -862,7 +862,7 @@ const TUT_STEPS = [                                        // 명세5 §7: 18단
   { focus: () => boundsOf(ui.refs.surveyEnd), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(ui.refs.surveyEnd)) }), done: () => state() === 'DIG' },
   { shaftX: X, stopY: TUT_STOP_Y, focus: () => cellScreen(X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(X, -0.4) }), done: () => S.round.shafts?.some((q) => q.x === X) },
   { focus: () => unionRect(actorRect(crew[0]), cellScreen(X, 0, 1, TUT_STOP_Y + 1)), hand: () => ({ kind: 'point', at: centerOf(actorRect(crew[0])) }), done: () => isDug(X, TUT_STOP_Y) },
-  { enter: () => revealCells(W.veins.list[veinOf('C')].cells), focus: () => unionRect(boundsOf(shaftBtns[`${S.round.shafts[0]?.id}:left`]), veinRect(veinOf('C'))), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(shaftBtns[`${S.round.shafts[0]?.id}:left`])) }),
+  { enter: () => revealCells(W.veins.list[veinOf('C')].cells), focus: () => unionRect(boundsOf(shaftBtns.left), veinRect(veinOf('C'))), hand: () => ({ kind: 'tap', at: centerOf(boundsOf(shaftBtns.left)) }),
     done: () => S.round.claimed.includes(veinOf('C')) },
   { enter: () => { S.tutorial.mark = S.counters?.ores ?? 0; }, focus: () => unionRect(veinRect(veinOf('C')), actorRect(cartA)), hand: () => ({ kind: 'point', at: centerOf(actorRect(cartA)) }),
     done: () => left('C') === 0 && (S.counters?.ores ?? 0) - (S.tutorial.mark ?? 0) >= 5 },
@@ -2115,7 +2115,7 @@ function setSheet(open, tabKey) { if (tabKey) sheetTab = tabKey; if (L.pc) { bui
 const toWorld = (sx, sy) => [((sx - display.x) / display.scale.x + cam.rx) / DENS, ((sy - display.y) / display.scale.y + cam.ry) / DENS];
 const toScreen = (x, y) => [display.x + (x * DENS - cam.rx) * display.scale.x, display.y + (y * DENS - cam.ry) * display.scale.y];
 const inRect = (r, sx, sy) => r && sx >= r.x && sx < r.x + r.w && sy >= r.y && sy < r.y + r.h;
-const inPanels = (sx, sy) => !!introView || tutBlocks(sx, sy) || inRect(ui.overlayRect2, sx, sy) || Object.values(L.panels).some((p) => sx >= p.x && sx < p.x + p.w && sy >= p.y && sy < p.y + p.h)
+const inPanels = (sx, sy) => !!introView || tutBlocks(sx, sy) || inRect(ui.overlayRect2, sx, sy) || inRect(ui.toolRect, sx, sy) || Object.values(L.panels).some((p) => sx >= p.x && sx < p.x + p.w && sy >= p.y && sy < p.y + p.h)
   || (ui.overlayRect && sx >= ui.overlayRect.x && sx < ui.overlayRect.x + ui.overlayRect.w && sy >= ui.overlayRect.y && sy < ui.overlayRect.y + ui.overlayRect.h);
 
 // ================================================================ UI (art/ui/ui.px.js 틀 · 인물은 틀 안에서만)
@@ -2249,6 +2249,7 @@ function makeOverlay() {
   if (st === 'DIG') return makeDigBar(x, y, w);
   return null;
 }
+function setToolRect(x, y, w, h) { ui.toolRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS }; }
 function setOverlayRect(x, y, w, h) { ui.overlayRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS }; }
 
 function makeAuction(x, y, w, h) {
@@ -2470,8 +2471,8 @@ function toolButtons(c, xr, y, onlyVibro = false) {
   const rd = S.round;
   for (const [k, name, n] of [['xray', '투시', rd.xrayLeft], ['vibro', '진동', rd.vibroLeft]]) {
     if (!(n > 0) || (onlyVibro && k !== 'vibro')) continue;
-    const bt = button(toolArmed === k ? 'wood' : 'paper', 40, 16, `${name} ${n}`, () => armTool(k), { small: true });
-    xr -= 42; bt.position.set(xr, y); c.addChild(bt); ui.refs[k] = bt;
+    const bt = button(toolArmed === k ? 'wood' : 'paper', 30, 16, `${k === 'vibro' ? '📡' : '🔦'}${n}`, () => armTool(k), { small: true });
+    xr -= 32; bt.position.set(xr, y); c.addChild(bt); ui.refs[k] = bt;
   }
   return xr;
 }
@@ -2482,7 +2483,7 @@ function makeDigBar(x, y, w) {
   if (W?.water.some((r) => r.some(Boolean)) && !(S.round.pumpLeft > 0)) {
     const pmp = button('paper', 56, 16, CF.pumpCost ? `펌프 ${CF.pumpCost}` : '펌프', pump, { small: true }); pmp.position.set(w - 108, 0); c.addChild(pmp); bw = 108;
   }
-  if (!tutOn() || S.tutorial.step >= 8) bw = w - toolButtons(c, w - bw - 4, 0, tutOn()) + 4;                 // 시추 중에도 남은 도구 (명세5 §1)
+  if (!tutOn() || S.tutorial.step >= 8) { const tc = new Container(); const xl = toolButtons(tc, 0, 0, tutOn()); tc.x = -xl; c.addChild(tc); setToolRect(x, y, -xl, 16); }   // 시추 중에도 남은 도구 — 왼쪽 위 아이콘만 (V12 §3)
   setOverlayRect(x + w - bw, y, bw - 4, 16);
   return c;
 }
@@ -3105,7 +3106,7 @@ function updateEvents(dt) {
 const cellAtWorld = (wx, wy) => [Math.floor((wx - GX) / T), Math.floor((wy - GY) / T)];
 const inGrid = (gx, gy) => !!W && gx >= 0 && gx < GW && gy >= 0 && gy < W.rows;
 const shaftMax = () => CF.shafts;
-const shaftNext = (s) => (s.dir === 'left' ? [s.hx - 1, s.hy] : s.dir === 'right' ? [s.hx + 1, s.hy] : [s.hx, s.hy + 1]);
+const shaftNext = (s) => (s.dir === 'left' ? [s.hx - 1, s.hy] : s.dir === 'right' ? [s.hx + 1, s.hy] : s.dir === 'up' ? [s.hx, s.hy - 1] : [s.hx, s.hy + 1]);
 const nearOre = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ORE_KEYS.has(W.g[y + dy]?.[x + dx]));
 const shaftsG = new Graphics(), shaftHeadG = new Graphics();
 markU.addChild(shaftsG, shaftHeadG);
@@ -3129,7 +3130,7 @@ function openShaft(gx) {
 function turnShaft(id, d) {
   const rd = S.round, s = rd?.shafts?.find((q) => q.id === id); if (!s) return;
   if (d === 'down') { s.dir = 'down'; s.side = 0; }
-  else { if (s.hy < 0) return; s.side = s.dir === d ? s.side + 1 : 1; s.dir = d; }
+  else { if (s.hy < 0 || (d === 'up' && s.hy <= 0)) return; s.side = s.dir === d ? s.side + 1 : 1; s.dir = d; }
   s.blocked = null; s.askT = null;
   for (const a of crew) if (a.job?.shaft === id && (a.job.x !== shaftNext(s)[0] || a.job.y !== shaftNext(s)[1])) { a.job = null; a.path = []; }
   rd.jobs = rd.jobs.filter((j) => j.shaft !== id || crew.some((a) => a.job === j));
@@ -3145,7 +3146,8 @@ function shaftTick() {
       if (!inGrid(nx, ny)) { s.dir = 'wait'; s.side = 0; changed = true; break; }
       if (!isDug(nx, ny)) break;
       s.hx = nx; s.hy = ny; changed = true;
-      if (s.dir !== 'down' && --s.side <= 0) { s.side = 0; s.dir = 'down'; }
+      if (s.dir === 'up') { if (--s.side <= 0) { s.side = 0; s.dir = 'wait'; } }   // ▲: 누른 만큼 위로 뒤 멈춤
+      else if (s.dir !== 'down' && --s.side <= 0) { s.side = 0; s.dir = 'down'; }
       if (nearOre(nx, ny) || (s.stopY != null && ny >= s.stopY)) { s.dir = 'wait'; s.side = 0; s.stopY = null; }
     }
     if (s.dir === 'wait' || rd.jobs.some((j) => j.shaft === s.id)) continue;
@@ -3156,7 +3158,7 @@ function shaftTick() {
       sfx('clink', true); toast(t === 'a' ? '고대석이에요. 곡괭이 3등급이 필요해요' : '단단한 바위예요. 곡괭이 2등급이 필요해요 — [◀][▶]로 돌아가도 돼요', 'momo', 3);
       continue;
     }
-    rd.jobs.push({ x: nx, y: ny, from: s.hy < 0 ? 'S' : idx(s.hx, s.hy), ladder: s.dir === 'down', prev: s.hy < 0 ? 'S' : [s.hx, s.hy], shaft: s.id });
+    rd.jobs.push({ x: nx, y: ny, from: s.hy < 0 ? 'S' : idx(s.hx, s.hy), ladder: s.dir === 'down' || s.dir === 'up', prev: s.hy < 0 ? 'S' : [s.hx, s.hy], shaft: s.id });
   }
   // 기다리는 갱도: 광맥을 다 캤으면 "다음 어디?"
   if (!rd.jobs.some((j) => j.vein != null)) rd.shafts.forEach((s, i) => {
@@ -3176,47 +3178,66 @@ function drawShafts() {
     g.moveTo(cx, y0 - 13).lineTo(cx, y0 - 1).stroke({ width: 0.5, color: 0xd8c8a0, alpha: 0.7 });
   }
 }
-/** 매 프레임: 머리 칸 테두리 · ◀▶▼ 버튼 자리 */
+// ---- 방향키 (PATCH_V12 §3): 게임 오른쪽 아래 한 벌 — ◀ ▲ ▶ / ▼ (각 40px). 고른 갱도(selShaft)에 적용. 멈춰 기다리면 살짝 커지고 노란 테두리, 파는 중엔 60%
+let selShaft = null, pendingEnt = null;
+const curShaft = () => { const sh = S.round?.shafts ?? []; let c = sh.find((q) => q.id === selShaft); if (!c || (c.dir !== 'wait' && sh.some((q) => q.dir === 'wait' && !q.blocked))) c = sh.find((q) => q.dir === 'wait' && !q.blocked) ?? c ?? sh[sh.length - 1]; if (c) selShaft = c.id; return c; };
+function tapEntrance(gx) {
+  const ex = S.round.shafts?.find((q) => q.x === gx);
+  if (ex) { selShaft = ex.id; sfx('ui_tap'); return; }
+  if (pendingEnt) return;
+  const st = tutStep();
+  if (st && (st.shaftX == null || gx !== st.shaftX)) { tutShake(); return; }
+  if ((S.round.shafts?.length ?? 0) >= shaftMax()) { openShaft(gx); return; }        // 안내 토스트
+  pendingEnt = { gx, until: time + 0.3 };                                             // 반투명 입구 0.3초 → 확정
+}
 function drawShaftUI() {
-  const rd = S.round, show = !!rd?.shafts?.length && rd.state === 'DIG' && view === 'mine' && !introView;
+  const rd = S.round, show = rd?.state === 'DIG' && view === 'mine' && !introView;
   shaftHeadG.clear(); shaftHits = [];
-  shaftUI.visible = show;
-  const key = show ? `${L.uiS}|${L.portrait}|${rd.shafts.map((s) => `${s.id}${s.dir}${s.hy < 0 ? 0 : 1}${s.blocked ?? ''}`).join(',')}` : '';
+  if (pendingEnt && show) {
+    const cx = cellX(pendingEnt.gx), y0 = GY, a = 0.35 + 0.3 * Math.sin(time * 20);
+    shaftHeadG.moveTo(cx - 7, y0).lineTo(cx - 1, y0 - 15).moveTo(cx + 7, y0).lineTo(cx + 1, y0 - 15).stroke({ width: 1.5, color: 0xd8c8a0, alpha: a });
+    if (time >= pendingEnt.until) { const gx = pendingEnt.gx; pendingEnt = null; if (openShaft(gx)) selShaft = rd.shafts[rd.shafts.length - 1].id; }
+  } else if (!show) pendingEnt = null;
+  const s = show ? curShaft() : null;
+  shaftUI.visible = !!s;
+  const waiting = !!s && s.dir === 'wait' && !s.blocked, up0 = !!s && s.hy <= 0;
+  const key = s ? `${L.uiS}|${L.mode}|${s.id}|${s.dir}|${s.hy < 0 ? 0 : 1}|${up0}|${s.blocked ?? ''}|${waiting}|${rd.shafts.length}` : '';
   if (key !== shaftKey) {
     shaftKey = key; shaftBtns = {};
     shaftUI.removeChildren().forEach((c) => c.destroy({ children: true }));
-    if (show) for (const s of rd.shafts) {
-      const bs = Math.round((L.portrait ? 56 : 40) / L.uiS);
-      const box = new Container(); box.sid = s.id; shaftUI.addChild(box);
-      for (const d of s.hy < 0 ? [] : ['left', 'right', 'down']) {
-        const on = s.dir === d;
-        const b = button(on ? 'wood' : 'stone', bs, bs, d === 'left' ? '◀' : d === 'right' ? '▶' : '▼', () => turnShaft(s.id, d));
-        b.alpha = on ? 0.5 : 0.85;
-        b.dir = d; box.addChild(b); shaftBtns[`${s.id}:${d}`] = b;
+    if (s) {
+      const bs = Math.round(40 / L.uiS);
+      for (const d of ['left', 'up', 'right', 'down']) {
+        const off = s.hy < 0 || (d === 'up' && up0);
+        const b = button(waiting ? 'wood' : 'stone', bs, bs, d === 'left' ? '◀' : d === 'right' ? '▶' : d === 'up' ? '▲' : '▼', () => turnShaft(s.id, d));
+        if (off) b.setDisabled(true);
+        b.dir = d; shaftUI.addChild(b); shaftBtns[d] = b;
       }
-      if (s.blocked) { const l = button('wood', 96, 16, s.blocked === 'a' ? '곡괭이 Lv3 [장비]' : '곡괭이 Lv2 [장비]', openGear, { small: true }); l.isNote = true; box.addChild(l); }
+      const ring = new Graphics(); ring.isRing = true; shaftUI.addChild(ring);
+      if (s.blocked) { const l = button('wood', bs * 3 + 4, 16, s.blocked === 'a' ? '고대석 — ⛏ Lv3' : '단단한 바위 — ⛏ Lv2', () => openGear('pick'), { small: true }); l.isNote = true; shaftUI.addChild(l); shaftBtns.note = l; }
+      if (rd.shafts.length > 1 || shaftMax() > 1) { const n = label(`입구 ${rd.shafts.length}/${shaftMax()}${rd.shafts.length > 1 ? ` · ${rd.shafts.indexOf(s) + 1}번` : ''}`, { small: true, color: COLOR.paper }); n.isTag = true; shaftUI.addChild(n); }
     }
   }
-  if (!show) return;
-  const half = (toScreen(GX + T, GY)[0] - toScreen(GX, GY)[0]) / 2;
-  for (const box of shaftUI.children) {
-    const s = rd.shafts.find((q) => q.id === box.sid); if (!s) continue;
-    box.scale.set(L.uiS);
-    const [cx, cy] = toScreen(cellX(s.hx), GY + s.hy * T + 8);
-    for (const b of box.children) {
-      if (b.isNote) { const nx = Math.max(2, Math.min(L.W - b.width * L.uiS - 2, cx - b.width * L.uiS / 2)), ny = cy - half - 22 * L.uiS; b.position.set(Math.round(nx / L.uiS), Math.round(ny / L.uiS)); shaftHits.push({ x: nx, y: ny, w: b.width * L.uiS, h: b.height * L.uiS }); continue; }
-      const bs = b.width * L.uiS;
-      let [x, y] = b.dir === 'left' ? [cx - half - bs - 2, cy - bs / 2] : b.dir === 'right' ? [cx + half + 2, cy - bs / 2] : [cx - bs / 2, cy + half + 2];
-      x = Math.max(2, Math.min(L.W - bs - 2, x));                // 가장자리 열이면 화면 안쪽으로
-      b.position.set(Math.round(x / L.uiS), Math.round(y / L.uiS));
-      shaftHits.push({ x, y, w: bs, h: bs });
-    }
-    // 다음에 팔 칸: 반짝 테두리 (막혔으면 빨강)
-    const [nx, ny] = s.blocked ? shaftNext({ ...s, dir: 'down' }) : shaftNext(s);
-    if (s.dir !== 'wait' || s.blocked) {
-      const a = 0.45 + 0.35 * Math.sin(time * 6);
-      shaftHeadG.rect(GX + nx * T + 0.5, GY + ny * T + 0.5, T - 1, T - 1).stroke({ width: 1, color: s.blocked ? 0xe05050 : 0xfff4b8, alpha: a });
-    }
+  if (!s) return;
+  // 자리: 게임 영역 오른쪽 아래 구석
+  const bs = 40, gap = 4, m = 8, grow = waiting ? 1 + 0.06 * (1 + Math.sin(time * 5)) : 1;
+  const x0 = L.vis.x1 - m - 3 * bs - 2 * gap - (L.overY > 0 ? 18 : 0), y0 = L.vis.y1 - m - 2 * bs - gap;
+  const at = { left: [x0, y0], up: [x0 + bs + gap, y0], right: [x0 + 2 * (bs + gap), y0], down: [x0 + bs + gap, y0 + bs + gap] };
+  shaftUI.scale.set(L.uiS); shaftUI.position.set(0, 0);
+  for (const b of shaftUI.children) {
+    if (b.isNote) { b.position.set(Math.round(x0 / L.uiS), Math.round((y0 - 22) / L.uiS)); shaftHits.push({ x: x0, y: y0 - 22, w: b.width * L.uiS, h: b.height * L.uiS }); continue; }
+    if (b.isTag) { b.position.set(Math.round(x0 / L.uiS), Math.round((y0 - (s.blocked ? 40 : 18)) / L.uiS)); continue; }
+    if (b.isRing) { b.clear(); if (waiting) for (const d of ['left', 'up', 'right', 'down']) { const [bx, by] = at[d]; b.rect(bx / L.uiS - 1, by / L.uiS - 1, bs / L.uiS + 2, bs / L.uiS + 2).stroke({ width: 1, color: 0xf5cf6a, alpha: 0.6 + 0.4 * Math.sin(time * 6) }); } continue; }
+    const [bx, by] = at[b.dir];
+    b.scale.set(grow); b.position.set(Math.round((bx - (grow - 1) * bs / 2) / L.uiS), Math.round((by - (grow - 1) * bs / 2) / L.uiS));
+    b.alpha = waiting ? 1 : 0.6;
+    shaftHits.push({ x: bx, y: by, w: bs, h: bs });
+  }
+  // 갱도 머리: 고른 갱도는 노란 테두리, 다음에 팔 칸은 반짝 (막혔으면 빨강)
+  for (const q of rd.shafts) {
+    if (q.hy >= 0) shaftHeadG.rect(GX + q.hx * T + 0.5, GY + q.hy * T + 0.5, T - 1, T - 1).stroke({ width: 1, color: q === s ? 0xf5cf6a : 0xf4ecd2, alpha: q === s ? 0.9 : 0.3 });
+    const [nx, ny] = q.blocked ? shaftNext({ ...q, dir: 'down' }) : shaftNext(q);
+    if (q.dir !== 'wait' || q.blocked) shaftHeadG.rect(GX + nx * T + 0.5, GY + ny * T + 0.5, T - 1, T - 1).stroke({ width: 1, color: q.blocked ? 0xe05050 : 0xfff4b8, alpha: 0.45 + 0.35 * Math.sin(time * 6) });
   }
 }
 /** 붕괴로 메워진 칸 → 광부가 다시 뚫음 */
@@ -3711,7 +3732,8 @@ window.addEventListener('pointerup', (e) => {
   }
   if (drag.mode === 'maybe' && state() === 'DIG') {                 // 톡: 지상 띠(맨 윗줄 포함) → 그 열에 입구
     const [wx, wy] = toWorld(e.clientX, e.clientY), [gx] = cellAtWorld(wx, wy);
-    if (wy < GY + T && wy > GY - 48 && gx >= 0 && gx < GW) openShaft(gx);
+    if (wy < GY + T && wy > GY - 48 && gx >= 0 && gx < GW) tapEntrance(gx);
+    else { const [, gy] = cellAtWorld(wx, wy); const hit = S.round.shafts?.find((q) => Math.abs(q.hx - gx) <= 0 && Math.abs(q.hy - gy) <= 1); if (hit) { selShaft = hit.id; sfx('ui_tap'); } }
   }
   drag = null;
 });
