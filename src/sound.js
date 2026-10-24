@@ -17,7 +17,7 @@ const groups = {};                                         // pick_dirt → [pic
 for (const n of SFX) { const g = n.replace(/_\d+$/, ''); (groups[g] ??= []).push(n); }
 
 let unlocked = false, hidden = false;
-let vol = { bgm: 0.6, sfx: 0.8 };
+let vol = { bgm: 0.35, sfx: 0.8 };
 const howls = {};
 const sfxHowl = (n) => (howls[n] ??= new Howl({ src: src('sfx', `sfx_${n}`), preload: true, onloaderror: () => {} }));
 

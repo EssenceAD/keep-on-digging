@@ -25,7 +25,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.0';
+const VERSION = 'v1.0.1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -487,7 +487,7 @@ function updateParticles(dt) {
 const stash = S.warehouse;
 const market = createMarket(S.prices ?? undefined);
 S.prices = market;
-setVolumes(S.settings.sound === false ? { bgm: 0, sfx: 0 } : { bgm: S.settings.bgmVol ?? 0.6, sfx: S.settings.sfxVol ?? 0.8 });
+setVolumes(S.settings.sound === false ? { bgm: 0, sfx: 0 } : { bgm: S.settings.bgmVol ?? 0.35, sfx: S.settings.sfxVol ?? 0.8 });
 // 시세 시계 (v0.6 패치 ④): 게임 날짜는 접속 중에만 흐르고, 시세는 현실 시간으로 — 떠나 있던 동안도 빨리감기
 S.marketT ??= now();
 const mNow = () => S.marketT;
@@ -1672,7 +1672,11 @@ function guildCap(card, g) {
   return Math.round(v * (g.style === 'random' ? g.capMin + Math.random() * (g.capMax - g.capMin) : g.cap));
 }
 const nextBid = () => (AU.holder == null ? AU.card.price : Math.round(AU.high * (1 + B.auction.raiseStep)));
+/** 경매 건너뛰고 공짜 자투리 구획 (힌트 없음) */
+function goFreePlot() { auctionSettings = false; AU.card = null; startRound(freeCard(newSeed(), CF.freeHint ? 1 : 0), 0); }
+let auctionSettings = false;                                // 경매 고르기 화면에서 [설정]을 눌렀을 때만 아래 시트를 보임
 function pickCard(card) {
+  auctionSettings = false;
   Object.assign(AU, { card, phase: 'bid', high: card.price, holder: null, me: null, endAt: null, react: 0, count: 0, out: [false, false, false], bids: [null, null, null] });
   AU.say = GUILD_LINES.map((l, i) => ({ text: l.enter, line: true, t: time + 0.15 + i * 0.45, intro: true }));   // 등장 한마디 (차례로)
   AU.caps = B.guilds.map((g) => guildCap(card, g));
@@ -2011,7 +2015,7 @@ function buildUI() {
     const hud = L.panels.hud, sheet = L.panels.sheet;
     const hc = makeHud(u(hud.w), u(hud.h)); hc.x = u(hud.x); uiRoot.addChild(hc);
     const s = new Container(); s.y = u(sheet.y); s.x = u(sheet.x);
-    s.visible = !(state() === 'AUCTION' && view !== 'company');      // 명세5 §8: 경매 화면엔 시세·광부 패널 없음
+    s.visible = !(state() === 'AUCTION' && view !== 'company') || (auctionSettings && !AU.card);      // 명세5 §8: 경매 화면엔 시세·광부 패널 없음
     const sw = u(sheet.w), sh = u(L.H) - u(sheet.y);
     s.addChild(frame('stone', sw, sh + 6, 'panel'));
     const tabs = [['sell', '판매'], ['gear', '장비'], ['miner', '광부'], ['day', '과제'], ['set', '설정']];
@@ -2096,7 +2100,7 @@ function makeOverlay() {
   const st = state();
   const u = (v) => Math.round(v / L.uiS);
   const v = L.vis, x = u(v.x0) + 4, y = u(v.y0) + 4, w = u(v.x1 - v.x0) - 8, h = u(v.y1 - v.y0) - 8;
-  if (st === 'AUCTION') return makeAuction(x, y, w, u(L.H) - y - 4);           // 경매: 시트 자리까지 다 씀
+  if (st === 'AUCTION') return makeAuction(x, y, w, auctionSettings && !AU.card ? h : u(L.H) - y - 4);           // 경매: 시트 자리까지 다 씀
   if (st === 'SURVEY') return makeSurveyBar(x, y, w);
   if (st === 'RESULT') return makeResult(x, y, w, h);
   if (st === 'DIG' && confirmRetreat) { const box = new Container(); box.addChild(makeDigBar(x, y, w), makeRetreatSheet(x, y, w, h)); return box; }
@@ -2114,8 +2118,12 @@ function makeAuction(x, y, w, h) {
   if (!AU.card) {                                   // 고르기: 카드 3장만 (이름 · 그림 · 크기 · 힌트 · 시작가)
     const title = label(`${S.day}일차 경매`, ink); title.position.set(8, 6); c.addChild(title);
     const gold = label(`금화 ${S.gold}`, { ...ink, small: true, color: 0x8a5a24 }); gold.position.set(w - 8 - Math.ceil(gold.width), 8); c.addChild(gold);
-    const top0 = 24, gap = 5, n = cards.length;
-    const chh = Math.min(84, Math.floor((h - top0 - 6 - gap * (n - 1)) / n));
+    const top0 = 24, gap = 5, n = cards.length, foot = 26;
+    const chh = Math.min(84, Math.floor((h - top0 - 6 - foot - gap * (n - 1)) / n));
+    const broke = cards.every((cd) => cd.price > S.gold);
+    const fw = Math.floor((w - 20) * 0.62);
+    const fr = button(broke ? 'wood' : 'paper', fw, 20, broke ? '공짜 구획으로 ▶' : '공짜 구획으로', goFreePlot, { small: true }); fr.position.set(8, h - foot); c.addChild(fr); ui.refs.freePlot = fr;
+    const sb = button('stone', w - 20 - fw, 20, '설정', () => { auctionSettings = !auctionSettings; sheetTab = 'set'; S.settings.sheetFolded = false; save(); layout(); }, { small: true }); sb.position.set(12 + fw, h - foot); c.addChild(sb);
     cards.forEach((card, i) => { const k = makePlotCard(card, w - 16, chh); k.position.set(8, top0 + i * (chh + gap)); c.addChild(k); });
     return c;
   }
@@ -2287,6 +2295,7 @@ function makePlotCard(card, w, h) {
   card.hints.forEach((hnt) => { const ic = icon(tex(HINT_ICON[hnt])); ic.position.set(hx, 33); c.addChild(ic); hx += 12; });
   if (!card.hints.length) { const nh = label(card.free ? '힌트 없음' : '힌트 없음', { small: true, color: COLOR.dim }); nh.position.set(tx, 32); c.addChild(nh); }
   const price = label(`시작가 ${card.price}`, { small: true, color: COLOR.gold }); price.position.set(tx, Math.min(46, h - 34)); c.addChild(price);
+  if (h < 64) info.visible = false;                             // 낮은 카드: 크기 줄 대신 시작가
   const b = button('wood', 48, 18, '입찰', () => { unlockAudio(); pickCard(card); }, { small: true });
   b.setDisabled(card.price > S.gold); b.position.set(w - 54, h - 22); c.addChild(b);
   return c;
