@@ -104,7 +104,10 @@ const A = (p) => `${BASE}art/${p}`;
 const BLD_ART = { office: 'office', warehouse: 'warehouse', cartShed: 'cartshed', lodge: 'lodge', smelter: 'smelter', lanternShop: 'lanternshop', pumpRoom: 'pump', turretShop: 'turretshop', moleHouse: 'molehome' };
 const DECO_ART = { campfire: 'deco_fire', flag: 'deco_flag', well: 'deco_well', flowers: 'deco_garden', scales: 'deco_scale', railDeco: 'deco_rail' };
 const DECO_ANIM = new Set(['deco_fire', 'deco_flag']);
-const SPRITES = [...Object.values(BLD_ART).flatMap((b) => [1, 3, 5].map((l) => `${b}_${l}`)), ...Object.values(DECO_ART).filter((d) => !DECO_ANIM.has(d)), 'dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'gem',
+// GPT 건물 시트(art/buildings_gpt.px.js)가 먼저 — 지금은 Lv1 그림뿐이라 모든 Lv에 쓰고 Lv는 눈금으로. Lv3·Lv5 시트가 오면 GPT_STEPS에 더한다
+const GPT_STEPS = [1];
+const GPT_SPRITES = [...Object.values(BLD_ART).flatMap((b) => GPT_STEPS.map((l) => `g_${b}_${l}`)), ...Object.values(DECO_ART).map((d) => `g_${d}`)];
+const SPRITES = [...GPT_SPRITES, ...Object.values(BLD_ART).flatMap((b) => [1, 3, 5].map((l) => `${b}_${l}`)), ...Object.values(DECO_ART).filter((d) => !DECO_ANIM.has(d)), 'dirt_1', 'dirt_2', 'dirt_3', 'rock', 'hard_rock', 'ore_copper', 'ore_gold', 'ore_silver', 'gem',
   'ancient', 'pocket_water', 'pocket_gas', 'relic_chest', 'cave', 'ladder', 'mark_x', 'ore_bits', 'star',
   'tunnel', 'tunnel_beam', 'rail', 'side_far', 'side_mid', 'side_fg',
   'sky_far', 'deep_far', 'deep_mid', 'deep_fg', 'bubble_dig', 'bubble_walk', 'bubble_rest',
@@ -1013,6 +1016,11 @@ function makeSite(sw, sh) {
 function coArt(kind, lv, ss) {
   const deco = DECO_ART[kind];
   let sp;
+  if (deco && tex(`g_${deco}`)) {
+    sp = new Sprite(tex(`g_${deco}`)); sp.anchor.set(0.5, 1);
+    sp.scale.set(Math.min(1.2, (ss - 2) / Math.max(sp.texture.width, sp.texture.height)));
+    return sp;
+  }
   if (deco) {
     if (DECO_ANIM.has(deco)) { sp = new Sprite(F[deco][0]); sp.anim = F[deco]; sp.fps = deco === 'deco_fire' ? 8 : 6; }
     else sp = new Sprite(tex(deco));
@@ -1020,9 +1028,16 @@ function coArt(kind, lv, ss) {
     return sp;
   }
   const step = lv >= 5 ? 5 : lv >= 3 ? 3 : 1;
-  sp = new Sprite(tex(`${BLD_ART[kind]}_${step}`));
+  const gStep = [...GPT_STEPS].reverse().find((l) => l <= step);
+  const gpt = gStep && tex(`g_${BLD_ART[kind]}_${gStep}`);
+  sp = new Sprite(gpt || tex(`${BLD_ART[kind]}_${step}`));
   sp.anchor.set(0.5, 1);
-  sp.scale.set((ss * (1 + step * 0.04)) / 48);                // 칸보다 살짝 크게 (Lv 높을수록 큼)
+  sp.scale.set((ss * (1.08 + step * 0.03)) / (gpt ? 64 : 48));   // 칸보다 살짝 크게 (Lv 높을수록 큼)
+  if (gpt) {                                                    // Lv 눈금 (GPT 그림이 Lv1뿐인 동안)
+    const pips = new Graphics();
+    for (let i = 0; i < lv; i++) pips.rect(-sp.width / 2 / sp.scale.x + 2 + i * 5, -sp.height / sp.scale.y + 1, 4, 4).fill(0xf5cf6a).rect(-sp.width / 2 / sp.scale.x + 2 + i * 5, -sp.height / sp.scale.y + 1, 4, 1).fill(0xfff4b8);
+    sp.addChild(pips);
+  }
   if (lv === 2 || lv === 4) sp.tint = 0xfff0d8;
   return sp;
 }

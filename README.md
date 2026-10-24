@@ -46,7 +46,7 @@
 ## 구조
 - `src/balance.js` 숫자(명세3: `idle` · `company` · `abandoned` · `daybook` · `talents`) · `src/save.js` 로컬 저장(v2 · migrate) · `src/offline.js` 방치 정산 · `src/company.js` 회사·어울림·특성 효과 · `src/daybook.js` 일일 과제 · `src/net.js` 계정·클라우드·랭킹 · `src/text.js` 대사 · `supabase/mine.sql` 테이블 메모 · `src/gen.js` 구획 생성(힌트 → 칸, 층·광맥·동굴·유물·지하수·가스) · `src/market.js` 시세 · `src/rng.js` 시드 난수
 - `src/main.js` 장면·상태 기계·경매·탐사·시추·광차·사건·결과·UI · `src/ui.js` UI 킷 런타임(9-slice) · `src/gl.js` 조명·후처리 · `src/sound.js` 효과음
-- 아트 (`npm run art`): `art/shaft.px.js` 타일·소품(형철 초안 + Code 추가: 고대석·지하수·가스·유물·동굴·사다리·빨간 X·슬라임) · `art/chibi.px.js` 캐릭터(+ 길드 대표 3) · `art/buildings.px.js` 회사 건물·장식(형철) · `art/chars.px.js` 광차(형철, §9) · `art/fx.px.js` 이펙트 10종 · `art/mine.px.js` 지상·겹·아이콘·힌트 아이콘 · `art/ui/ui.px.js` UI 킷 · `art/office/office.px.js` 사무소
+- 아트 (`npm run art`): `art/shaft.px.js` 타일·소품(형철 초안 + Code 추가: 고대석·지하수·가스·유물·동굴·사다리·빨간 X·슬라임) · `art/chibi.px.js` 캐릭터(+ 길드 대표 3) · `art/buildings_gpt.px.js` 회사 건물·장식(GPT 시트 `art/raw/mine_buildings_lv1.png` → `sh scripts/buildings.sh`, 지금 Lv1뿐 — Lv는 금 눈금) · `art/buildings.px.js` 폴백(형철 코드 그림) · `art/chars.px.js` 광차(형철, §9) · `art/fx.px.js` 이펙트 10종 · `art/mine.px.js` 지상·겹·아이콘·힌트 아이콘 · `art/ui/ui.px.js` UI 킷 · `art/office/office.px.js` 사무소
 - 렌더: 알베도 + 노멀 → 조명 셰이더 → 발광·헤일로 → 후처리 → 확대 (화면 1px = 칸/32: 타일 2×2, 캐릭터·이펙트 1:1), 그 위에 UI
 
 ## 명령
