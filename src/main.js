@@ -28,7 +28,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.8';
+const VERSION = 'v1.8.1';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -125,15 +125,27 @@ const urls = [
   ...ANIMS.flatMap((n) => [A(`anims/${n}.png`), A(`anims/${n}.json`)]), A('scenes/surface.png'),
 ];
 // 부지 v5 (PATCH_V14): public/art/yard5 — The Fan-tasy Tileset (Free) 기반
-const [Y5, Y5A] = await Promise.all([fetch(A('yard5/yard_v5.json')).then((r) => r.json()), fetch(A('yard5/bld/anchors.json')).then((r) => r.json())]);
+// PATCH_V14 §7: 지역마다 바닥·소품·json = yard5/region{N}/ (지역 1은 yard5/). 사람·건물·갱도 타일은 yard5/ 공용
+const regionDir = (idx) => (idx ? `yard5/region${idx + 1}/` : 'yard5/');
+let Y5DIR = regionDir(S.region?.idx ?? 0);
+let [Y5, Y5A] = await Promise.all([fetch(A(`${Y5DIR}yard_v5.json`)).then((r) => r.json()), fetch(A('yard5/bld/anchors.json')).then((r) => r.json())]);
+const regionArt = (j) => [...[0, 1, 2, 3].map((i) => `yard_ground_f${i}.png`), ...[...new Set(j.objects.map((o) => o.n))].map((n) => `props/${n}.png`), ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `props/campfire_f${i}.png`)];
 const Y5_PEOPLE = ['brick', 'tumba', 'elin', 'grun', 'dor', 'fin', 'marta', 'ugle'].map((n) => `miner_${n}`).concat(['halabeoji', 'momo', 'brok', 'merchant', 'guild_abyss', 'guild_tower', 'guild_shield'].map((n) => `npc_${n}`));
-const Y5_FILES = [...[0, 1, 2, 3].map((i) => `yard_ground_f${i}.png`), ...[...new Set(Y5.objects.map((o) => o.n))].map((n) => `props/${n}.png`), ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `props/campfire_f${i}.png`),
+const Y5_FILES = [
   ...Object.keys(Y5A).filter((n) => !/smoke|lot_site/.test(n)).map((n) => `bld/${n}.png`), 'bld/lot_site_a.png', 'bld/lot_site_b.png', 'bld/lot_site_locked.png', ...[0, 1, 2, 3, 4, 5].map((i) => `bld/smoke_f${i}.png`),
   ...Y5_PEOPLE.flatMap((w) => [`chars/${w}_walk.png`, `chars/${w}_idle.png`]),
   ...['mole_idle', 'mole_walk', 'cart_empty', 'cart_ore', 'cart_gold', 'cart_glow', 'cart_roll', 'cart_roll_ore', 'cart_roll_gold', 'cart_roll_glow'].map((n) => `critters/${n}.png`)];
-urls.push(...Y5_FILES.map((f) => A(`yard5/${f}`)));
+urls.push(...Y5_FILES.map((f) => A(`yard5/${f}`)), ...regionArt(Y5).map((f) => A(`${Y5DIR}${f}`)));
 const [loaded] = await Promise.all([Assets.load(urls), loadUI(BASE)]);
-const y5tex = (p) => { const t = loaded[A(`yard5/${p}`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
+const isRegionArt = (p) => p.startsWith('yard_ground') || p.startsWith('props/');
+const y5tex = (p) => { const t = loaded[A(`${isRegionArt(p) ? Y5DIR : 'yard5/'}${p}`)] ?? loaded[A(`yard5/${p}`)]; if (t) t.source.scaleMode = 'nearest'; return t; };
+/** 지역 바꿀 때: 그 지역 부지 그림·json 읽고 바꿔 끼움 */
+async function loadRegionArt(idx) {
+  const dir = regionDir(idx), j = await fetch(A(`${dir}yard_v5.json`)).then((r) => r.json());
+  const got = await Assets.load(regionArt(j).map((f) => A(`${dir}${f}`)));
+  Object.assign(loaded, got);
+  Y5 = j; Y5DIR = dir; _y5Graph = null;
+}
 /** 시간대 곱하기 색 (V14 §4): 바닥·소품·건물·사람 모두 같은 값 */
 const Y5_SHADE = { day: 0xffffff, dusk: 0xffc8a0, night: 0x8890c8 };
 /** V14 건물 그림: Lv1~2 → _1, Lv3~4 → _3, Lv5 → _5 */
@@ -1765,8 +1777,7 @@ function y5Route(a, b) {
 /** 부지 장면 (PATCH_V14): yard5 바닥 4프레임 위에 소품·건물(빈 터)·광부를 바닥 y로 정렬. 장식·어울림은 이번엔 숨김 */
 function makeSite(sw, sh) {
   const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', [SW, SH] = Y5.size;
-  const mulT = (a, b) => (((((a >> 16) & 255) * ((b >> 16) & 255)) / 255) << 16) | (((((a >> 8) & 255) * ((b >> 8) & 255)) / 255) << 8) | ((((a & 255) * (b & 255)) / 255) | 0);
-  const k = yardScale(), shade = mulT(Y5_SHADE[phase], B.region[S.region?.idx ?? 0].tint);   // 6-4: 지역 색
+  const k = yardScale(), shade = Y5_SHADE[phase];
   const view = new Container(); c.addChild(view);
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
   const sc = new Container(); view.addChild(sc);
@@ -4462,7 +4473,8 @@ function moveRegion() {
   S.exp = null; ensureExp(); for (const g of S.exp.guilds) g.asset = Math.round(g.asset * loopMul('guildCapMul'));
   yardPan = null; yardPanY = null; yardWalkers.clear();
   refreshCompany(); save(); cloudSoon();
-  moveScene(gain);
+  yardWalkers.clear();
+  loadRegionArt(ni).then(() => moveScene(gain), () => moveScene(gain));   // PATCH_V14 §7: 새 지역 부지
 }
 /** 이사 장면: 짐 실은 광차 행렬이 지나감 → 새 지역 부지 아침 · 대사 2줄 */
 function moveScene(gain) {

@@ -36,6 +36,9 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.8.1 (PATCH_V14 §7)
+- 지역 부지 = yard5/region{N}/ 의 yard_ground_f0~3 · props · yard_v5.json (지역 1은 yard5/). 사람·건물·갱도 타일은 yard5/ 공용. 부팅 때 저장된 지역 것을 읽고, 이사 때 loadRegionArt(새 지역) 뒤 이사 장면. 지역 색 입히기(region.tint·mulT) 삭제.
+
 ## v1.8 (명세6-4 지역 · 조합 지분 · 이사)
 - balance.js region(4: 광종 비율·바닥 색·특이 — 물/바위·가스/기절 배수) · shares · prestige. applyRegion()이 시추 생성 값(oreMix·waterHint·hardShare·gas·stunSeconds)을 지역에 맞게 덮음. 부지는 지역 색을 곱함(새 맵 생성은 팩 원본이 없어 색만 — yard_map.py 다시 돌리면 교체).
 - S.region {idx, loop, shares{me,g[3]}, nextDay, cleared, soldBase} · S.prestige {rep, moves}. 해금 #13(생산 50/초) 뒤 everyDays(1)마다 지분 10% 경매(DOM 창, +10%·3초·길드 한도 = 자산×0.15, 표정). 50% = 조합장(chief), 길드 50% = 점령(occupied, 평판 절반). 길드 자산은 생산×13/초로 자라고 날마다 갱도 +1.

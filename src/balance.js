@@ -228,10 +228,10 @@ export const B = {
   },
   // 숙소 Lv업마다 다리에서 걸어오는 광부 (명세5 §5) — 이름 · 성격 · 그림(뚱보/금발 몸 + 빛깔)
   recruits: [
-    { name: '도르', trait: 'hasty', body: 'brown', tint: 0xc8d4ff },
-    { name: '핀', trait: 'diligent', body: 'blonde', tint: 0xffd0b8 },
-    { name: '마르타', trait: 'careful', body: 'blonde', tint: 0xd8ffc8 },
-    { name: '우글', trait: 'calm', body: 'brown', tint: 0xffe0a0 },
+    { name: '도르', trait: 'hasty', body: 'brown' },
+    { name: '핀', trait: 'diligent', body: 'blonde' },
+    { name: '마르타', trait: 'careful', body: 'blonde' },
+    { name: '우글', trait: 'calm', body: 'brown' },
   ],
 
   talents: {                       // 명세5 §4: 3갈래 × 8단, 위에서부터 1점씩. 포인트 = 라운드 별 수(최소 1) + 사무소 Lv
@@ -329,10 +329,10 @@ export const B = {
 
   // ---------------------------------------------------------------- 지역 · 조합 지분 · 이사 (명세6-4)
   region: [
-    { name: '뒷산', mix: { C: 50, s: 30, g: 15, j: 4, c: 1 }, tint: 0xffffff },
-    { name: '안개 계곡', mix: { C: 30, s: 35, g: 25, j: 7, c: 3 }, tint: 0xc0e4dc, water: 2, line: '물이 많아요. 펌프를 챙겨요' },
-    { name: '붉은 협곡', mix: { C: 20, s: 30, g: 30, j: 12, c: 8 }, tint: 0xf4c4a8, hard: 2, gasMul: 2, line: '단단한 바위와 가스가 두 배예요' },
-    { name: '얼음 동굴', mix: { C: 10, s: 25, g: 35, j: 18, c: 12 }, tint: 0xdce8ff, stunMul: 1.6, line: '떨어지면 오래 기절해요 · 발광석이 많아요' },
+    { name: '뒷산', mix: { C: 50, s: 30, g: 15, j: 4, c: 1 } },
+    { name: '안개 계곡', mix: { C: 30, s: 35, g: 25, j: 7, c: 3 }, water: 2, line: '물이 많아요. 펌프를 챙겨요' },
+    { name: '붉은 협곡', mix: { C: 20, s: 30, g: 30, j: 12, c: 8 }, hard: 2, gasMul: 2, line: '단단한 바위와 가스가 두 배예요' },
+    { name: '얼음 동굴', mix: { C: 10, s: 25, g: 35, j: 18, c: 12 }, stunMul: 1.6, line: '떨어지면 오래 기절해요 · 발광석이 많아요' },
   ],
   shares: {
     everyDays: 1,                    // 지분 경매 간격 (게임일 = 현실 24분). 명세는 7일 — 그러면 50%까지 11시간이라 2~3시간 목표에 맞춰 1일
