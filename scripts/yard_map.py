@@ -213,11 +213,12 @@ json.dump({"size": [W, H], "lots": [{"id": i, "cx": cx, "by": by, "w": LOT_W, "h
            "objects": [{"x": x, "by": by, "w": im.width, "h": im.height} for im, x, by in objs],
            "credit": "The Fan-tasy Tileset (Free) by Ventilatore — non-commercial use"}, open(os.path.join(OUT, "yard_v5.json"), "w"), indent=0)
 if MOCK:
-    B = lambda n: A(f"Buildings/{n}.png")
+    KIT = sys.argv[sys.argv.index("--mock") + 1] if len(sys.argv) > sys.argv.index("--mock") + 1 else None
+    AN = json.load(open(os.path.join(KIT, "anchors.json")))
     img = Image.open(os.path.join(OUT, "yard_ground_f0.png")).convert("RGBA")
     things = list(objs)
-    for (cx, by), n in zip(LOTS, ["House_Hay_1", "House_Hay_3", "House_Hay_2", "House_Hay_4_Purple", "House_Hay_1", "Well_Hay_1", "House_Hay_2", None, "House_Hay_1"]):
-        if n: b = B(n); things.append((b, cx - b.width // 2, by))
+    for (cx, by), n in zip(LOTS, ["lodge_1", "office_5", "smelter_3", "lanternshop_3", "warehouse_1", "pump_1", "cartshed_3", "molehome_1", "turretshop_1"]):
+        b = Image.open(os.path.join(KIT, n + ".png")); ax, ay = AN[n]; things.append((b, cx - ax, by - ay + b.height))
     img = Image.alpha_composite(img, render(W, H, [], things))
     img.save(os.path.join(OUT, "yard_mock.png"))
 print("→", OUT, len(objs), "objects")
