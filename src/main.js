@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.6';
+const VERSION = 'v1.2.7';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -2771,13 +2771,15 @@ const whenText = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d
 /** 💌 제보: 제목 없이 본문만 → 모모가 "전해 드릴게요" */
 function openReport() {
   if (!online()) { openPanel('💌 제보', '<p class="kmuted">제보는 로그인하면 보낼 수 있어요 — 답장도 모모 편지로 받아요.</p><div class="krow"><button class="kgo">로그인</button></div>', (b, close) => { b.querySelector('.kgo').onclick = () => { close(); openLoginForm(); }; }); return; }
-  openPanel('💌 제보', '<textarea maxlength="1000" placeholder="버그 · 건의 · 아무 말이나 (모모가 전해 드려요)"></textarea><p class="kmsg"></p><div class="krow"><button class="kgo">보내기</button></div>', (b, close) => {
+  openPanel('💌 제보', `<textarea maxlength="1000" placeholder="버그 · 건의 · 아무 말이나 (모모가 전해 드려요)"></textarea>${errLog.length ? `<p class="kmuted">최근 오류 ${errLog.length}건이 함께 가요 (고치는 데 써요)</p>` : ''}<p class="kmsg"></p><div class="krow"><button class="kgo">보내기</button></div>`, (b, close) => {
     const ta = b.querySelector('textarea'), msg = b.querySelector('.kmsg'), go = b.querySelector('.kgo');
     setTimeout(() => ta.focus(), 50);
     go.onclick = async () => {
       const body = ta.value.trim(); if (!body) { msg.textContent = '내용을 써 주세요'; return; }
       go.disabled = true; msg.textContent = '…';
-      const r = await sendLetter(body, `mine-${VERSION}`);
+      const errs = errLog.slice(0, 3).map((x) => `[오류 ${x.ver} ${x.st}] ${x.msg} @ ${x.stack}`).join('\n');
+      const r = await sendLetter(errs ? `${body}\n\n${errs}`.slice(0, 1000) : body, `mine-${VERSION}`);
+      if (r.ok && errs) { errLog.length = 0; try { localStorage.removeItem('kod.errors'); } catch {} }
       if (!r.ok) { go.disabled = false; msg.textContent = r.why === 'login' ? '로그인이 풀렸어요' : '보내지 못했어요. 잠시 뒤에 다시 해 주세요'; return; }
       S.letters ??= { sent: [], seen: [] }; if (r.id != null) S.letters.sent.push(r.id); save();
       close(); showDialog({ who: 'momo', lines: ['편지 잘 받았어요. 전해 드릴게요!'] });
@@ -3909,7 +3911,21 @@ function addLight(x, y, z, r, color, power) { if (lights.length < MAX_LIGHTS) li
 const flick = (t, seed) => 0.55 * Math.sin(t * 9 + seed) + 0.3 * Math.sin(t * 23 + seed * 2) + 0.15 * Math.sin(t * 41 + seed * 3);
 
 
-app.ticker.add((tk) => {
+// v1.2.7: 프레임 하나가 오류로 끊겨도 게임은 계속 (PixiJS 는 리스너가 던지면 다음 프레임을 안 잡는다 → 화면이 멈춤). 오류는 남겨서 제보에 자동 첨부
+const errLog = [];
+let errToastAt = -99;
+function onTickError(e, where) {
+  const msg = `${where}: ${e?.message ?? e}`.slice(0, 160), stack = String(e?.stack ?? '').split('\n').slice(1, 4).map((l) => l.trim().replace(/https?:\/\/[^\s)]+\//g, '')).join(' | ');
+  if (!errLog.some((x) => x.msg === msg)) { errLog.unshift({ msg, stack: stack.slice(0, 300), at: Date.now(), ver: VERSION, st: S.round?.state ?? 'AUCTION' }); errLog.length = Math.min(errLog.length, 5); try { localStorage.setItem('kod.errors', JSON.stringify(errLog)); } catch {} console.error('[kod]', where, e); }   // 같은 오류는 한 번만 콘솔에
+  if (time - errToastAt > 30) { errToastAt = time; toast('앗, 문제가 생겼어요 — 게임은 계속돼요. [설정]→[제보]로 알려 주면 고칠게요', 'momo', 4); }
+}
+try { errLog.push(...JSON.parse(localStorage.getItem('kod.errors') || '[]')); } catch {}
+window.addEventListener('error', (e) => onTickError(e.error ?? e.message, 'window'));
+window.addEventListener('unhandledrejection', (e) => onTickError(e.reason, 'promise'));
+app.ticker.add((tk) => { try { tickMain(tk); } catch (e) { onTickError(e, 'tick'); } });
+/** 한 부분이 오류를 내도 나머지(그리기 포함)는 계속 */
+const safe = (where, fn) => { try { fn(); } catch (e) { onTickError(e, where); } };
+function tickMain(tk) {
   const real = Math.min(tk.deltaMS / 1000, 0.05);
   fpsT += real; fpsN++;
   if (fpsT >= 0.5) {
@@ -3929,9 +3945,9 @@ app.ticker.add((tk) => {
     const k = ui.scrollKnob, span = L.overY + 48, frac = Math.max(0, Math.min(1, (cam.panY + 24) / span)), kh = Math.max(12, k.h * 0.3);
     k.g.clear().rect(k.x, k.y0 + frac * (k.h - kh), 4, kh).fill({ color: 0xf5cf6a, alpha: 0.8 });
   }
-  ui.coTick?.(real);
-  introTick?.(real);
-  tutTick(real);
+  safe('coTick', () => ui.coTick?.(real));
+  safe('intro', () => introTick?.(real));
+  safe('tut', () => tutTick(real));
   if (ui.readyBtn && !ui.readyBtn.destroyed) ui.readyBtn.alpha = 0.75 + 0.25 * Math.sin(time * 5);
   if (fpsN % 15 === 0) { updateSmelt(); if (ui.smeltLine && S.smelt.jobs.length) refreshUI(); }
   S.tick += real;
@@ -3943,11 +3959,11 @@ app.ticker.add((tk) => {
   // 상태별
   const st = state();
   if (st === 'AUCTION') { updateAuction(real); if ((AU.say.some((q) => q && time - q.t < 0.6) || (AU.endAt != null && time - AU.endAt < 0.7 && AU.card) || AU.say.some((q) => q && !q.old && time - q.t > 2.2 && time - q.t < 2.3)) && fpsN % 2 === 0) buildUI(); }
-  if (st === 'SURVEY') updateSurvey(dt);
-  updateMole(dt);
-  updateCrew(dt);
-  for (const q of S.round?.stakes ?? []) if (q.text === '…' && q.at > 0 && time > q.at + 1) resolveStake(q);
-  shaftTick(); drawShaftUI(); drawStakeUI(); updatePops(real); if (fpsN % 20 === 0) drawSurvey();
+  if (st === 'SURVEY') safe('survey', () => updateSurvey(dt));
+  safe('mole', () => updateMole(dt));
+  safe('crew', () => updateCrew(dt));
+  safe('stake', () => { for (const q of S.round?.stakes ?? []) if (q.text === '…' && q.at > 0 && time > q.at + 1) resolveStake(q); });
+  safe('shaft', () => shaftTick()); safe('shaftUI', () => drawShaftUI()); safe('stakeUI', () => drawStakeUI()); safe('pops', () => updatePops(real)); if (fpsN % 20 === 0) safe('survey2', () => drawSurvey());
   if (market.surge && fpsN % 3 === 0) refreshUI();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
 
@@ -3961,8 +3977,8 @@ app.ticker.add((tk) => {
   const [lfx, lfy] = lanternFlame();
 
   if (mole.sniffing) mole.p.t += 0; else { mole.p.i = 0; mole.p.t = 0; }
-  for (const a of actors) drawActor(a, dt, lfx, lfy);
-  drawEmotes(real);
+  for (const a of actors) safe('actor', () => drawActor(a, dt, lfx, lfy));
+  safe('emotes', () => drawEmotes(real));
   const red = crew[0], blonde = crew[2];
   const head = [red.x + 3, red.y - 18];
   const blondeLamp = [blonde.x + 6 * blonde.face, blonde.y - 7];
@@ -3979,7 +3995,7 @@ app.ticker.add((tk) => {
     t.extra[0].alpha = t.extra[0].baseAlpha * (0.6 + 0.4 * Math.sin((f / 12) * Math.PI * 2));
     gxs += t.cx * T + 8; gys += t.cy * T + 8;
   }
-  updateEffects(dt);
+  safe('fx', () => updateEffects(dt));
 
   // 빛
   lights.length = 0;
@@ -4046,7 +4062,9 @@ app.ticker.add((tk) => {
   R.render({ container: wU, target: litRT, clear: false });
   R.render({ container: postPass, target: finalRT, clear: true });
   if (shotWaiter) { R.render({ container: app.stage }); shotWaiter(app.canvas.toDataURL('image/png')); shotWaiter = null; }
-});
+}
+
+{ const r0 = app.render.bind(app); app.render = () => { try { r0(); } catch (e) { onTickError(e, 'render'); } }; }
 
 // ================================================================ 시작: 저장된 라운드가 있으면 이어서, 없으면 경매
 const bootIdle = settleOffline(true);
@@ -4065,7 +4083,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });
