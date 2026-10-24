@@ -17,7 +17,7 @@ import { SAVE_VERSION, loadSave, migrate, resetSave, writeSave } from './save.js
 import { BOARDS, adminMineLetters, adminReply, initAuth, isAdmin, listNotices, login, logout, me, markRepliesRead, myMineReplies, online, pullSave, pushSave, recover, sendLetter, submitRank, topRank, weekKey } from './net.js';
 import { PATCH_NOTES } from './patchnotes.js';
 import { computeOffline } from './offline.js';
-import { cartOfS, ENGINE_BLD, ENGINE_UP, addMine, bottleneck, cartOf, digRate, engineCost, engineFastForward, engineStep, engineText, liveMines, mineFromRound, mineSlots, minersTotal, moveMiner, nextMilestone, pileCapOf, pileOf, whCapOf } from './engine.js';
+import { cartOfS, ensureEngine, ENGINE_BLD, ENGINE_UP, addMine, bottleneck, cartOf, digRate, engineCost, engineFastForward, engineStep, engineText, liveMines, mineFromRound, mineSlots, minersTotal, moveMiner, nextMilestone, pileCapOf, pileOf, whCapOf } from './engine.js';
 import { AUCTIONEER, GUILD_LINES, fill, pick } from './text.js';
 import { checkDaybook, dayDef, progress, rollDaybook } from './daybook.js';
 import { TUT_CARTS, AUCTION_INTRO, AUCTION_LINE, DIG_LINE, DIG_LINE_ROUNDS, INTRO, MANUAL, TILE_TIP, TIPS, TUT_AGAIN, TUT_CARD, TUT_NUDGE_SECONDS, TUT_GOLD_X, TUT_IDLE, TUT_SHAFT_X, TUT_STOP_Y, TUT_TEXT } from './onboard.js';
@@ -28,7 +28,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.7';
+const VERSION = 'v1.8';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -564,7 +564,7 @@ function sellIngots(key) {
   refreshUI();
 }
 let sellMode = 'ore';
-const priceOf = (key) => Math.round(market.price(key, buyer(), mNow()) * CF.sellMul);
+const priceOf = (key) => Math.round(market.price(key, buyer(), mNow()) * CF.sellMul * (1 + (S.region?.shares?.me ?? 0) * B.shares.sellPerPct));   // 6-4: 지분 1%마다 +0.5%
 
 // ---------------------------------------------------------------- 주스
 let shake = 0, shakeAmp = 0, hitstop = 0, slowmo = 0, flash = 0, boom = null;
@@ -607,6 +607,7 @@ function newExpDay() {
     const g = B.guilds[c.owner], ore = ['구리', '은', '금'][Math.floor(Math.random() * 3)], n = Math.round(rndIn(XP().newsOre));
     mail(`${g.name}이(가) ${c.name}에서 ${ore} ${n}개를 캤대요!`, '광산 소식');
   }
+  if (e.day >= 0) for (const g of e.guilds) g.mines += B.shares.guildMinePerDay;   // 6-4: 길드도 큼
   e.day = S.day; e.tickets = XP().tickets;
   const pool = (z) => makeCards(newSeed(), [z, z, z], 2, false).sort((p, q) => cardValue(p).mid - cardValue(q).mid);   // 크기마다 3장 → 싼 땅 = 가장 싼 S · 보통 = 가운데 M · 노른자 = 가장 비싼 L
   const P = { S: pool('S')[0], M: pool('M')[1], L: pool('L')[2] }, bySize = (z) => P[z];
@@ -1008,6 +1009,7 @@ function makeCoCard() {
   const mainTxt = deco ? (have ? '놓음' : `놓기 💰${cost}`) : cost == null ? '최대' : `${have ? '올리기' : '짓기'} 💰${cost}`;
   const bw = have && k !== 'office' ? w - 16 - 50 : w - 16;
   const bt = button(chk.ok ? 'wood' : 'stone', bw, 22, mainTxt, () => coAction(k), { small: true }); bt.setDisabled(!chk.ok); bt.position.set(8, h - 30); c.addChild(bt); ui.refs.upCardBtn = bt;
+  if (k === 'office' && S.region?.cleared) { const mvb = button('wood', 70, 22, '🚚 이사 준비', () => { upCard = null; buildUI(); openMove(); }, { small: true }); mvb.position.set(w - 78, h - 30); c.addChild(mvb); }
   if (have && k !== 'office') { const mv = button('paper', 46, 22, '옮기기', () => { placing = { kind: k, move: true, deco }; upCard = null; toast('옮길 자리를 톡!'); buildUI(); }, { small: true }); mv.position.set(w - 54, h - 30); c.addChild(mv); }
   return box;
 }
@@ -1763,7 +1765,8 @@ function y5Route(a, b) {
 /** 부지 장면 (PATCH_V14): yard5 바닥 4프레임 위에 소품·건물(빈 터)·광부를 바닥 y로 정렬. 장식·어울림은 이번엔 숨김 */
 function makeSite(sw, sh) {
   const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', [SW, SH] = Y5.size;
-  const k = yardScale(), shade = Y5_SHADE[phase];
+  const mulT = (a, b) => (((((a >> 16) & 255) * ((b >> 16) & 255)) / 255) << 16) | (((((a >> 8) & 255) * ((b >> 8) & 255)) / 255) << 8) | ((((a & 255) * (b & 255)) / 255) | 0);
+  const k = yardScale(), shade = mulT(Y5_SHADE[phase], B.region[S.region?.idx ?? 0].tint);   // 6-4: 지역 색
   const view = new Container(); c.addChild(view);
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
   const sc = new Container(); view.addChild(sc);
@@ -2559,6 +2562,7 @@ function makeHud(w, h, vertical = false) {
   const c = new Container();
   c.addChild(frame('wood', w, h));
   const btns = [];
+  if (S.prestige?.rep || isOpen(S, 'shares')) btns.push(['union', button(shareOpenToday() || S.region?.cleared ? 'wood' : 'stone', 34, 15, `★${S.prestige?.rep ?? 0}`, openUnion, { small: true })]);   // 6-4: 평판 · 조합
   if (S.unl && Object.keys(S.unl.got).length > (S.unl.seen ?? 0)) btns.push(['unl', button('wood', 20, 15, '!', openUnlocks, { small: true })]);   // 6-3 §4: 새로 열린 것
   if (S.tutorial.done || S.tutorial.deferred) {
     const tl = talentLeft(S);
@@ -4359,6 +4363,128 @@ function openForemen() {
     const r = b.querySelector('input[data-k=pct]'); if (r) r.oninput = () => { S.foremen.marta.pct = +r.value; b.querySelector('.kpv').textContent = `×${(+r.value).toFixed(2)}`; save(); };
   });
 }
+// ================================================================ 지역 · 조합 지분 · 이사 (명세6-4)
+S.region ??= { idx: 0, loop: 1, shares: { me: 0, g: [0, 0, 0] }, nextDay: null, cleared: null, soldBase: S.counters?.soldGold ?? 0 };
+S.prestige ??= { rep: 0, moves: 0 };
+const REG = () => B.region[S.region.idx];
+const BASE_GEN = { oreMix: { ...B.oreMix }, waterHint: [...B.waterHint], waterNoHint: [...B.waterNoHint], hardShare: B.hardShare, gas: [...B.gas], stunSeconds: B.stunSeconds, hurtStunSeconds: B.hurtStunSeconds };
+/** 지역 특성을 시추 생성·낙하에 적용 (balance 값을 지역에 맞게 덮음) */
+function applyRegion() {
+  const r = REG(), x2 = (a, m) => a.map((v) => Math.round(v * m));
+  Object.assign(B, { oreMix: { ...r.mix }, waterHint: x2(BASE_GEN.waterHint, r.water ?? 1), waterNoHint: x2(BASE_GEN.waterNoHint, r.water ?? 1), hardShare: BASE_GEN.hardShare * (r.hard ?? 1), gas: x2(BASE_GEN.gas, r.gasMul ?? 1), stunSeconds: BASE_GEN.stunSeconds * (r.stunMul ?? 1), hurtStunSeconds: BASE_GEN.hurtStunSeconds * (r.stunMul ?? 1) });
+}
+applyRegion();
+const loopMul = (k) => (S.region.loop > 1 ? B.prestige.loop2[k] : 1);
+const regionSold = () => (S.counters?.soldGold ?? 0) - (S.region.soldBase ?? 0);
+const repGain = () => { const c = S.region.cleared; if (!c) return 0; const g = B.prestige.base[c] + Math.floor(Math.sqrt(regionSold() / B.prestige.soldDiv)); return c === 'occupied' ? Math.max(1, Math.round(g / 2)) : g; };
+const sharePct = () => S.region.shares.me;
+/** 지분 경매 열린 날인가 (해금 #13 뒤 · everyDays마다 · 클리어 전) */
+function shareOpenToday() {
+  if (!isOpen(S, 'shares') || S.region.cleared) return false;
+  if (S.region.nextDay == null) { S.region.nextDay = S.day; save(); }
+  return S.day >= S.region.nextDay && (S.region.shares.me + S.region.shares.g.reduce((a, v) => a + v, 0)) < 100;
+}
+// 길드도 큼: 자산 = 생산 × guildIncome /초 · 날마다 갱도 +1
+setInterval(() => { if (!S.exp?.guilds) return; S.exp.guilds.forEach((g, gi) => { g.asset += guildRate(gi) * B.shares.guildIncome; }); }, 1000);
+/** 조합 지분 경매 (DOM 창): 나 + 길드 3팀 · +10% · 3초 · 길드는 자산×0.15 한도, 표정으로 */
+function openShareAuction() {
+  ensureExp(); if (!shareOpenToday()) { toast('오늘은 지분 경매가 없어요'); return; }
+  const sh = B.shares, caps = S.exp.guilds.map((g) => Math.round(g.asset * sh.guildCapMul * loopMul('guildCapMul') * (1 + (Math.random() * 2 - 1) * XP().guildEye)));
+  const A = { price: Math.max(100, r10(Math.min(...caps) * sh.startMul)), holder: null, out: [false, false, false], react: 0, hammer: 0, done: false };
+  const el = openPanel(`🏛 조합 지분 ${sh.chunk}% 경매 — ${REG().name}`, '<div class="kshare"></div>');
+  const box = el.querySelector('.kshare');
+  const render = () => {
+    const mood = (i) => (A.out[i] ? '포기' : A.price >= caps[i] * XP().auction.sweat ? '💦' : A.price >= caps[i] * XP().auction.hesitate ? '음…' : '');
+    const nxt = A.holder == null ? A.price : r10(A.price * 1.1);
+    box.innerHTML = `<p>현재가 <b>💰${A.price.toLocaleString()}</b> · ${A.holder === 'me' ? '<b>내가 최고가</b>' : A.holder != null ? `${B.guilds[A.holder].name} 최고가` : '아직 아무도'}${A.hammer > 0 ? ` · <b>${Math.ceil(A.hammer)}</b>` : ''}</p>`
+      + B.guilds.map((g, i) => `<div class="kitem"><small>${g.name} · 지분 ${S.region.shares.g[i]}% ${mood(i)}${/debug=(auction|region)/.test(location.search) ? ` · 한도 ${caps[i]}` : ''}</small></div>`).join('')
+      + (A.done ? '' : `<div class="krow"><button class="kup" ${A.holder === 'me' || S.gold < nxt ? 'disabled' : ''}>${A.holder == null ? '입찰' : '올리기 +10%'} 💰${nxt.toLocaleString()}</button><button class="kno">포기</button></div>`)
+      + `<p class="kmuted">내 지분 ${S.region.shares.me}% · 50% 먼저면 조합장 · 지분 1%마다 판매가 +0.5%</p>`;
+    const up = box.querySelector('.kup'); if (up) up.onclick = () => { if (A.holder === 'me' || S.gold < nxt) return; A.price = nxt; A.holder = 'me'; A.react = rndIn(XP().auction.react); A.hammer = 0; sfx('bid'); render(); };
+    const no = box.querySelector('.kno'); if (no) no.onclick = () => { const live = [0, 1, 2].filter((q) => !A.out[q]); const w = A.holder !== 'me' && A.holder != null ? A.holder : live.sort((p, q) => caps[q] - caps[p])[0]; finish(w); };
+  };
+  const finish = (w) => {
+    A.done = true; clearInterval(iv);
+    if (w === 'me') { S.gold -= A.price; S.region.shares.me += sh.chunk; sfx('gavel'); toast(`조합 지분 +${sh.chunk}%! 이제 ${S.region.shares.me}%`, 'halabeoji', 3); }
+    else if (w != null) { S.exp.guilds[w].asset -= A.price; S.region.shares.g[w] += sh.chunk; toast(`${B.guilds[w].name}이(가) 지분 ${sh.chunk}%를 가져갔어요`, `guild${w}`, 3); }
+    S.region.nextDay = S.day + sh.everyDays;
+    if (S.region.shares.me >= sh.win) { S.region.cleared = 'chief'; setTimeout(() => toast('조합장이 됐어요! 이 지역 클리어 — 상회에서 [이사 준비]', 'halabeoji', 4), 1200); sfx('jackpot'); }
+    else if (S.region.shares.g.some((v) => v >= sh.win)) { S.region.cleared = 'occupied'; setTimeout(() => toast('길드가 조합을 점령했어요… 이사만 할 수 있어요(평판 절반)', 'halabeoji', 4), 1200); }
+    save(); buildUI(); render();
+  };
+  const iv = setInterval(() => {
+    if (!document.body.contains(el)) { clearInterval(iv); if (!A.done && A.holder === 'me') finish('me'); return; }
+    if (A.holder === 'me' && A.react > 0) { A.react -= 0.1; if (A.react <= 0) {                         // 길드 반응: 한도 안이면 한 곳이 +10%
+      const next = r10(A.price * 1.1); let raised = false;
+      for (const gi of [0, 2, 1]) { if (A.out[gi]) continue; if (next > caps[gi]) { A.out[gi] = true; continue; } if (!raised) { raised = true; A.price = next; A.holder = gi; sfx('bid'); } }
+      if (!raised) A.hammer = XP().auction.hammer; render(); } }
+    else if (A.hammer > 0) { A.hammer -= 0.1; if (A.hammer <= 0) finish('me'); else if (Math.abs(A.hammer - Math.round(A.hammer)) < 0.05) render(); }
+    else if (A.holder != null && A.holder !== 'me' && [0, 1, 2].every((q) => A.out[q] || q === A.holder)) { /* 길드만 남음: 플레이어 차례 */ }
+  }, 100);
+  render();
+}
+/** 조합 창: 지분 원형 그래프 · 다음 경매 · 이사 준비 */
+function openUnion() {
+  const sh = S.region.shares, parts = [['나', sh.me, '#f5cf6a'], ...B.guilds.map((g, i) => [g.name, sh.g[i], '#' + GUILD_COLOR[i].toString(16).padStart(6, '0')])], rest = 100 - parts.reduce((a, p) => a + p[1], 0);
+  let a0 = -Math.PI / 2; const arc = (pct, col) => { if (!pct) return ''; const a1 = a0 + (pct / 100) * Math.PI * 2, x0 = 50 + 40 * Math.cos(a0), y0 = 50 + 40 * Math.sin(a0), x1 = 50 + 40 * Math.cos(a1), y1 = 50 + 40 * Math.sin(a1), big = pct > 50 ? 1 : 0; a0 = a1; return pct >= 100 ? `<circle cx="50" cy="50" r="40" fill="${col}"/>` : `<path d="M50,50 L${x0},${y0} A40,40 0 ${big} 1 ${x1},${y1} Z" fill="${col}"/>`; };
+  const svg = `<svg viewBox="0 0 100 100" width="120" height="120">${parts.map(([, p, c]) => arc(p, c)).join('')}${arc(rest, '#5a4a40')}</svg>`;
+  const today = shareOpenToday();
+  openPanel(`🏛 ${REG().name} 광산 조합${S.region.loop > 1 ? ` (${S.region.loop}회차)` : ''}`, `<div class="krow" style="align-items:center">${svg}<div>${parts.map(([n, p, c]) => `<div><span style="color:${c}">■</span> ${n} ${p}%</div>`).join('')}<div><span style="color:#5a4a40">■</span> 남은 지분 ${rest}%</div></div></div>`
+    + `<p>평판 ★${S.prestige.rep} · 생산 +${Math.round(B.prestige.prodPerRep * S.prestige.rep * 100)}% · 지분 판매가 +${(sh.me * B.shares.sellPerPct * 100).toFixed(1)}%</p>`
+    + (!isOpen(S, 'shares') ? `<p class="kmuted">🔒 ${needText('shares')}이면 지분 경매가 열려요</p>` : S.region.cleared ? `<p><b>${S.region.cleared === 'chief' ? '조합장! 지역 클리어' : '길드 점령'}</b> · 이사하면 평판 +${repGain()}</p><div class="krow"><button class="kmove">🚚 이사 준비</button></div>` : today ? '<div class="krow"><button class="kauc">지분 10% 경매 ▶</button></div>' : `<p class="kmuted">다음 지분 경매: ${S.region.nextDay}일차</p>`), (bx, close) => {
+    const au = bx.querySelector('.kauc'); if (au) au.onclick = () => { close(); openShareAuction(); };
+    const mv = bx.querySelector('.kmove'); if (mv) mv.onclick = () => { close(); openMove(); };
+  });
+}
+/** 이사 준비: 다음 지역 미리보기 · 받을 평판 → [이사하기] */
+function openMove() {
+  if (!S.region.cleared) { toast('조합장이 되거나 길드가 점령하면 이사할 수 있어요'); return; }
+  const ni = (S.region.idx + 1) % B.region.length, nr = B.region[ni], gain = repGain(), rep2 = S.prestige.rep + gain, loop2 = ni === 0;
+  openPanel('🚚 이사 준비', `<p>다음 지역: <b>${nr.name}</b>${loop2 ? ' (2회차: 매장량 ×1.5 · 길드 ×1.3)' : ''}</p><p class="kmuted">${nr.line ?? '익숙한 숲'}</p><p>받을 평판 <b>+${gain}</b> → ★${rep2} · 생산 +${Math.round(rep2 * B.prestige.prodPerRep * 100)}% · 시작 금화 ${B.engine.startGold + rep2 * B.prestige.goldPerRep} · 특성 +${gain}</p><p class="kmuted">리셋: 금화·갱도·엔진 업글·창고·특성 배치·십장 · 남음: 평판·유물·광부 명단·설정·원정 도구 Lv 절반</p><div class="krow"><button class="kgo">이사하기</button></div>`, (bx, close) => { bx.querySelector('.kgo').onclick = () => { close(); moveRegion(); }; });
+}
+function moveRegion() {
+  const gain = repGain(); if (!gain) return;
+  S.prestige.rep += gain; S.prestige.moves++;
+  const R0 = S.region, ni = (R0.idx + 1) % B.region.length;
+  S.region = { idx: ni, loop: R0.loop + (ni === 0 ? 1 : 0), shares: { me: 0, g: [0, 0, 0] }, nextDay: null, cleared: null, soldBase: S.counters?.soldGold ?? 0 };
+  applyRegion();
+  // 리셋
+  S.gold = B.engine.startGold + S.prestige.rep * B.prestige.goldPerRep;
+  for (const k of Object.keys(stash)) stash[k] = 0;
+  for (const k of Object.keys(S.ingots)) S.ingots[k] = 0;
+  S.smelt = { queue: [], jobs: [] };
+  for (const k of ['pick', 'lodge', 'cart', 'warehouse']) S.upgrades[k] = 1; S.upgrades.smelter = 0;
+  for (const k of UP_KEYS) if (!ENGINE_UP[k]) S.upgrades[k] = UP[k].min + Math.floor((S.upgrades[k] - UP[k].min) / 2);   // 원정 도구 Lv 절반
+  S.regionMine = { name: `${REG().name} 1호`, oreMix: Object.fromEntries(Object.entries(REG().mix).map(([k, v]) => [k, v / 100])), reserve: Math.round(B.engine.firstMine.reserve * loopMul('reserveMul')) };
+  S.engine = undefined; ensureEngine(S);
+  S.talents.cells = { survey: [], dig: [], trade: [] };
+  for (const f of Object.values(S.foremen)) f.hired = false;
+  S.exp = null; ensureExp(); for (const g of S.exp.guilds) g.asset = Math.round(g.asset * loopMul('guildCapMul'));
+  yardPan = null; yardPanY = null; yardWalkers.clear();
+  refreshCompany(); save(); cloudSoon();
+  moveScene(gain);
+}
+/** 이사 장면: 짐 실은 광차 행렬이 지나감 → 새 지역 부지 아침 · 대사 2줄 */
+function moveScene(gain) {
+  const ov = new Container(), uW = L.W, uH = L.H; app.stage.addChild(ov);
+  const bg = new Graphics().rect(0, 0, uW, uH).fill(0x0b0910); ov.addChild(bg);
+  const carts = [...Array(5)].map((_, i) => { const c0 = new Sprite(F.cart_roll[0]); c0.anchor.set(0.5, 1); c0.scale.set(3); c0.position.set(-80 - i * 110, uH * 0.6); ov.addChild(c0); return c0; });
+  const t0 = performance.now();
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    carts.forEach((c0, i) => { c0.x = -80 - i * 110 + t * 260; c0.texture = F.cart_roll[Math.floor(t * 10 + i) % F.cart_roll.length]; });
+    if (t > 3.2) bg.alpha = Math.max(0, 1 - (t - 3.2) / 0.8);
+    if (t > 4) { app.ticker.remove(tick); ov.destroy({ children: true }); S.tick = (6.5 / 24) * TICK_PER_DAY; openCompany();
+      showDialog({ who: 'halabeoji', lines: [`여기가 ${REG().name}일세. 평판이 ★${S.prestige.rep}가 됐으니 다들 알아봐 줄 걸세.`] });
+      showDialog({ who: 'momo', lines: [REG().line ? `${REG().line}!` : '새 부지예요! 곡괭이부터 갈아요!'] }); }
+  };
+  app.ticker.add(tick); sfx('cart_roll');
+}
+if (/debug=region/.test(location.search)) {                      // 지역 1 클리어까지 빨리감기 → 이사 확인
+  const bt = document.createElement('button'); bt.textContent = '지역 클리어 빨리감기'; bt.style.cssText = 'position:fixed;left:4px;top:60px;z-index:99;font:12px monospace';
+  bt.onclick = () => { for (const u of B.unlocks) S.unl.got[u.id] ??= S.playSec; S.counters.soldGold = (S.counters.soldGold ?? 0) + 400000; S.region.shares.me = 50; S.region.cleared = 'chief'; save(); buildUI(); openMove(); };
+  document.body.appendChild(bt);
+}
 /** HUD 초당: 창고 가득이면 0, 아니면 캐기·나르기 중 느린 쪽 */
 const engineRate = () => (whTotal() >= whCap() || !S.engine ? 0 : Math.min(digRate(S), cartOfS(S).rate));
 /** 엔진 업글 한 번 (건물 카드·장비 탭) */
@@ -4575,7 +4701,7 @@ if (bootIdle?.midRound) toast(`라운드 이어 하기 — ${S.round.card.name}`
 
 window.__kod = {
   get S() { return S; }, openReport, openNews, openMailbox, openInbox, openSound, checkReplies, get adminOn() { return adminOn; }, set adminOn(v) { adminOn = v; }, app, step(n = 60) { for (let i = 0; i < n; i++) app.ticker.update(app.ticker.lastTime + 1000 / 60); }, get W() { return W; }, get L() { return L; }, get ui() { return ui; }, AU, cam, lantern, actors, crew, fx, bigVein, tilesA, wA, lights,
-  startRound, todayCards, settleOffline, openMines, openMap, buyCheap, playerFold, get AU() { return AU; }, engineBuy, startExpedition, makeMineFromRound, get engRate() { return engineRate(); }, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, set yardHour(h) { S.tick = (h / 24) * TICK_PER_DAY; }, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
+  startRound, todayCards, settleOffline, openMines, openUnion, openMove, moveRegion, openShareAuction, get region() { return S.region; }, openMap, buyCheap, playerFold, get AU() { return AU; }, engineBuy, startExpedition, makeMineFromRound, get engRate() { return engineRate(); }, get welcome() { return welcome; }, introNext, showIntro, get introView() { return introView; }, dialogNext, openManual(key = MANUAL[0].key) { manualView = { key }; buildUI(); }, get tut() { return S.tutorial; }, startTutorialRound, openCompany, closeCompany, closeWelcome, movePlacing(kind) { placing = { kind, move: true, deco: !!B.company.decos[kind] }; buildUI(); }, refreshCompany, coAction, onLot, onSpot, get yardPan() { return yardPan; }, get held() { return held.length; }, notify, openRank, openLoginForm, pushNow, learnTalent, openTalents, get market() { return market; }, smeltOne, get sellMode() { return sellMode; }, set sellMode(v) { sellMode = v; }, get CF() { return CF; }, away(sec) { S.idle.lastSeen = Date.now() - sec * 1000; return settleOffline(); }, startDig, set yardHour(h) { S.tick = (h / 24) * TICK_PER_DAY; }, get errLog() { return errLog; }, openStorage, upgradeEquip, openGear, get upCard() { return upCard; }, set upCard(v) { upCard = v; }, vibroAt, xrayAt, armTool, get toolArmed() { return toolArmed; }, openShaft, turnShaft, collapse, get shafts() { return S.round?.shafts; }, get shaftBtns() { return shaftBtns; }, get piles() { return piles; }, B, refreshAround, get cart() { return cart; }, carts, endRound, askRetreat, nextAuction, pickCard, playerRaise, reset() { saving = false; resetSave(); location.reload(); },
   async shot(name, frames = 240) {
     let t = performance.now();
     const url = await new Promise((r) => { for (let i = 0; i < frames; i++) app.ticker.update((t += 33)); shotWaiter = r; app.ticker.update((t += 33)); });

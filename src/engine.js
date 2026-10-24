@@ -60,7 +60,7 @@ export function ensureEngine(S) {
     const up = S.upgrades ?? {};
     if (!(S.stats?.rounds > 0) && !(S.counters?.soldGold > 0) && !S.tutorial?.done) S.gold = E().startGold;   // 새 게임: 캐서 번 돈으로
     S.engine = {
-      mines: [newMine(1, { ...E().firstMine, opened: S.day ?? 0 })], nextId: 2,
+      mines: [newMine(1, { ...E().firstMine, ...(S.regionMine ?? {}), opened: S.day ?? 0 })], nextId: 2,
       pileT: zero(), carryAcc: zero(), lastTick: Date.now(),
       lv: { pick: Math.max(1, up.pick ?? 1), lodge: Math.max(1, up.lodge ?? 1), cart: Math.max(1, up.cart ?? 1), warehouse: Math.max(1, up.warehouse ?? 1), smelter: up.smelter ?? 0 },
     };
@@ -103,7 +103,8 @@ function mixOf(m) {
   for (const k of ORE_KEYS5) w[k] = t ? w[k] / t : 0;
   return w;
 }
-export const digRateOf = (S, m) => (m.reserve > 0 ? m.miners * pickRate(S.engine.lv.pick) * m.depth : 0);
+export const repMul = (S) => 1 + (B.prestige?.prodPerRep ?? 0) * (S.prestige?.rep ?? 0);   // 명세6-4: 평판 1마다 생산 +25%
+export const digRateOf = (S, m) => (m.reserve > 0 ? m.miners * pickRate(S.engine.lv.pick) * m.depth * repMul(S) : 0);
 export const digRate = (S) => S.engine.mines.reduce((a, m) => a + digRateOf(S, m), 0);
 /** 지금 막힌 곳: 'dig' 캐기가 느림 · 'carry' 입구 더미 가득(광차가 못 따라감) · 'wh' 창고 가득 · 'empty' 캘 갱도 없음 */
 export function bottleneck(S, whTotal, whCap) {

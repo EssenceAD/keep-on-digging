@@ -326,4 +326,26 @@ export const B = {
   },
   // 특성 (명세6-3 §3): 포인트 = 평판 + 원정 ★3 땅마다 1 · 갈래마다 두 칸은 둘 중 하나만 (칸 번호 0부터)
   talentChoice: { survey: [[2, 3], [5, 6]], dig: [[1, 2], [4, 5]], trade: [[2, 3], [5, 6]] },
+
+  // ---------------------------------------------------------------- 지역 · 조합 지분 · 이사 (명세6-4)
+  region: [
+    { name: '뒷산', mix: { C: 50, s: 30, g: 15, j: 4, c: 1 }, tint: 0xffffff },
+    { name: '안개 계곡', mix: { C: 30, s: 35, g: 25, j: 7, c: 3 }, tint: 0xc0e4dc, water: 2, line: '물이 많아요. 펌프를 챙겨요' },
+    { name: '붉은 협곡', mix: { C: 20, s: 30, g: 30, j: 12, c: 8 }, tint: 0xf4c4a8, hard: 2, gasMul: 2, line: '단단한 바위와 가스가 두 배예요' },
+    { name: '얼음 동굴', mix: { C: 10, s: 25, g: 35, j: 18, c: 12 }, tint: 0xdce8ff, stunMul: 1.6, line: '떨어지면 오래 기절해요 · 발광석이 많아요' },
+  ],
+  shares: {
+    everyDays: 1,                    // 지분 경매 간격 (게임일 = 현실 24분). 명세는 7일 — 그러면 50%까지 11시간이라 2~3시간 목표에 맞춰 1일
+    chunk: 10, win: 50,              // 한 번에 10% · 50% 먼저 = 조합장
+    guildCapMul: 0.15,               // 길드 한도 = 자산 × 0.15
+    startMul: 0.5,                   // 시작가 = 가장 낮은 길드 한도 × 0.5
+    sellPerPct: 0.005,               // 지분 1%마다 판매가 +0.5%
+    guildIncome: 13,                 // 길드 자산 증가/초 = 생산/초 × 이 값 (길드도 같이 큼)
+    guildMinePerDay: 1,              // 날마다 길드 갱도 +1
+  },
+  prestige: {
+    base: { chief: 2, occupied: 1 }, soldDiv: 50000,   // 평판 = 기본 + ⌊√(지역 누적 판매 ÷ 50,000)⌋ (점령이면 절반)
+    prodPerRep: 0.25, goldPerRep: 300,                  // 평판 1마다 생산 +25% · 시작 금화 +300 (특성 +1은 talentPoints)
+    loop2: { reserveMul: 1.5, guildCapMul: 1.3 },        // 지역 4 다음 = 2회차
+  },
 };
