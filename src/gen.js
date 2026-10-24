@@ -12,7 +12,7 @@ const NAME_A = ['북쪽', '남쪽', '동쪽', '서쪽', '깊은', '바람 부는
 const NAME_B = ['비탈', '골짜기', '능선', '샘터', '바위굴', '언덕', '벼랑', '오솔길', '옛 갱도'];
 
 /** 오늘의 경매 카드 3장 */
-export function makeCards(seed, allowed = ['S', 'M', 'L'], nHints = B.hintsPerCard) {
+export function makeCards(seed, allowed = ['S', 'M', 'L'], nHints = B.hintsPerCard, floor2 = false) {
   const r = rng(seed);
   const sizes = (allowed.length >= 3 ? allowed.slice(0, 3) : [...allowed, r.pick(allowed)]).sort(() => r() - 0.5);
   return sizes.map((size, k) => {
@@ -20,8 +20,11 @@ export function makeCards(seed, allowed = ['S', 'M', 'L'], nHints = B.hintsPerCa
     while (hints.length < nHints) { const h = r.pick(HINTS); if (!hints.includes(h)) hints.push(h); }
     return {
       name: `뒷산 ${r.pick(NAME_A)} ${r.pick(NAME_B)}`,
-      size, hints, price: B.plotSizes[size].price, seed: (seed * 31 + k * 977 + 7) >>> 0,
+      size, hints, price: B.plotSizes[size].price, seed: (seed * 31 + k * 977 + 7) >>> 0, floor: 1,
     };
+  }).map((c, k, all) => {
+    if (!floor2 || k !== (seed % all.length)) return c;            // 폐광 해금: 셋 중 하나는 2층
+    return { ...c, name: c.name.replace('뒷산', '폐광'), floor: 2, price: Math.round(c.price * B.abandoned.priceMul) };
   });
 }
 export function freeCard(seed, nHints = 0) {
@@ -52,7 +55,8 @@ export function generate(card) {
   };
   const rockP = has('rock') ? B.rockHint : B.rockShare;
   blob('r', Math.round(rows * COLS * rockP / 7), [5, 9], 0.1);
-  blob('h', Math.round(rows * COLS * B.hardShare / 6), [3, 8], 0.35);
+  const A = card.floor === 2 ? B.abandoned : null;
+  blob('h', Math.round(rows * COLS * B.hardShare * (A ? A.hardMul : 1) / 6), [3, 8], 0.35);
   blob('a', Math.round(rows * COLS * B.ancientShare * (1 - B.ancientDepth) / 3), [3, 7], B.ancientDepth);
   for (let x = 0; x < COLS; x++) { g[0][x] = 'd'; if (g[1][x] === 'h' || g[1][x] === 'a') g[1][x] = 'r'; }   // 처음 두 줄은 늘 파진다
 
@@ -62,7 +66,7 @@ export function generate(card) {
   const bigIdx = !card.free && r.chance(B.bigVeinChance) ? r.int(0, veins - 1) : -1;
   for (let v = 0; v < veins; v++) {
     const y0 = r.int(2, rows - 1), x0 = r.int(0, COLS - 1), d = depth(y0);
-    const w = { ...B.oreMix };
+    const w = { ...(A ? A.oreMix : B.oreMix) };
     for (const k of ['g', 'j', 'c']) w[k] *= 1 + (B.depthWeight - 1) * d;
     if (has('glow')) w.c *= B.glowHintMul;
     const type = r.weighted(w);
@@ -83,13 +87,13 @@ export function generate(card) {
     for (let k = 0; k < 200; k++) { const x = r.int(0, COLS - 1), y = r.int(2, rows - 1); if (pred(g[y][x], x, y)) return [x, y]; }
     return null;
   };
-  const caves = r.range(B.caves);
+  const caves = r.range(B.caves) * (A ? A.caveMul : 1);
   for (let k = 0; k < caves; k++) {
     const p = free((t) => t === 'd' || t === 'r'); if (!p) continue;
     const n = r.range(B.caveSize); let [x, y] = p;
     for (let i = 0; i < n; i++) { if (inside(x, y) && y >= 2 && !ORE_TYPES.includes(g[y][x])) g[y][x] = 'o'; const [dx, dy] = r.pick([[1, 0], [-1, 0], [0, 1]]); x += dx; y += dy; }
   }
-  const relics = has('relic') ? 1 : r.range(B.relics);
+  const relics = (has('relic') ? 1 : r.range(B.relics)) * (A ? A.relicMul : 1);
   for (let k = 0; k < relics; k++) { const p = free((t, x, y) => (t === 'd' || t === 'r') && depth(y) > 0.3); if (p) g[p[1]][p[0]] = 'R'; }
   const waters = has('water') ? r.range(B.waterHint) : r.range(B.waterNoHint);
   for (let k = 0; k < waters; k++) { const p = free((t, x, y) => (t === 'r' || t === 'd') && depth(y) > 0.25); if (p) g[p[1]][p[0]] = 'w'; }
