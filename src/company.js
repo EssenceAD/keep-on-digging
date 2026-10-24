@@ -25,9 +25,10 @@ export function ensureCompany(S) {
   for (const d of co.decos) if (d.spot == null) { const used = new Set(co.decos.map((q) => q.spot)); d.spot = YARD.decoSpots.findIndex((_, i) => !used.has(i)); delete d.x; delete d.y; }
   ensureEngine(S);                         // 명세6-1: 엔진 (옛 건물 Lv → 같은 Lv)
   autoPlace(S);
-  if (S.talents.v !== 2) {                 // 명세5 §4: 5단 → 8단으로 바뀜 — 찍은 것 돌려주고, 지난 라운드 수만큼 포인트
+  if (S.talents.v === 3) {} else if (S.talents.v !== 2) {                 // 명세5 §4: 5단 → 8단으로 바뀜 — 찍은 것 돌려주고, 지난 라운드 수만큼 포인트
     Object.assign(S.talents, { survey: 0, dig: 0, trade: 0, v: 2, earned: S.talents.earned ?? (S.stats?.rounds ?? 0) * B.talents.minPerRound });
   }
+  if (S.talents.v !== 3) Object.assign(S.talents, { cells: { survey: [], dig: [], trade: [] }, star3: 0, v: 3 });   // 명세6-3: 칸 모델 (예전 찍은 건 돌려줌 — 포인트는 평판·★3 땅으로)
   return co;
 }
 // ---- 장비 (명세5 §3): S.upgrades[k] = Lv. 회사 건물 Lv = 그 장비 Lv − min (Lv0 = 안 지음)
@@ -125,27 +126,27 @@ export function companyFx(S) {
   const L = (k) => lvOf(S, k), b = C.buildings;
   const add = { idleMul: 0, guildMul: 0, smeltMul: 0, surveyAdd: 0, sellMul: 0, cartMul: 0, turretAdd: 0, xrayAdd: 0 };
   for (const h of harmonies(S)) for (const [k, v] of Object.entries(h.fx)) add[k] += v;
-  const t = S.talents ?? {}, TL = B.talents, sv = t.survey ?? 0, dg = t.dig ?? 0, tr = t.trade ?? 0;
+  const TL = B.talents, T = (tree, n) => hasTalent(S, tree, n - 1);   // 명세6-3: n번째 칸(1부터)을 찍었나
   return {
     // 특성 (§3)
     // 특성 (명세5 §4: 3×8)
-    hints: sv >= 1 ? 3 : B.hintsPerCard, vibroAdd: sv >= 3 ? 1 : 0, oreColor: sv >= 4, vibroRangeMinus: sv >= 5 ? 1 : 0, clueTruth: sv >= 6 ? TL.clueTruth : B.tools.clue.truth,
-    veinRange: sv >= 7, silhouette: sv >= 8, freeHint: false,
+    hints: T('survey', 1) ? 3 : B.hintsPerCard, vibroAdd: T('survey', 3) ? 1 : 0, oreColor: T('survey', 4), vibroRangeMinus: T('survey', 5) ? 1 : 0, clueTruth: T('survey', 6) ? TL.clueTruth : B.tools.clue.truth,
+    veinRange: T('survey', 7), silhouette: T('survey', 8), freeHint: false,
     pick: upV(S, 'pick', 'tier'), pickSpeed: upV(S, 'pick', 'speed'), pickDouble: !!upV(S, 'pick', 'double'),
-    digMul: dg >= 5 ? TL.digMul[1] : dg >= 1 ? TL.digMul[0] : 1, dirt: dg >= 2 ? TL.dirtTime : B.digTime.d, stunMul: dg >= 4 ? TL.stunMul : 1, chainVein: dg >= 7,
-    preview: tr >= 2, surgeWarn: tr >= 3 ? TL.surgeWarnLong : B.surgeWarn, penalty: tr >= 5 ? TL.penaltyLow : null, surgeMul: tr >= 6 ? TL.surgeMul : B.surgeMul,
-    bigVein: tr >= 7 ? TL.bigVein : B.bigVein, freeze: tr >= 8,
+    digMul: T('dig', 5) ? TL.digMul[1] : T('dig', 1) ? TL.digMul[0] : 1, dirt: T('dig', 2) ? TL.dirtTime : B.digTime.d, stunMul: T('dig', 4) ? TL.stunMul : 1, chainVein: T('dig', 7),
+    preview: T('trade', 2), surgeWarn: T('trade', 3) ? TL.surgeWarnLong : B.surgeWarn, penalty: T('trade', 5) ? TL.penaltyLow : null, surgeMul: T('trade', 6) ? TL.surgeMul : B.surgeMul,
+    bigVein: T('trade', 7) ? TL.bigVein : B.bigVein, freeze: T('trade', 8),
     // 장비 (명세5 §3 — upgrades 표 하나)
     whCap: upV(S, 'warehouse', 'cap'),
-    carts: Math.min(4, upV(S, 'cart', 'carts') + (dg >= 3 ? 1 : 0)),
-    cartLoad: upV(S, 'cart', 'load') + (dg >= 6 ? TL.cartLoadAdd : 0),
+    carts: Math.min(4, upV(S, 'cart', 'carts') + (T('dig', 3) ? 1 : 0)),
+    cartLoad: upV(S, 'cart', 'load') + (T('dig', 6) ? TL.cartLoadAdd : 0),
     cartSpeed: upV(S, 'cart', 'speed') * (1 + add.cartMul),
-    miners: upV(S, 'lodge', 'miners') + (dg >= 8 ? TL.crewAdd : 0),
-    diggers: Math.max(2, Math.ceil(upV(S, 'lodge', 'miners') / 2)) + (dg >= 8 ? 1 : 0),     // 갱도 조: 광부 절반이 캐고 나머지는 운반
+    miners: upV(S, 'lodge', 'miners') + (T('dig', 8) ? TL.crewAdd : 0),
+    diggers: Math.max(2, Math.ceil(upV(S, 'lodge', 'miners') / 2)) + (T('dig', 8) ? 1 : 0),     // 갱도 조: 광부 절반이 캐고 나머지는 운반
     capHours: upV(S, 'lodge', 'capHours'),
     smeltSec: (upV(S, 'smelter', 'sec') || 20) / (1 + add.smeltMul),
     smeltSlots: upV(S, 'smelter', 'slots'),
-    xrayPerDay: upV(S, 'lantern', 'xray') + add.xrayAdd + (sv >= 2 ? 1 : 0),
+    xrayPerDay: upV(S, 'lantern', 'xray') + add.xrayAdd + (T('survey', 2) ? 1 : 0),
     xrayRadius: upV(S, 'lantern', 'radius'),
     pumpCost: upV(S, 'pump', 'price'),
     autoPump: !!upV(S, 'pump', 'auto'),
@@ -157,9 +158,9 @@ export function companyFx(S) {
     shafts: upLv(S, 'cart') >= 3 ? 3 : 2,                               // 동시 갱도 (광차 Lv3 → 3개)
     idleMul: 1 + add.idleMul,
     guildMul: 1 + add.guildMul,
-    sellMul: 1 + add.sellMul + (tr >= 4 ? TL.sellAdd[1] : tr >= 1 ? TL.sellAdd[0] : 0),
+    sellMul: 1 + add.sellMul + (T('trade', 4) ? TL.sellAdd[1] : T('trade', 1) ? TL.sellAdd[0] : 0),
     plotSizes: S.company.coreLv >= C.lPlotLv ? ['S', 'M', 'L'] : ['S', 'M'],
-    ...(S.engine ? { miners: crewOf(S.engine.lv.lodge) + (dg >= 8 ? TL.crewAdd : 0), diggers: Math.max(2, Math.ceil(crewOf(S.engine.lv.lodge) / 2)) + (dg >= 8 ? 1 : 0), whCap: whCapOf(S.engine.lv.warehouse), smeltSlots: smeltOf(S.engine.lv.smelter).slots, smeltSec: smeltOf(S.engine.lv.smelter).sec / (1 + add.smeltMul) } : {}),   // 명세6-1 엔진
+    ...(S.engine ? { miners: crewOf(S.engine.lv.lodge) + (T('dig', 8) ? TL.crewAdd : 0), diggers: Math.max(2, Math.ceil(crewOf(S.engine.lv.lodge) / 2)) + (T('dig', 8) ? 1 : 0), whCap: whCapOf(S.engine.lv.warehouse), smeltSlots: smeltOf(S.engine.lv.smelter).slots, smeltSec: smeltOf(S.engine.lv.smelter).sec / (1 + add.smeltMul) } : {}),   // 명세6-1 엔진
   };
 }
 
@@ -188,6 +189,16 @@ export function effectText(S, k) {
 
 // ---------------------------------------------------------------- 특성 포인트 (§3)
 export const TALENT_TREES = [['survey', '탐사'], ['dig', '채굴'], ['trade', '장사']];
-export const talentPoints = (S) => S.company.coreLv + (S.talents.earned ?? 0);   // 명세5 §4: 라운드 별 수(최소 1) + 사무소 Lv
-export const talentSpent = (S) => (S.talents.survey ?? 0) + (S.talents.dig ?? 0) + (S.talents.trade ?? 0);
+/** 명세6-3 §3: 포인트 = 평판 + 원정 ★3 땅마다 1 (라운드·사무소 지급 없음) */
+export const talentPoints = (S) => (S.prestige?.rep ?? 0) + (S.talents.star3 ?? 0);
+export const talentSpent = (S) => Object.values(S.talents.cells ?? {}).reduce((a, l) => a + l.length, 0);
+/** 갈래의 줄: 양자택일 짝은 한 줄에 두 칸 — [[0],[1],[2,3],[4],[5,6],[7]] */
+export function talentRows(tree) {
+  const pairs = B.talentChoice[tree] ?? [], rows = [];
+  for (let i = 0; i < B.talents[tree].length; i++) { const p = pairs.find((q) => q[0] === i); if (p) { rows.push(p); i = p[1]; } else rows.push([i]); }
+  return rows;
+}
+export const hasTalent = (S, tree, cell) => !!S.talents.cells?.[tree]?.includes(cell);
+/** 다음에 찍을 수 있는 줄 번호 (다 찍었으면 -1) */
+export const talentNextRow = (S, tree) => talentRows(tree).findIndex((r) => !r.some((cl) => hasTalent(S, tree, cl)));
 export const talentLeft = (S) => talentPoints(S) - talentSpent(S);

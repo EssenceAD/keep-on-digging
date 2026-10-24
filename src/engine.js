@@ -23,6 +23,13 @@ export const cartOf = (lv) => {
   const load = (a + b * lv) * 2 ** milestones(lv), n = 1 + Math.floor(lv / E().cartsEvery), trip = Math.max(tMin, t0 - dt * lv);
   return { load, n, trip, rate: (n * load) / trip };
 };
+/** 광차 (운반 십장 핀이 있으면 왕복 −15% · 더미 가득일 때 +1대) */
+export function cartOfS(S) {
+  const c = cartOf(S.engine.lv.cart), f = S.foremen?.fin, F = B.foremen.fin;
+  if (!f?.hired || f.on === false) return c;
+  const trip = c.trip * F.tripMul, n = c.n + (pileOf(S) >= pileCapOf(S.engine.lv.warehouse) - 0.5 ? F.extraCart : 0);
+  return { ...c, trip, n, rate: (n * c.load) / trip };
+}
 export const whCapOf = (lv) => Math.floor(E().whBase * E().whMul ** (lv - 1));
 export const pileCapOf = (lv) => Math.floor(whCapOf(lv) / E().pileDiv);
 export const smeltOf = (lv) => { const [a, b, m] = E().smelt.sec; return { slots: lv >= 1 ? 1 + Math.floor(lv / E().smelt.slotsEvery) : 0, sec: Math.max(m, a - b * lv) }; };
@@ -51,6 +58,7 @@ export function newMine(id, o) {
 export function ensureEngine(S) {
   if (!S.engine) {
     const up = S.upgrades ?? {};
+    if (!(S.stats?.rounds > 0) && !(S.counters?.soldGold > 0) && !S.tutorial?.done) S.gold = E().startGold;   // 새 게임: 캐서 번 돈으로
     S.engine = {
       mines: [newMine(1, { ...E().firstMine, opened: S.day ?? 0 })], nextId: 2,
       pileT: zero(), carryAcc: zero(), lastTick: Date.now(),
@@ -67,7 +75,7 @@ export const pileOf = (S) => sum(S.engine.pileT);
 /** 원정대 (명세6-2 §4): 숙소 Lv 구간별 인원 — 원정(탐사·시추) 중엔 엔진 광부에서 빠짐 */
 export const crewOf = (lv) => { const t = B.expedition.crew; return t[Math.min(t.length - 1, Math.max(0, lv - 1))]; };
 export const onExpedition = (S) => ['SURVEY', 'DIG'].includes(S.round?.state);
-export const minersTotal = (S) => Math.max(0, minersOf(S.engine.lv.lodge) - (onExpedition(S) ? crewOf(S.engine.lv.lodge) : 0));
+export const minersTotal = (S) => { const n = minersOf(S.engine.lv.lodge); return onExpedition(S) ? Math.max(1, n - crewOf(S.engine.lv.lodge)) : n; };   // 원정 중에도 1명은 남음
 export const liveMines = (S) => S.engine.mines.filter((m) => m.reserve > 0);
 /** 광부 배치: 다 캔 갱도는 0, 모자라면 덜어 내고, 남으면 적은 곳부터 고르게 */
 export function balanceMiners(S) {
@@ -101,7 +109,7 @@ export const digRate = (S) => S.engine.mines.reduce((a, m) => a + digRateOf(S, m
 export function bottleneck(S, whTotal, whCap) {
   if (whTotal >= whCap - 0.5) return 'wh';
   if (!liveMines(S).length) return 'empty';
-  if (digRate(S) > cartOf(S.engine.lv.cart).rate && pileOf(S) >= pileCapOf(S.engine.lv.warehouse) * 0.5) return 'carry';
+  if (digRate(S) > cartOfS(S).rate && pileOf(S) >= pileCapOf(S.engine.lv.warehouse) * 0.5) return 'carry';
   return 'dig';
 }
 /**
@@ -124,7 +132,7 @@ export function engineStep(S, dt, wh, cap) {
   }
   // 2) 나르기 → 창고 (정수만 창고에, 나머지는 carryAcc)
   const pile = pileOf(S), whNow = sum(wh) + sum(en.carryAcc);
-  const n = Math.min(cartOf(en.lv.cart).rate * dt, pile, Math.max(0, cap - whNow));
+  const n = Math.min(cartOfS(S).rate * dt, pile, Math.max(0, cap - whNow));
   if (n > 0) {
     out.carried = {};
     for (const k of ORE_KEYS5) {
@@ -142,12 +150,12 @@ export function engineStep(S, dt, wh, cap) {
   return out;
 }
 /** 떠나 있던 sec초를 그대로 빨리감기 (상한 idleCapHours) — 창고가 차면 멈춤 */
-export function engineFastForward(S, sec, wh, cap) {
+export function engineFastForward(S, sec, wh, cap, hook = null) {
   const capSec = idleCapHours(S) * 3600, run = Math.min(sec, capSec), before = { ...wh };
   let t = 0, full = false;
   while (t < run) {
     const st = Math.min(5, run - t);
-    engineStep(S, st, wh, cap); t += st;
+    engineStep(S, st, wh, cap); t += st; hook?.(S, st);                // 십장도 방치 중에 일함
     if (sum(wh) >= cap && pileOf(S) >= pileCapOf(S.engine.lv.warehouse) - 0.01) { full = true; break; }
   }
   const got = Object.fromEntries(ORE_KEYS5.map((k) => [k, wh[k] - before[k]]));

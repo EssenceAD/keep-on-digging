@@ -266,13 +266,14 @@ export const B = {
   // ---------------------------------------------------------------- 엔진 (명세6-1): 캐기 → 나르기 → 창고 3단 병목 · 무한 업글 · 방치
   //  비용(Lv) = base × mul^(Lv − start) · 효과는 선형 + milestones Lv에서 ×2 (곡괭이 속도 · 광차 적재)
   engine: {
-    firstMine: { name: '뒷산 1호', rows: 10, reserve: 1500, depth: 1.0, oreMix: { C: 0.75, s: 0.17, g: 0.06, j: 0.01, c: 0.01 } },
+    startGold: 30,                                   // 새 게임 시작 금화 (엔진은 캐서 번 돈으로 크게)
+    firstMine: { name: '뒷산 1호', rows: 10, reserve: 4000, depth: 1.0, oreMix: { C: 0.75, s: 0.17, g: 0.06, j: 0.01, c: 0.01 } },
     oreRank: { C: 0, s: 1, g: 2, j: 3, c: 3 },        // 깊을수록(depth) 귀한 쪽 가중: 비율 × depth^rank
     milestones: [10, 25, 50, 100],
     up: {
-      pick: { name: '곡괭이', start: 1, base: 40, mul: 1.15 },       // 광부 1명 캐기/초 = pickBase × (1 + pickPerLv(Lv−1)) × 2^마일스톤
-      lodge: { name: '숙소', start: 1, base: 150, mul: 1.22 },       // 광부 = 1 + Lv · 갱도 수 = 1 + ⌊Lv/3⌋ (최대 maxMines)
-      cart: { name: '광차', start: 1, base: 60, mul: 1.16 },         // 적재 = 4 + 2Lv (×2^마일스톤) · 대수 = 1 + ⌊Lv/8⌋ · 왕복 = max(4, 10 − 0.2Lv)초
+      pick: { name: '곡괭이', start: 1, base: 40, mul: 1.4 },        // 6-3 템포 맞춤 (1.15 → 1.4)       // 광부 1명 캐기/초 = pickBase × (1 + pickPerLv(Lv−1)) × 2^마일스톤
+      lodge: { name: '숙소', start: 1, base: 150, mul: 1.6 },       // 광부 = 1 + Lv · 갱도 수 = 1 + ⌊Lv/3⌋ (최대 maxMines)
+      cart: { name: '광차', start: 1, base: 60, mul: 1.4 },         // 적재 = 4 + 2Lv (×2^마일스톤) · 대수 = 1 + ⌊Lv/8⌋ · 왕복 = max(4, 10 − 0.2Lv)초
       warehouse: { name: '창고', start: 1, base: 50, mul: 1.14 },    // 용량 = ⌊60 × 1.22^(Lv−1)⌋ · 입구 더미 상한 = 용량 ÷ 3
       smelter: { name: '제련', start: 0, base: 400, mul: 1.3 },      // Lv1 해금 · 슬롯 = 1 + ⌊Lv/5⌋ · 시간 = max(3, 12 − 0.3Lv)초
     },
@@ -281,7 +282,7 @@ export const B = {
     whBase: 60, whMul: 1.22, pileDiv: 3,
     smelt: { slotsEvery: 5, sec: [12, 0.3, 3] },
     maxMines: 6, minesBase: 2, minesEvery: 3,          // 갱도 자리 = minesBase + ⌊(숙소Lv−1)/minesEvery⌋ (6-3 해금 #6: 숙소 전에 갱도 2개)
-    reservePerCell: 30, depthMul: 0.8,              // 원정 → 갱도: reserve = 캔 광맥 칸 × 30 · depth = 1 + 최대깊이/줄 × 0.8
+    reservePerCell: 200, depthMul: 0.8,              // 원정 → 갱도: reserve = 캔 광맥 칸 × 30 · depth = 1 + 최대깊이/줄 × 0.8
     idleCapHours: 2, idleCapPerLodge: 0.25, idleCapMax: 12,
     awayCardSeconds: 60,                            // 이만큼 넘게 떠나 있으면 돌아왔을 때 카드
   },
@@ -299,4 +300,30 @@ export const B = {
     guildRatePerMine: 1.2,                                           // 길드 생산/초 = 갱도 수 × 이것 (순위용)
     newsOre: [8, 30],                                                // 길드가 가져간 땅 소식: 광석 n개
   },
+
+  // ---------------------------------------------------------------- 해금 템포 (명세6-3 §1): 조건 충족 순간 모모 한 줄 + 반짝. 목표 #5≈6분 · #8≈20분 · #10≈40분 · #13≈60분
+  //  cond: [종류, 값] — pickLv 곡괭이 Lv · cartLv · whFull 창고 첫 가득 · sold 누적 판매 · rate 생산/초 · mines 갱도 수 · expeditions 원정 횟수 · relics 유물 수 · smeltLv
+  unlocks: [
+    { id: 1, cond: ['start', 0], opens: ['pick'], line: '탭해서 곡괭이부터 갈아요!' },
+    { id: 2, cond: ['pickLv', 3], opens: ['cart'], line: '캐는 게 빨라지니 나르는 게 밀리네요' },
+    { id: 3, cond: ['whFull', 1], opens: ['warehouse', 'sellAll'], line: '창고가 꽉! 팔거나 넓히거나' },
+    { id: 4, cond: ['sold', 500], opens: ['buyers'], line: '브로크 아저씨는 구리를 좋아해요' },
+    { id: 5, cond: ['rate', 0.5], opens: ['expedition'], line: '새 땅을 사서 갱도를 늘려봐요' },
+    { id: 6, cond: ['mines', 2], opens: ['lodge'], line: '갱도가 둘! 숙소를 넓혀 광부를 늘려요' },
+    { id: 7, cond: ['sold', 3000], opens: ['smelter'], line: '괴로 만들면 1.6배!' },
+    { id: 8, cond: ['expeditions', 2], opens: ['auction'], who: 'guilds', line: '길드들이 원정 땅에 관심을 보여요' },
+    { id: 9, cond: ['pickLv', 10], opens: ['vibro', 'lantern'], line: '곡괭이 ×2! 원정 도구도 올릴 수 있어요' },
+    { id: 10, cond: ['sold', 250000], opens: ['foreman1'], line: '이제 판매는 맡겨도 돼요' },
+    { id: 11, cond: ['relics', 1], opens: ['showcase'], line: '유물은 진열장에 모아 둬요' },
+    { id: 12, cond: ['mines', 3], opens: ['abandoned'], line: '폐광 땅이 지도에 나오기 시작해요' },
+    { id: 13, cond: ['rate', 50], opens: ['shares'], who: 'halabeoji', line: '이 마을 조합장 자리가… 곧 지분 경매가 열리네' },
+  ],
+  // ---------------------------------------------------------------- 십장 (명세6-3 §2): 반복 자동화 · 방치 중에도 일함
+  foremen: {
+    marta: { name: '판매 십장 마르타', who: 'miner_marta', open: 'foreman1', cost: 2000, fill: 0.7, pct: 1.0 },   // 창고 fill 넘고 시세 ≥ 평균 × pct면 자동 판매
+    dor: { name: '제련 십장 도르', who: 'miner_dor', need: ['smelter', 5], cost: 5000 },                              // 제련 칸이 비면 가장 비싼 광석부터
+    fin: { name: '운반 십장 핀', who: 'miner_fin', need: ['cart', 15], cost: 8000, tripMul: 0.85, extraCart: 1 },     // 왕복 −15% · 더미 가득이면 광차 +1
+  },
+  // 특성 (명세6-3 §3): 포인트 = 평판 + 원정 ★3 땅마다 1 · 갈래마다 두 칸은 둘 중 하나만 (칸 번호 0부터)
+  talentChoice: { survey: [[2, 3], [5, 6]], dig: [[1, 2], [4, 5]], trade: [[2, 3], [5, 6]] },
 };
