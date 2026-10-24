@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.2.3';
+const VERSION = 'v1.2.4';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -943,7 +943,7 @@ const TUT_STEPS = [                                        // PATCH_V12 §6: 12�
     done: () => (S.counters?.soldGold ?? 0) > (S.tutorial.mark ?? 0) },
   { vibroX: TUT_GOLD_X, enter: () => { S.round.vibroLeft = Math.max(1, S.round.vibroLeft ?? 0); if (!L.pc) { S.settings.sheetFolded = true; setTimeout(layout, 0); } },
     focus: () => (toolArmed === 'vibro' ? cellScreen(TUT_GOLD_X, -1, 1, 2) : boundsOf(ui.refs.vibro)), hand: () => ({ kind: 'tap', at: toolArmed === 'vibro' ? cellCenter(TUT_GOLD_X, -0.4) : centerOf(boundsOf(ui.refs.vibro)) }),
-    done: () => S.round.stakes?.some((q) => q.x === TUT_GOLD_X && !(q.at > 0)) },
+    done: () => S.round.stakes?.some((q) => q.x === TUT_GOLD_X && q.text !== '…' && q.text !== '?') },
   { shaftX: TUT_GOLD_X, wait: true, enter: () => { S.tutorial.mark = left('g'); }, focus: () => cellScreen(TUT_GOLD_X, -1, 1, 2), hand: () => ({ kind: 'tap', at: cellCenter(TUT_GOLD_X, -0.4) }),
     done: () => left('g') < (S.tutorial.mark ?? 99) && (stash.g > 0 || carts.some((c) => c.cargo.g) || piles.some((p) => p.type === 'g')) },   // 금 1개만 캐면 판매로
   { focus: () => (sheetTab !== 'sell' || !sheetOpen() ? boundsOf(ui.sellAnchor) : buyer() !== 'merchant' ? boundsOf(ui.refs.buyerSwap) : boundsOf(ui.rows.g?.r)),
@@ -1054,7 +1054,8 @@ function tutTick(dt) {
     const fc = focus ? (focus.y + focus.h / 2) * k : uH;
     const top = Math.round(L.vis.y0 * k) + 4, bottom = Math.round(L.vis.y1 * k) - tutBubble.bh - 6;
     const last = state() === 'RESULT';          // 결과 단계는 카드 아래 (v0.8 §4): 폰 = 아래 시트 위 · PC = 화면 아래 왼쪽
-    const y = last ? bottom : fc > (L.vis.y0 + L.vis.y1) / 2 * k ? top : Math.max(top, bottom);
+    let y = last ? bottom : fc > (L.vis.y0 + L.vis.y1) / 2 * k ? top : Math.max(top, bottom);
+    if (focus) { const fy0 = (focus.y - 6) * k, fy1 = (focus.y + focus.h + 6) * k; if (y < fy1 && y + tutBubble.bh > fy0) y = fy0 - tutBubble.bh - 4 >= top ? Math.round(fy0 - tutBubble.bh - 4) : Math.round(fy1 + 4); }   // 강조한 버튼을 가리지 않게
     const shake = tutShakeT > 0 ? Math.sin(tutShakeT * 50) * 3 : 0;
     tutBubble.position.set(Math.round(((L.vis.x0 + L.vis.x1) / 2) * k - tutBubble.bw / 2 + shake), y);
     if (tutShakeT > 0) { tutShakeT -= dt; tutBubble.scale.set(1 + Math.max(0, tutShakeT) * 0.06); } else tutBubble.scale.set(1);
@@ -1991,20 +1992,24 @@ function vibroAt(wx) {
   rd.vibroLeft--; toolArmed = null;
   const st = { x: gx, text: '…', color: null, at: time + TV.vibro.seconds };
   rd.stakes.push(st); sfx('ui_tap'); shake = 0.15; shakeAmp = 0.8;
-  setTimeout(() => {
-    let id = -1, d = 0;
-    for (let y = 0; y < W.rows && id < 0; y++) { const v = W.veins.id[y][gx]; if (v >= 0 && ORE_KEYS.has(W.g[y][gx])) { id = v; d = y + 1; } }
-    if (id < 0) { st.text = '없음'; }
-    else {
-      const v = W.veins.list[id], r = tutOn() ? 1 : Math.max(1, vibroV('range') - CF.vibroRangeMinus), lo = tutOn() ? d : Math.max(1, d - Math.floor(Math.random() * (r + 1)));
-      const word = TV.sizeWords.find(([n]) => v.size <= n)[1];
-      st.text = `깊이 ${lo}~${lo + r} · ${word}`;
-      if (vibroV('color')) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
-    }
-    st.at = 0; sfx(id < 0 ? 'pass' : 'vein_found', true); drawSurvey(); syncRound();
-  }, TV.vibro.seconds * 1000);
+  setTimeout(() => resolveStake(st), TV.vibro.seconds * 1000);
   drawSurvey(); buildUI(); syncRound();
   return true;
+}
+/** 말뚝 결과 채우기 (3초 뒤 · 새로고침으로 타이머가 끊긴 말뚝도 다시) */
+function resolveStake(st, quiet = false) {
+  if (!W || !st || (st.text !== '…' && st.text !== '?')) return;
+  const gx = st.x;
+  let id = -1, d = 0;
+  for (let y = 0; y < W.rows && id < 0; y++) { const v = W.veins.id[y][gx]; if (v >= 0 && ORE_KEYS.has(W.g[y][gx])) { id = v; d = y + 1; } }
+  if (id < 0) { st.text = '없음'; }
+  else {
+    const v = W.veins.list[id], r = tutOn() ? 1 : Math.max(1, vibroV('range') - CF.vibroRangeMinus), lo = tutOn() ? d : Math.max(1, d - Math.floor(Math.random() * (r + 1)));
+    const word = TV.sizeWords.find(([n]) => v.size <= n)[1];
+    st.text = `깊이 ${lo}~${lo + r} · ${word}`;
+    if (vibroV('color')) { st.color = ORE_COLOR[v.type]; st.text += ` ${ORES.find((o) => o.key === v.type)?.name ?? ''}`; }
+  }
+  st.at = 0; if (!quiet) sfx(id < 0 ? 'pass' : 'vein_found', true); drawSurvey(); syncRound();
 }
 function armTool(k) {
   const left = k === 'vibro' ? S.round.vibroLeft : S.round.xrayLeft;
@@ -3920,6 +3925,7 @@ app.ticker.add((tk) => {
   if (st === 'SURVEY') updateSurvey(dt);
   updateMole(dt);
   updateCrew(dt);
+  for (const q of S.round?.stakes ?? []) if (q.text === '…' && q.at > 0 && time > q.at + 1) resolveStake(q);
   shaftTick(); drawShaftUI(); drawStakeUI(); updatePops(real); if (fpsN % 20 === 0) drawSurvey();
   if (market.surge && fpsN % 3 === 0) refreshUI();
   if (ui.crew) for (const c of ui.crew) { const s = crewStateText(c.m); if (c.st.text !== s) c.st.text = s; }
@@ -4027,7 +4033,7 @@ buildWorld();
 layout();
 if (!S.round) startAuction();
 else {
-  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= []; S.round.stakes ??= []; for (const q of S.round.stakes) if (q.text === '…') q.text = '?';
+  piles = S.round.piles ?? []; seenCells = new Set(S.round.seen ?? []); S.round.jobs ??= []; S.round.claimed ??= []; S.round.shafts ??= []; S.round.stakes ??= []; setTimeout(() => { for (const q of S.round.stakes ?? []) if (q.text === '…' || q.text === '?') resolveStake(q, true); }, 0);
   (S.round.cartCargos ?? [S.round.cartCargo, S.round.cartCargo2]).forEach((cg, i) => cg && carts[i] && Object.assign(carts[i].cargo, cg));
   buildUI(); if (S.round.state === 'SURVEY') S.round.surveyLeft = Math.max(3, S.round.surveyLeft);
 }

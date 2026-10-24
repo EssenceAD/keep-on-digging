@@ -36,6 +36,10 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.2.4
+- 진동계 말뚝 결과를 함수로(resolveStake): 새로고침·백그라운드로 타이머가 끊겨도 다시 채움 — 튜토리얼이 「이미 박은 말뚝」에서 멈추던 것 고침.
+- 튜토리얼 말풍선이 강조한 버튼(결과 카드 [특성 찍기][다음 경매] 등)을 가리면 그 위로 올라감.
+
 ## v1.2.3
 - 제보 답장: 서버 `my_letter_replies('mine')`(supabase/mine_letters.sql 적용됨)로 받고 `mark_replies_read`로 읽음 — 체크인은 채굴 답장을 안 가져감.
 - 인수인계(사무소) 대사도 ONBOARDING §2 말풍선: 초상 48px · 한 장에 한 문장 · 최대 2줄. 문장은 . ! ? 에서 나눔(…은 안 나눔).
