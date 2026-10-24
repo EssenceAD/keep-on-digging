@@ -15,7 +15,8 @@ export function newSave() {
     warehouse: { C: 0, s: 0, g: 0, j: 0, c: 0 },
     prices: null,                                                // market.js 가 채움
     stats: { rounds: 0, profitTotal: 0, bestVein: 0, relics: [] },
-    tutorial: { step: 0 },
+    // 온보딩 (docs/ONBOARDING_1024.md): introSeen [0] 인수인계 · active/step [1] 튜토리얼 라운드 · done · auctionIntro [2] · tips [3] · tiles 칸 첫 등장
+    tutorial: { step: 0, done: false, introSeen: false, active: false, auctionIntro: false, firstAuction: false, tips: {}, tiles: {} },
     settings: { low: false, sound: true },
     // 명세3 §8
     company: { coreLv: 1, buildings: {}, decos: [], harmoniesFound: [] },

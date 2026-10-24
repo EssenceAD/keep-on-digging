@@ -1,6 +1,6 @@
 # 용사님, 채굴하실게요~ (Keep On Digging)
 
-모험의 유산(체크인) 세계관 스핀오프 채굴 아이들러. 기획: [`docs/MINING_SPEC_1_1024.md`](docs/MINING_SPEC_1_1024.md) · [`docs/MINING_SPEC_2_LOOP_1024.md`](docs/MINING_SPEC_2_LOOP_1024.md) · [`docs/MINING_SPEC_3_IDLE_1024.md`](docs/MINING_SPEC_3_IDLE_1024.md) · [`docs/MINING_VISUAL_1024.md`](docs/MINING_VISUAL_1024.md) · 대사 [`docs/TEXT_GUILDS.md`](docs/TEXT_GUILDS.md).
+모험의 유산(체크인) 세계관 스핀오프 채굴 아이들러. 기획: [`docs/MINING_SPEC_1_1024.md`](docs/MINING_SPEC_1_1024.md) · [`docs/MINING_SPEC_2_LOOP_1024.md`](docs/MINING_SPEC_2_LOOP_1024.md) · [`docs/MINING_SPEC_3_IDLE_1024.md`](docs/MINING_SPEC_3_IDLE_1024.md) · [`docs/MINING_VISUAL_1024.md`](docs/MINING_VISUAL_1024.md) · 대사 [`docs/TEXT_GUILDS.md`](docs/TEXT_GUILDS.md) · 온보딩 [`docs/ONBOARDING_1024.md`](docs/ONBOARDING_1024.md).
 
 **지금 단계: v0.6 — 방치 · 회사 · 특성 · 계정 (명세3).** v0.5 핵심 루프(경매 → 탐사 → 시추 → 광차 → 판매 → 결과) 위에, 앱을 닫아도 광부들이 캐 두고(「돌아오셨군요」), 라운드 사이에 회사를 키우고, 특성을 찍고, 체크인 계정으로 클라우드에 저장한다. 지하 호수·드워프 도시·광고 SDK는 명세4.
 
@@ -28,6 +28,16 @@
 | 결과 | [철수](확인 시트) 또는 광맥 전부 고갈 → 낙찰가 → 매출 → **순이익** · 별 1~3(순이익/낙찰가 0.5/1.5/3.0) · 최대 광맥 · 시간 · 사건 · 할아범 한마디 → [다음 경매]. 누적 통계 저장 |
 | 튜토리얼 | 첫 라운드만 모모 말풍선 6단계, 해당 행동을 하면 넘어감 |
 
+## 온보딩 (v0.7 · ONBOARDING_1024)
+| | 하는 것 |
+|---|---|
+| [0] 인수인계 | 첫 실행: 사무소 장면(낮 빛) · 할아범 대사 4 · 붉은 수염이 걸어 들어옴 · 열쇠·장부가 밀려옴 · [건너뛰기]. **v0.6 이전 세이브는 이것만 보고 넘어감** |
+| [1] 튜토리얼 라운드 | 고정 구획 뒷산 비탈(할아범 선물) · 12단계 강제: 강조한 곳만 밝게, 나머지 어둡게(입력도 막음) · pxl 손가락(가리키기·누르기·끌기) · 모모 한 문장 · 20초면 말풍선 깜빡 · 다른 경로는 여기요!. 사건·낙하·체력·급등·과제 편지·회사 버튼 없음, 구리 시세는 오르는 중 |
+| [2] 첫 경매 | 할아범 안내 3줄(탭) · 첫 경매 구획 하나는 S · 힌트 2 · 시작가 120 |
+| [3] 처음 만나는 순간 | 회사(손가락: [회사] → 창고 [짓기]) · 지하수 · 가스 · 붕괴 · 낙하 · 급등 편지 · 창고 가득 · 돌아오셨군요 · 특성 포인트 · 대박 — 각 1회 대사 카드 · 칸 종류 첫 등장 라벨 |
+| 첫 화면 | 튜토리얼 뒤엔 접속하면 부지 + 깜빡이는 [오늘 경매 준비됐어요 ▶] (라운드 중이면 갱도) · 경매 고정 안내줄 · 시추 안내줄(3라운드까지) |
+| 설명서 | [설정] → [설명서] 11쪽 (체크인 manual 모양) · [설정] → [튜토리얼 다시] |
+
 ## 명세3 (v0.6)
 | | 하는 것 |
 |---|---|
@@ -44,7 +54,7 @@
 | 일일 과제 | 한국 0시마다 12종 중 3개(모모 편지) · 금화 50~150 자동 · [과제] 탭(PC 왼쪽) · 결과 카드에 n/3 |
 
 ## 구조
-- `src/balance.js` 숫자(명세3: `idle` · `company` · `abandoned` · `daybook` · `talents`) · `src/save.js` 로컬 저장(v2 · migrate) · `src/offline.js` 방치 정산 · `src/company.js` 회사·어울림·특성 효과 · `src/daybook.js` 일일 과제 · `src/net.js` 계정·클라우드·랭킹 · `src/text.js` 대사 · `supabase/mine.sql` 테이블 메모 · `src/gen.js` 구획 생성(힌트 → 칸, 층·광맥·동굴·유물·지하수·가스) · `src/market.js` 시세 · `src/rng.js` 시드 난수
+- `src/balance.js` 숫자(명세3: `idle` · `company` · `abandoned` · `daybook` · `talents`) · `src/save.js` 로컬 저장(v2 · migrate) · `src/offline.js` 방치 정산 · `src/company.js` 회사·어울림·특성 효과 · `src/daybook.js` 일일 과제 · `src/net.js` 계정·클라우드·랭킹 · `src/text.js` 대사 · `src/onboard.js` 온보딩 대사·튜토리얼 구획·안내·설명서(진행 엔진은 main.js) · `supabase/mine.sql` 테이블 메모 · `src/gen.js` 구획 생성(힌트 → 칸, 층·광맥·동굴·유물·지하수·가스) · `src/market.js` 시세 · `src/rng.js` 시드 난수
 - `src/main.js` 장면·상태 기계·경매·탐사·시추·광차·사건·결과·UI · `src/ui.js` UI 킷 런타임(9-slice) · `src/gl.js` 조명·후처리 · `src/sound.js` 효과음
 - 아트 (`npm run art`): `art/shaft.px.js` 타일·소품(형철 초안 + Code 추가: 고대석·지하수·가스·유물·동굴·사다리·빨간 X·슬라임) · `art/chibi.px.js` 캐릭터(+ 길드 대표 3) · `art/buildings_gpt.px.js` 회사 건물·장식(GPT 시트 `art/raw/mine_buildings_lv1·3·5.png` → `sh scripts/buildings.sh` → 128×128, Lv2·4는 1·3 그림) · `art/yard.px.js` 부지 배경(잔디·흙길·울타리·하늘) · `art/buildings.px.js` 폴백(형철 코드 그림) · `art/chars.px.js` 광차(형철, §9) · `art/fx.px.js` 이펙트 10종 · `art/mine.px.js` 지상·겹·아이콘·힌트 아이콘 · `art/ui/ui.px.js` UI 킷 · `art/office/office.px.js` 사무소
 - 렌더: 알베도 + 노멀 → 조명 셰이더 → 발광·헤일로 → 후처리 → 확대 (화면 1px = 칸/32: 타일 2×2, 캐릭터·이펙트 1:1), 그 위에 UI

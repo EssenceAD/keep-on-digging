@@ -2,6 +2,7 @@
 // 칸 문자: d 흙 · r 바위 · h 단단한 바위 · a 고대석 · C 구리 · s 은 · g 금 · j 보석 · c 발광
 //          w 지하수 주머니 · x 가스 주머니 · R 유물 상자 · o 동굴(빈 공간) · . 뚫린 갱도
 import { B } from './balance.js';
+import { TUT_GRID } from './onboard.js';
 import { rng } from './rng.js';
 
 export const COLS = 12;
@@ -34,6 +35,7 @@ export function freeCard(seed, nHints = 0) {
 
 /** 카드 → 격자 (문자열 배열, 위에서 아래로) */
 export function generate(card) {
+  if (card.tutorial) return TUT_GRID.slice();                    // 온보딩 튜토리얼 구획 (고정)
   const r = rng(card.seed);
   const rows = B.plotSizes[card.size].rows;
   const has = (h) => card.hints.includes(h);

@@ -9,6 +9,7 @@ pal({
   G: "#2fa09a", g: "#6fe0d8", z: "#c8fff4",                               // 발광
   N: "#22305e", b: "#3d5a9a", B: "#5a7ac0", x: "#f4ecd2",                 // 물
   F: "#46702e", f: "#6a9a3a", v: "#9cc45a", m: "#4a7048",                 // 가스·상승
+  q: "#f6d2a8", Q: "#d79a6e", R: "#a8664a",                                // 손 (튜토리얼 손가락)
 })
 const S = 48, C = 24, TAU = Math.PI * 2
 const ease = (t) => 1 - (1 - t) ** 2
@@ -131,3 +132,16 @@ anim("fx_pulse", { w: S, h: S, frames: 6, fps: 12 }, (c) => {
 sheet("fx", ["fx_*"], { pad: 0 })
 scene("fx_demo", { w: 5 * S, h: 2 * S, bg: "K" },
   ...["fx_hit", "fx_dirt", "fx_rock", "fx_vein", "fx_daebak", "fx_gas", "fx_water", "fx_collapse", "fx_cart", "fx_pulse"].map((n, i) => stamp(n, (i % 5) * S, Math.floor(i / 5) * S, { frame: 2 })))
+
+// 튜토리얼 손가락 (온보딩 §2): 0 가리키기 · 1 누르기 · 2 끌기 — 32×32, 손끝 = (9, 2). 게임이 프레임을 골라 씀
+anim("ui_hand", { w: 32, h: 32, frames: 3, fps: 3, outline: "k" }, (c) => {
+  const f = c.frame, dy = f ? 2 : 0
+  if (f === 1) { c.circ(9, 3, 4, "L"); c.circ(9, 3, 2, "x") }                      // 누르는 곳 링
+  if (f === 2) { c.hline(18, 6, 6, "I"); c.hline(20, 9, 5, "I"); c.hline(18, 12, 6, "I") }   // 끌기 줄
+  const fy = 2 + dy + (f === 1 ? 1 : 0)
+  c.rect(7, fy, 5, 13 - (f === 1 ? 1 : 0), "q"); c.vline(11, fy + 1, 11, "Q"); c.px(8, fy + 1, "x")     // 검지
+  c.rect(6, 13 + dy, 15, 11, "q"); c.rect(17, 14 + dy, 4, 9, "Q")                 // 손바닥
+  c.rect(12, 12 + dy, 4, 4, "q"); c.rect(16, 13 + dy, 4, 4, "q"); c.rect(20, 15 + dy, 3, 4, "Q")   // 접은 손가락
+  c.rect(2, 16 + dy, 5, 4, "q"); c.hline(2, 19 + dy, 5, "Q")                       // 엄지
+  c.rect(7, 24 + dy, 14, 5, "b"); c.hline(7, 24 + dy, 14, "B")                     // 소매
+})
