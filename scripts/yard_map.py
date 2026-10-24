@@ -11,7 +11,9 @@ from tiled_render import load_tsx, autotile, render, pick
 PACK, OUT = sys.argv[1], sys.argv[2]; MOCK = "--mock" in sys.argv
 T = 16; W, H = 960, 540; GW, GH = W // T, (H + T - 1) // T
 TS = lambda n: load_tsx(os.path.join(PACK, "Tiled", "Tilesets", n + ".tsx"))
-A = lambda p: Image.open(os.path.join(PACK, "Art", p)).convert("RGBA")
+NAMES = {}
+def A(p):
+    im = Image.open(os.path.join(PACK, "Art", p)).convert("RGBA"); NAMES[id(im)] = os.path.splitext(os.path.basename(p))[0].lower(); return im
 rng = random.Random(11); os.makedirs(OUT, exist_ok=True)
 def noise(x, s=1.0):                                                       # 부드러운 1D 노이즈
     return sum(math.sin(x * f * s + p) * a for f, p, a in ((0.013, 1.3, 1.0), (0.031, 4.1, 0.5), (0.071, 2.2, 0.25))) / 1.75
@@ -116,9 +118,14 @@ trees = [A(f"Trees and Bushes/Tree_Emerald_{i}.png") for i in (1, 2, 3, 4)]
 bushes = [A(f"Trees and Bushes/Bush_Emerald_{i}.png") for i in range(1, 8)]
 small_bush = bushes[4:]; big_bush = bushes[:4]
 rocks = [A(f"Rocks/Rock_Brown_{i}.png") for i in (1, 2, 4, 6, 9)]
-P = lambda n: A(f"Props/{n}.png")
+_pc = {}
+def P(n):
+    if n not in _pc: _pc[n] = A(f"Props/{n}.png")
+    return _pc[n]
 def strip(p, fw):
-    im = A(p); return [im.crop((i * fw, 0, i * fw + fw, im.height)) for i in range(im.width // fw)]
+    im = A(p); n = NAMES[id(im)]; out = [im.crop((i * fw, 0, i * fw + fw, im.height)) for i in range(im.width // fw)]
+    for i, f in enumerate(out): NAMES[id(f)] = f"{n}_f{i}"
+    return out
 flowers = [strip("Props/Animation/Flowers_Red.png", 32)[0], strip("Props/Animation/Flowers_White.png", 32)[0]]
 fires = strip("Props/Animation/Animation_Campfire.png", 32)
 objs = []                                                                  # (img, x, y_bottom)
@@ -161,7 +168,7 @@ def entrance():
             for x in range(cx - 8, cx + 8):
                 if px[x, y] != RAIL: px[x, y] = TIE
     return im
-put(entrance(), ENTRANCE[0], ENTRANCE[1] + 16, force=True)
+ENT = entrance(); NAMES[id(ENT)] = "mine_entrance"; put(ENT, ENTRANCE[0], ENTRANCE[1] + 16, force=True)
 put(P("Banner_Stick_1_Purple"), ENTRANCE[0] - 78, ENTRANCE[1] + 18, force=True); put(P("LampPost_3"), ENTRANCE[0] - 110, ENTRANCE[1] + 30, force=True)
 put(P("Crate_Large_Empty"), ENTRANCE[0] + 48, ENTRANCE[1] + 34, force=True); put(P("Crate_Medium_Closed"), ENTRANCE[0] + 62, ENTRANCE[1] + 40, force=True); put(P("Sack_3"), ENTRANCE[0] + 36, ENTRANCE[1] + 42, force=True)
 # 모닥불 광장
@@ -208,9 +215,16 @@ for _ in range(18):
 for f in range(4):
     render(W, H, [(gTS, gt), (rTS, rt), (wTS, wt), (lTS, lt)], [], frame=f, bg=(160, 147, 138, 255)).save(os.path.join(OUT, f"yard_ground_f{f}.png"))
 render(W, H, [], objs).save(os.path.join(OUT, "yard_props_all.png"))
+os.makedirs(os.path.join(OUT, "props"), exist_ok=True); saved = set()
+for im, x, by in objs:
+    n = NAMES[id(im)]
+    if n not in saved: im.save(os.path.join(OUT, "props", n + ".png")); saved.add(n)
+for i, f in enumerate(fires): f.save(os.path.join(OUT, "props", f"campfire_f{i}.png"))
 json.dump({"size": [W, H], "lots": [{"id": i, "cx": cx, "by": by, "w": LOT_W, "h": LOT_H} for i, (cx, by) in enumerate(LOTS)],
            "entrance": ENTRANCE, "spine": SPINE, "branches": [BR1, BR2], "campfire": [806, 344],
-           "objects": [{"x": x, "by": by, "w": im.width, "h": im.height} for im, x, by in objs],
+           "objects": [{"n": NAMES[id(im)], "x": x, "by": by} for im, x, by in objs],
+           "idleSpots": [[790, 362], [826, 366], [760, 346], [404, 300], [96, 300], [620, 300], [300, 500], [700, 440]],
+           "lamps": [[236, 170], [452, 174], [668, 178], [110, 260], [604, 260], [758, 270]], "credit_line": "타일·건물·나무: The Fan-tasy Tileset (Free) — Ventilatore",
            "credit": "The Fan-tasy Tileset (Free) by Ventilatore — non-commercial use"}, open(os.path.join(OUT, "yard_v5.json"), "w"), indent=0)
 if MOCK:
     KIT = sys.argv[sys.argv.index("--mock") + 1] if len(sys.argv) > sys.argv.index("--mock") + 1 else None

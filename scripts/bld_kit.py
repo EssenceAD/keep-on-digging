@@ -115,14 +115,38 @@ for name, sp in SPEC.items():
         im.alpha_composite(house, (cx - house.width // 2, by - house.height))
         if sp.get("chimney"):
             fx, fy = sp["chimney"]; x = cx - house.width // 2 + int(house.width * fx); y = by - house.height + int(house.height * fy)
-            im.alpha_composite(CHIMNEY_BIG, (x, y)); im.alpha_composite(SMOKE[0], (x - 1, max(0, y - 27)))
+            im.alpha_composite(CHIMNEY_BIG, (x, y)); smoke_at = (x - 1, y - 27)
         props = sp["props"] if lv >= 3 else sp["props"][:2]
         for p, dx, dy in sorted(props, key=lambda p: p[2]):
             pi = P(p) if isinstance(p, str) else p
             ox = cx + (house.width // 2 + 6 if dx > 0 else -house.width // 2 - 6) + (dx - (40 if dx > 0 else -40)) // 2
             im.alpha_composite(pi, (int(ox - pi.width // 2), by + dy - pi.height))
-        bb = im.getbbox(); im = im.crop(bb); im.save(os.path.join(OUT, f"{name}_{lv}.png")); lineup.append((name, lv, im))
+        bb = im.getbbox(); im = im.crop(bb)
+        if sp.get("chimney"): ANCHOR[f"{name}_{lv}_smoke"] = [smoke_at[0] - bb[0], smoke_at[1] - bb[1]]   # 연기 그림(16×28) 왼위 자리; im.save(os.path.join(OUT, f"{name}_{lv}.png")); lineup.append((name, lv, im))
         ANCHOR[f"{name}_{lv}"] = [cx - bb[0], by - bb[1]]                       # 그림 안에서 건물 바닥 가운데
+# ------------------------------------------------------------ 빈 터 (공사 예정지) · 잠긴 터 — 180×60, 바닥 가운데 = (90, 52)
+def lot_site(kind):
+    im = Image.new("RGBA", (180, 64)); c = lambda k: tuple(hx(PAL[k])) + (255,)
+    L, R, Tp, Bt = 18, 162, 14, 52
+    stake = sprite([".kk.", "kttk", "ktnk", "knnk", "knnk", "knnk", "kbbk", "kkkk"], PAL)
+    posts = [(x, Tp) for x in (L, 66, 114, R)] + [(x, Bt) for x in (L, 54, 126, R)] + [(L, 33), (R, 33)]
+    def rope(x0, y0, x1, y1):
+        n = max(abs(x1 - x0), abs(y1 - y0))
+        for i in range(n + 1):
+            t = i / n; x = round(x0 + (x1 - x0) * t); y = round(y0 + (y1 - y0) * t + 2.2 * np.sin(np.pi * t))
+            im.putpixel((x, y), c("t")); im.putpixel((x, y + 1), c("n"))
+    if kind != "locked_b":
+        for a, b in (((L, Tp), (66, Tp)), ((66, Tp), (114, Tp)), ((114, Tp), (R, Tp)), ((L, Tp), (L, 33)), ((L, 33), (L, Bt)), ((R, Tp), (R, 33)), ((R, 33), (R, Bt)), ((L, Bt), (54, Bt)), ((126, Bt), (R, Bt))):
+            rope(a[0], a[1] - 6, b[0], b[1] - 6)
+        for x, y in sorted(posts, key=lambda p: p[1]): im.alpha_composite(stake, (x - 2, y - 8))
+    stuff = {"a": [("Crate_Large_Empty", 40, 40), ("Crate_Medium_Closed", 56, 44), ("Sack_3", 132, 42), ("Sign_1", 150, 64)],
+             "b": [("Chopped_Tree_1", 44, 46), (COAL, 128, 40), ("Barrel_Small_Empty", 140, 44), ("Sign_1", 150, 64)],
+             "locked": [(A("Trees and Bushes/Bush_Emerald_1.png"), 44, 46), (A("Trees and Bushes/Bush_Emerald_3.png"), 120, 44), (A("Trees and Bushes/Bush_Emerald_2.png"), 86, 54), (A("Rocks/Rock_Brown_4.png"), 146, 48), (A("Trees and Bushes/Bush_Emerald_5.png"), 70, 34)], "locked_b": []}[kind]
+    for p, x, y in sorted(stuff, key=lambda s: s[2]):
+        pi = P(p) if isinstance(p, str) else p; im.alpha_composite(pi, (x - pi.width // 2, min(64, y) - pi.height))
+    return im
+for k in ("a", "b", "locked"): lot_site(k).save(os.path.join(OUT, f"lot_site_{k}.png"))
+ANCHOR["lot_site"] = [90, 52]
 import json; json.dump(ANCHOR, open(os.path.join(OUT, "anchors.json"), "w"), indent=0)
 if "--preview" in sys.argv:
     cols = 3; cw = max(i.width for *_, i in lineup) + 12; ch = max(i.height for *_, i in lineup) + 12
