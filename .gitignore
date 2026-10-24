@@ -4,3 +4,4 @@ art/**/out
 art/conv
 art/raw/audio/**/*.wav
 art/yard/out/
+__pycache__/
