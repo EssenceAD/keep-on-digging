@@ -36,6 +36,9 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.3.3
+- 음악 라디오: 경매(auction)·결과(result)만 상황곡, 나머지는 title·mine_1·mine_2·yard_day·yard_night 무작위 연속(같은 곡 연속 없음). 상황곡 동안 라디오 곡은 멈췄다가 그 자리부터 이어서. 대박(jackpot)은 5초(끝 0.8초 페이드), 덕킹도 5초.
+
 ## v1.3.2
 - 오류 토스트 반복: `blonde_swing` 애니가 없어 금발 광부가 캐기에 들어가면 매 프레임 `actor: …reading 'dur'`. `animOf`로 없는 애니는 같은 광부 idle → red 같은 동작으로 대신.
 

@@ -26,7 +26,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.3.2';
+const VERSION = 'v1.3.3';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -1206,13 +1206,13 @@ setInterval(onboardWatch, 400);
 /** 장면 ↔ 곡: 인수인계·설명서·튜토리얼 title · 회사 낮/밤 · 돌아오셨군요 밤 · 갱도 뒷산/폐광 · 경매 · 결과 (+ 앰비언스) */
 function musicTick() {
   const st = state();
-  let m, a = null;
-  if (introView || manualView || tutOn()) m = 'title';
-  else if (welcome) { m = 'yard_night'; a = 'yard_night'; }
-  else if (view === 'company') { m = isNight() ? 'yard_night' : 'yard_day'; a = isNight() ? 'yard_night' : 'yard_day'; }
+  let m = 'radio', a = null;                                               // v1.3.3: 경매·결과 말고는 라디오(무작위 연속)
+  if (introView || manualView || tutOn()) {}
+  else if (welcome) a = 'yard_night';
+  else if (view === 'company') a = isNight() ? 'yard_night' : 'yard_day';
   else if (st === 'AUCTION') m = 'auction';
   else if (st === 'RESULT') m = 'result';
-  else { m = S.round?.card?.floor === 2 ? 'mine_2' : 'mine_1'; a = 'mine'; }
+  else a = 'mine';
   if (st === 'SURVEY' || st === 'DIG') a = 'mine';
   music(m); ambience(a);
 }
