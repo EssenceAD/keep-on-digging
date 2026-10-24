@@ -1,0 +1,106 @@
+{
+ "frames": {
+  "yard_ripple_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 224
+   },
+   "duration": 333
+  },
+  "yard_ripple_1": {
+   "frame": {
+    "x": 40,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 224
+   },
+   "duration": 333
+  },
+  "yard_ripple_2": {
+   "frame": {
+    "x": 80,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 224
+   },
+   "duration": 333
+  },
+  "yard_ripple_3": {
+   "frame": {
+    "x": 120,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 224
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 224
+   },
+   "duration": 333
+  }
+ },
+ "meta": {
+  "app": "pxl",
+  "image": "yard_ripple.png",
+  "format": "RGBA8888",
+  "size": {
+   "w": 160,
+   "h": 224
+  },
+  "scale": "1",
+  "frameTags": [
+   {
+    "name": "yard_ripple",
+    "from": 0,
+    "to": 3,
+    "direction": "forward"
+   }
+  ]
+ }
+}
