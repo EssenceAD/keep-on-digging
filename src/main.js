@@ -28,7 +28,7 @@ const ORE_COLOR = { C: 0xb87a4a, s: 0x7c7a92, g: 0xb8862a, j: 0x8a4ab0, c: 0x2fa
 import { newSeed } from './rng.js';
 
 TextureSource.defaultOptions.scaleMode = 'nearest';
-const VERSION = 'v1.8.1';
+const VERSION = 'v1.8.2';
 
 // ---------------------------------------------------------------- 저장 (명세2 §12: 로컬 자동 저장 5초마다 + 닫을 때)
 const S = loadSave();
@@ -1668,7 +1668,7 @@ function makeCompany(x, y, w, h) {
   const c = new Container();
   const iconH = Math.round(48 / L.uiS), listH = placing ? 30 : 2 * (iconH + 13) + 24;
   const areaH = h - listH;
-  c.addChild(new Graphics().rect(x, y, w, areaH).fill(0x2f6a34).rect(x, y, w, areaH).fill({ color: Y5_SHADE[yardPhase()] === 0xffffff ? 0x2f6a34 : 0x1a2440, alpha: yardPhase() === 'day' ? 0 : 0.5 }));   // V14: 장면 밖 = 숲 짙은 초록 (옛 forest_fill 대신)
+  c.addChild(new Graphics().rect(x, y, w, areaH).fill(0x2a594a));   // V14 §1: 장면이 안 채우는 테두리 = 어두운 숲색
   const site = makeSite(w, areaH); site.position.set(x, y); c.addChild(site);
   ui.overlayRect = { x: x * L.uiS, y: y * L.uiS, w: w * L.uiS, h: h * L.uiS };
   const tag = label(`🏗 ${openLots(S).length}/${YARD.lots.length}`, { small: true, color: COLOR.gold }); const tg = new Graphics().rect(x + 2, y + 2, Math.ceil(tag.width) + 8, 13).fill({ color: 0x0b0910, alpha: 0.55 }); tag.position.set(x + 6, y + 3); c.addChild(tg, tag);   // 빈 터 n/10 (작게)
@@ -1740,7 +1740,9 @@ function glowTex() {
 const yardWalkers = new Map();                               // 부지 광부 자리 (화면을 다시 그려도 이어서)
 let siteDragged = false, yardPan = null, yardPanY = null;   // 끌기 (CSS px, 처음 = 사무소 터 가운데)
 /** 장면 배율 (V14 §1, 정수만): 960×540 — PC 2×(1920×1080) · 세로 폰 1× · 가로 폰 1~2× (넘치면 끌어 봄) */
-const yardScale = () => (L.portrait ? 1 : Math.max(1, Math.min(2, Math.round((L.full.x1 - L.full.x0) / Y5.size[0]))));
+/** 부지 배율 (V14 §1): 기기 px 기준 정수만 — 세로 폰 = 높이에 맞춤(좌우 끌기) · 그 밖 = 폭에 맞춤. 돌려줌: CSS px 배율 (= 정수 ÷ dpr) */
+const yardScaleDev = (PW, PH) => { const d = L.dpr, [SW, SH] = Y5.size; return Math.max(1, Math.floor(L.portrait ? (PH * d) / SH : (PW * d) / SW)); };
+const yardScale = () => yardScaleDev((L.full.x1 - L.full.x0), (L.full.y1 - L.full.y0)) / L.dpr;
 const _y5Sheet = {};
 function y5Frames(who, act) {
   const key = `${who}_${act}`; if (_y5Sheet[key]) return _y5Sheet[key];
@@ -1777,20 +1779,23 @@ function y5Route(a, b) {
 /** 부지 장면 (PATCH_V14): yard5 바닥 4프레임 위에 소품·건물(빈 터)·광부를 바닥 y로 정렬. 장식·어울림은 이번엔 숨김 */
 function makeSite(sw, sh) {
   const c = new Container(), phase = yardPhase(), night = phase === 'night', dusk = phase === 'dusk', [SW, SH] = Y5.size;
-  const k = yardScale(), shade = Y5_SHADE[phase];
+  const PW = sw * L.uiS, PH = sh * L.uiS, dpr = L.dpr;       // 장면 자리 (CSS px)
+  const k = yardScaleDev(PW, PH) / dpr, shade = Y5_SHADE[phase];   // k = CSS px 배율 (기기 px로는 정수)
   const view = new Container(); c.addChild(view);
   const mask = new Graphics().rect(0, 0, sw, sh).fill(0xffffff); c.addChild(mask); view.mask = mask;
   const sc = new Container(); view.addChild(sc);
   sc.scale.set(k / L.uiS);
-  const PW = sw * L.uiS, PH = sh * L.uiS;                    // 장면 자리 (CSS px)
-  const minX = Math.min(0, PW - SW * k), centerX = Math.round((PW - SW * k) / 2), minY = Math.min(0, PH - SH * k), centerY = Math.round((PH - SH * k) / 2);
+  const sceneMask = new Graphics().rect(0, 0, SW, SH).fill(0xffffff); sc.addChild(sceneMask); sc.mask = sceneMask;   // 장면(960×540) 밖은 잘라냄
+  const minX = Math.min(0, PW - SW * k), centerX = (PW - SW * k) / 2, minY = Math.min(0, PH - SH * k), centerY = (PH - SH * k) / 2;
   const ol = Y5.lots[S.company.buildings.office?.lot ?? 1] ?? Y5.lots[1];
   if (yardPan == null) yardPan = Math.round(PW / 2 - ol.cx * k);
   if (yardPanY == null) yardPanY = Math.round(PH / 2 - (ol.by - 50) * k);
   const clampPanX = (v) => (minX < 0 ? Math.max(minX, Math.min(0, v)) : centerX);
   const clampPanY = (v) => (minY < 0 ? Math.max(minY, Math.min(0, v)) : centerY);
   yardPan = clampPanX(yardPan); yardPanY = clampPanY(yardPanY);
-  const placeSc = () => { sc.position.set(Math.round(yardPan) / L.uiS, Math.round(yardPanY) / L.uiS); };
+  let ax = 0, ay = 0;                                          // 부지 자리 원점이 기기 px 사이에 걸리면 그만큼 밀어 맞춤
+  const placeSc = () => { sc.position.set((Math.round(yardPan * dpr) / dpr + ax) / L.uiS, (Math.round(yardPanY * dpr) / dpr + ay) / L.uiS); };
+  const alignSc = () => { ax = ay = 0; placeSc(); const g = sc.getGlobalPosition(); ax = Math.round(g.x * dpr) / dpr - g.x; ay = Math.round(g.y * dpr) / dpr - g.y; placeSc(); };
   placeSc();
   if (minX < 0 || minY < 0) {                                  // 끌기 (탭과 구분: 4px 넘게 움직이면 끌기)
     c.eventMode = 'static'; c.hitArea = new Rectangle(0, 0, sw, sh);
@@ -1914,7 +1919,9 @@ function makeSite(sw, sh) {
   if (!night) glows.alpha = 0.6;
   sc.addChild(glows);
   let tt = 0;
+  let aligned = false;
   ui.coTick = (dt) => {
+    if (!aligned && !sc.destroyed) { aligned = true; alignSc(); }
     tt += dt; drawMarks(tt);
     if (yardPhase() !== phase) { ui.coTick = null; setTimeout(buildUI, 0); return; }      // 낮 → 해질녘 → 밤 바뀌면 장면 다시
     if (bg.destroyed) return;
@@ -2573,18 +2580,19 @@ function makeHud(w, h, vertical = false) {
   const c = new Container();
   c.addChild(frame('wood', w, h));
   const btns = [];
-  if (S.prestige?.rep || isOpen(S, 'shares')) btns.push(['union', button(shareOpenToday() || S.region?.cleared ? 'wood' : 'stone', 34, 15, `★${S.prestige?.rep ?? 0}`, openUnion, { small: true })]);   // 6-4: 평판 · 조합
-  if (S.unl && Object.keys(S.unl.got).length > (S.unl.seen ?? 0)) btns.push(['unl', button('wood', 20, 15, '!', openUnlocks, { small: true })]);   // 6-3 §4: 새로 열린 것
+  const narrow = !vertical && w < 330;                                   // 세로 폰: HUD 버튼 줄임 (숫자 안 가리게)
+  if (S.prestige?.rep || isOpen(S, 'shares')) btns.push(['union', button(shareOpenToday() || S.region?.cleared ? 'wood' : 'stone', narrow ? 30 : 34, 15, `★${S.prestige?.rep ?? 0}`, openUnion, { small: true })]);   // 6-4: 평판 · 조합
+  if (!narrow && S.unl && Object.keys(S.unl.got).length > (S.unl.seen ?? 0)) btns.push(['unl', button('wood', 20, 15, '!', openUnlocks, { small: true })]);   // 6-3 §4: 새로 열린 것
   if (S.tutorial.done || S.tutorial.deferred) {
     const tl = talentLeft(S);
-    btns.push(['talents', button(tl > 0 ? 'wood' : 'stone', 46, 15, tl > 0 ? `특성${tl}` : '특성', openTalents, { small: true })]);
+    btns.push(['talents', button(tl > 0 ? 'wood' : 'stone', narrow ? 34 : 46, 15, tl > 0 ? (narrow ? `특${tl}` : `특성${tl}`) : '특성', openTalents, { small: true })]);
     if (SHOW_COMPANY) btns.push(['company', button(view === 'company' ? 'paper' : 'stone', 46, 15, view === 'company' ? '광산' : '회사', () => (view === 'company' ? closeCompany() : openCompany()), { small: true })]);
   }
   const items = [['coin', kit('coin')], ['rate', tex('pickaxe')], ['wh', tex('icon_gold')], ['clock', null]];   // 명세6-1: 💰 ⛏/초 📦 🕒
   if (!vertical) {
     const cy = Math.round((h - 14) / 2);
     let xa = 6;
-    const room = w - 6 - btns.length * 48;
+    const room = w - 6 - btns.reduce((a, [, b]) => a + b.width + 2, 0);
     items.forEach(([key, tx]) => {
       const i = tx ? icon(tx) : new Container(), n = label('0', { small: key === 'clock' || room < 120 });   // 좁으면 숫자도 본문 크기
       i.position.set(xa, cy + Math.round((14 - (tx ? i.height : 0)) / 2)); n.position.set(xa + (tx ? i.width + 3 : 0), cy + (key === 'clock' ? 1 : 0));
@@ -2593,6 +2601,7 @@ function makeHud(w, h, vertical = false) {
       n.reserve = key === 'coin' ? 7 : key === 'wh' ? 7 : key === 'rate' ? 7 : 0;               // 자리: 숫자가 바뀌어도 안 밀리게 (글자 수)
       xa = n.x + Math.max(n.width, n.reserve * (room < 120 ? 5 : 6)) + (room < 120 ? 5 : 8);
       if (key === 'clock' && n.x + 44 > room) { n.visible = false; }
+      else if (key !== 'coin' && n.x + n.reserve * (room < 120 ? 5 : 6) > room) { n.visible = false; i.visible = false; }   // 자리 없으면 숨김 (버튼에 안 가리게)
     });
     { let bx = w - 2; for (let i = btns.length - 1; i >= 0; i--) { const [k, b] = btns[i]; bx -= b.width + 2; b.position.set(bx, Math.round((h - 15) / 2)); c.addChild(b); ui.refs[k] = b; } }
   } else {

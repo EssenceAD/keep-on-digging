@@ -36,6 +36,11 @@
 
 변환 손실 점검(원본 ↔ png2pxl ×4): `docs/preview/convert_check_*.png` (`py scripts/convert_check.py`). 길드 대표는 32×40에서 뭉개져 64×80으로 다시 변환.
 
+## v1.8.2 (PATCH_V14 §1 다시)
+- 부지 배율 = 기기 px 정수(yardScaleDev): 세로 폰은 높이에 맞춤(좌우 끌기), 그 밖은 폭에 맞춤(넘치면 위아래 끌기). CSS 배율 = 정수 ÷ dpr이라 dpr 1.25 같은 화면에서도 소수 배율이 안 생김. 장면 위치도 기기 px로 맞춤(첫 프레임 alignSc). 이전엔 CSS px 기준 round → dpr이 정수가 아니면 1.07배 같은 배율.
+- 장면(960×540) 마스크로 밖에 그려지던 소품·나무 잘라냄. 남는 테두리 #2a594a 단색.
+- HUD: 폭 좁으면 ★·특성 버튼 줄이고 ! 숨김, 자리 없는 숫자는 숨김(가리지 않게).
+
 ## v1.8.1 (PATCH_V14 §7)
 - 지역 부지 = yard5/region{N}/ 의 yard_ground_f0~3 · props · yard_v5.json (지역 1은 yard5/). 사람·건물·갱도 타일은 yard5/ 공용. 부팅 때 저장된 지역 것을 읽고, 이사 때 loadRegionArt(새 지역) 뒤 이사 장면. 지역 색 입히기(region.tint·mulT) 삭제.
 
