@@ -3,6 +3,7 @@
 // 건물 Lv = 장비 Lv − min (명세5 §3, upgrades 한 표). 어울림 = 같은 구역(위/아래)에 둘 다 있으면.
 import { B } from './balance.js';
 import YARD from '../art/yard/yard_lots.json';
+import { ENGINE_BLD, ENGINE_UP, engineCost, engineText, ensureEngine, smeltOf, whCapOf } from './engine.js';
 export { YARD };
 
 const C = B.company;
@@ -22,6 +23,7 @@ export function ensureCompany(S) {
   co.buildings.office ??= {}; co.buildings.office.lot ??= YARD.lots.find((l) => l.default === 'office')?.id ?? 0;
   co.decos = co.decos.filter((d) => d && C.decos[d.kind]);
   for (const d of co.decos) if (d.spot == null) { const used = new Set(co.decos.map((q) => q.spot)); d.spot = YARD.decoSpots.findIndex((_, i) => !used.has(i)); delete d.x; delete d.y; }
+  ensureEngine(S);                         // 명세6-1: 엔진 (옛 건물 Lv → 같은 Lv)
   autoPlace(S);
   if (S.talents.v !== 2) {                 // 명세5 §4: 5단 → 8단으로 바뀜 — 찍은 것 돌려주고, 지난 라운드 수만큼 포인트
     Object.assign(S.talents, { survey: 0, dig: 0, trade: 0, v: 2, earned: S.talents.earned ?? (S.stats?.rounds ?? 0) * B.talents.minPerRound });
@@ -32,7 +34,8 @@ export function ensureCompany(S) {
 export const UP = B.upgrades;
 export const UP_KEYS = Object.keys(UP);
 export const BUILD_UP = Object.fromEntries(UP_KEYS.filter((k) => UP[k].building).map((k) => [UP[k].building, k]));
-export const upLv = (S, k) => S.upgrades?.[k] ?? UP[k].min;
+/** 장비 Lv — 엔진 업글(곡괭이·숙소·광차·창고·제련)은 엔진 Lv를 옛 표 최대까지 (원정용) */
+export const upLv = (S, k) => (S.engine && ENGINE_UP[k] ? Math.max(UP[k].min, Math.min(UP[k].max, S.engine.lv[ENGINE_UP[k]])) : S.upgrades?.[k] ?? UP[k].min);
 const upV = (S, k, f) => UP[k][f][upLv(S, k)];
 /** 처음 한 번: 예전 회사 건물 Lv → 장비 Lv */
 export function ensureUpgrades(S) {
@@ -40,7 +43,7 @@ export function ensureUpgrades(S) {
   S.upgrades = {};
   for (const k of UP_KEYS) S.upgrades[k] = Math.min(UP[k].max, UP[k].min + (UP[k].building ? S.company.buildings[UP[k].building]?.lv ?? 0 : 0));
 }
-export const upCostOf = (S, k) => (upLv(S, k) >= UP[k].max ? null : UP[k].cost[upLv(S, k)]);
+export const upCostOf = (S, k) => (S.engine && ENGINE_UP[k] ? engineCost(S, ENGINE_UP[k]) : upLv(S, k) >= UP[k].max ? null : UP[k].cost[upLv(S, k)]);
 /** 장비 한 줄: 지금 → 다음 */
 export function upText(S, k) {
   const lv = upLv(S, k), n = Math.min(UP[k].max, lv + 1), u = UP[k], top = lv >= u.max;
@@ -59,7 +62,7 @@ export function upText(S, k) {
   }
   return '';
 }
-export const lvOf = (S, k) => (k === 'office' ? S.company.coreLv : BUILD_UP[k] && S.upgrades ? upLv(S, BUILD_UP[k]) - UP[BUILD_UP[k]].min : S.company.buildings[k]?.lv ?? 0);
+export const lvOf = (S, k) => (S.engine && ENGINE_BLD[k] ? S.engine.lv[ENGINE_BLD[k]] : k === 'office' ? S.company.coreLv : BUILD_UP[k] && S.upgrades ? upLv(S, BUILD_UP[k]) - UP[BUILD_UP[k]].min : S.company.buildings[k]?.lv ?? 0);
 /** 열린 빈 터: 처음 6곳 + 사무소 Lv2·3·4·5마다 덤불 걷힌 곳 1곳씩 */
 export function openLots(S) {
   const locked = YARD.lots.filter((l) => l.locked);
@@ -86,6 +89,7 @@ export function upCost(S, k) {
   const lv = lvOf(S, k);
   if (k === 'office') return lv >= 5 ? null : C.officeCost[lv - 1];
   if (C.decos[k]) return S.company.decos.some((d) => d.kind === k) ? null : C.decos[k].cost;
+  if (S.engine && ENGINE_BLD[k]) return engineCost(S, ENGINE_BLD[k]);   // 엔진 건물: 무한
   return BUILD_UP[k] ? upCostOf(S, BUILD_UP[k]) : null;              // 건물 = 장비 (같은 값)
 }
 export const bldMax = (k) => (BUILD_UP[k] ? UP[BUILD_UP[k]].max - UP[BUILD_UP[k]].min : 5);
@@ -155,11 +159,13 @@ export function companyFx(S) {
     guildMul: 1 + add.guildMul,
     sellMul: 1 + add.sellMul + (tr >= 4 ? TL.sellAdd[1] : tr >= 1 ? TL.sellAdd[0] : 0),
     plotSizes: S.company.coreLv >= C.lPlotLv ? ['S', 'M', 'L'] : ['S', 'M'],
+    ...(S.engine ? { whCap: whCapOf(S.engine.lv.warehouse), smeltSlots: smeltOf(S.engine.lv.smelter).slots, smeltSec: smeltOf(S.engine.lv.smelter).sec / (1 + add.smeltMul) } : {}),   // 명세6-1 엔진
   };
 }
 
 /** 목록 한 줄 설명: 지금 → 다음 */
 export function effectText(S, k) {
+  if (S.engine && ENGINE_BLD[k]) return engineText(S, ENGINE_BLD[k]);   // 엔진 건물
   if (BUILD_UP[k]) return upText(S, BUILD_UP[k]);                  // 건물 = 장비 (같은 표)
   const lv = lvOf(S, k), b = C.buildings[k], n = Math.min(5, lv + 1);
   const arrow = (arr, unit = '') => (lv >= 5 ? `${arr[lv]}${unit}` : `${arr[lv]}${unit} → ${arr[n]}${unit}`);

@@ -262,4 +262,27 @@ export const B = {
     crewAdd: 2,                     // 광부 조 +1 = 광부 2명 + 캐는 사람 1명
     chainRange: 2,                  // 인접 광맥: 이 칸 거리 안
   },
+
+  // ---------------------------------------------------------------- 엔진 (명세6-1): 캐기 → 나르기 → 창고 3단 병목 · 무한 업글 · 방치
+  //  비용(Lv) = base × mul^(Lv − start) · 효과는 선형 + milestones Lv에서 ×2 (곡괭이 속도 · 광차 적재)
+  engine: {
+    firstMine: { name: '뒷산 1호', rows: 10, reserve: 1500, depth: 1.0, oreMix: { C: 0.75, s: 0.17, g: 0.06, j: 0.01, c: 0.01 } },
+    oreRank: { C: 0, s: 1, g: 2, j: 3, c: 3 },        // 깊을수록(depth) 귀한 쪽 가중: 비율 × depth^rank
+    milestones: [10, 25, 50, 100],
+    up: {
+      pick: { name: '곡괭이', start: 1, base: 40, mul: 1.15 },       // 광부 1명 캐기/초 = pickBase × (1 + pickPerLv(Lv−1)) × 2^마일스톤
+      lodge: { name: '숙소', start: 1, base: 150, mul: 1.22 },       // 광부 = 1 + Lv · 갱도 수 = 1 + ⌊Lv/3⌋ (최대 maxMines)
+      cart: { name: '광차', start: 1, base: 60, mul: 1.16 },         // 적재 = 4 + 2Lv (×2^마일스톤) · 대수 = 1 + ⌊Lv/8⌋ · 왕복 = max(4, 10 − 0.2Lv)초
+      warehouse: { name: '창고', start: 1, base: 50, mul: 1.14 },    // 용량 = ⌊60 × 1.22^(Lv−1)⌋ · 입구 더미 상한 = 용량 ÷ 3
+      smelter: { name: '제련', start: 0, base: 400, mul: 1.3 },      // Lv1 해금 · 슬롯 = 1 + ⌊Lv/5⌋ · 시간 = max(3, 12 − 0.3Lv)초
+    },
+    pickBase: 0.10, pickPerLv: 0.25,
+    cartLoad: [4, 2], cartsEvery: 8, trip: [10, 0.2, 4],
+    whBase: 60, whMul: 1.22, pileDiv: 3,
+    smelt: { slotsEvery: 5, sec: [12, 0.3, 3] },
+    maxMines: 6, minesEvery: 3,
+    reservePerCell: 30, depthMul: 0.8,              // 원정 → 갱도: reserve = 캔 광맥 칸 × 30 · depth = 1 + 최대깊이/줄 × 0.8
+    idleCapHours: 2, idleCapPerLodge: 0.25, idleCapMax: 12,
+    awayCardSeconds: 60,                            // 이만큼 넘게 떠나 있으면 돌아왔을 때 카드
+  },
 };
