@@ -77,7 +77,7 @@ export const B = {
     cart: { name: '광차', building: 'cartShed', min: 1, max: 5, cost: [0, 250, 600, 1300, 2600], load: [0, 10, 12, 15, 18, 20], speed: [0, 3, 3.5, 4, 4.5, 5], carts: [0, 2, 2, 3, 3, 4] },
     lodge: { name: '숙소', building: 'lodge', min: 1, max: 5, cost: [0, 300, 700, 1500, 3000], miners: [0, 3, 4, 5, 6, 7], capHours: [0, 4, 4, 6, 6, 8] },
     warehouse: { name: '창고', building: 'warehouse', min: 1, max: 5, cost: [0, 150, 350, 800, 1600], cap: [0, 60, 120, 200, 320, 500] },
-    mole: { name: '두더지', building: 'moleHouse', min: 1, max: 4, cost: [0, 200, 500, 1100], depth: [0, 3, 4, 6, 99], speed: [0, 14, 17, 20, 24], size: [0, 0, 0, 0, 1] },
+    mole: { name: '꼬물(두더지)', building: 'moleHouse', min: 1, max: 4, cost: [0, 200, 500, 1100], depth: [0, 3, 4, 6, 99], speed: [0, 14, 17, 20, 24], size: [0, 0, 0, 0, 1] },
     vibro: { name: '진동계', min: 1, max: 4, cost: [0, 200, 500, 1100], uses: [0, 2, 3, 4, 5], range: [0, 2, 2, 1, 1], color: [0, 0, 0, 1, 1] },
     lantern: { name: '투시 랜턴', building: 'lanternShop', min: 1, max: 4, cost: [0, 200, 500, 1100], xray: [0, 2, 3, 3, 4], radius: [0, 1, 1, 2, 2] },   // 반경 1 = 3×3 · 2 = 5×5
     smelter: { name: '제련', building: 'smelter', min: 0, max: 3, cost: [400, 900, 2000], sec: [0, 20, 15, 10], slots: [0, 1, 2, 3] },
@@ -219,6 +219,21 @@ export const B = {
   daybook: { perDay: 3, reward: [50, 150] },
 
   // ---------------------------------------------------------------- 특성 트리 (§3): 3갈래 × 5단, 위에서부터 1점씩
+  // ---------------------------------------------------------------- 광부 성격 (명세4 §5 · 명세5 §5) — 개인 숫자
+  traits: {
+    hasty: { name: '성급', text: '채굴 +10% · 사고 ×1.5', dig: 1.1, stun: 1.5 },
+    calm: { name: '느긋', text: '운반 −10% · 가스 면역', carry: 0.9, gasImmune: true },
+    careful: { name: '꼼꼼', text: '유물 +20% · 손 랜턴', relic: 1.2 },
+    diligent: { name: '부지런', text: '운반 +10%', carry: 1.1 },
+  },
+  // 숙소 Lv업마다 다리에서 걸어오는 광부 (명세5 §5) — 이름 · 성격 · 그림(뚱보/금발 몸 + 빛깔)
+  recruits: [
+    { name: '도르', trait: 'hasty', body: 'brown', tint: 0xc8d4ff },
+    { name: '핀', trait: 'diligent', body: 'blonde', tint: 0xffd0b8 },
+    { name: '마르타', trait: 'careful', body: 'blonde', tint: 0xd8ffc8 },
+    { name: '우글', trait: 'calm', body: 'brown', tint: 0xffe0a0 },
+  ],
+
   talents: {                       // 명세5 §4: 3갈래 × 8단, 위에서부터 1점씩. 포인트 = 라운드 별 수(최소 1) + 사무소 Lv
     minPerRound: 1,
     resetCost: 500,                 // 초기화 (처음 한 번은 무료)
