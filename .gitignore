@@ -2,3 +2,4 @@ node_modules
 dist
 art/**/out
 art/conv
+art/raw/audio/**/*.wav
