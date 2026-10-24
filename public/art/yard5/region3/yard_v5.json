@@ -1,0 +1,2201 @@
+{
+"size": [
+960,
+540
+],
+"lots": [
+{
+"id": 0,
+"cx": 130,
+"by": 196,
+"w": 180,
+"h": 128
+},
+{
+"id": 1,
+"cx": 342,
+"by": 206,
+"w": 180,
+"h": 128
+},
+{
+"id": 2,
+"cx": 562,
+"by": 214,
+"w": 180,
+"h": 128
+},
+{
+"id": 3,
+"cx": 782,
+"by": 190,
+"w": 180,
+"h": 128
+},
+{
+"id": 4,
+"cx": 172,
+"by": 414,
+"w": 180,
+"h": 128
+},
+{
+"id": 5,
+"cx": 390,
+"by": 446,
+"w": 180,
+"h": 128
+},
+{
+"id": 6,
+"cx": 660,
+"by": 410,
+"w": 180,
+"h": 128
+},
+{
+"id": 7,
+"cx": 846,
+"by": 500,
+"w": 180,
+"h": 128
+},
+{
+"id": 8,
+"cx": 572,
+"by": 538,
+"w": 180,
+"h": 128
+}
+],
+"entrance": [
+868,
+292
+],
+"spine": [
+[
+-10,
+258
+],
+[
+96,
+262
+],
+[
+206,
+256
+],
+[
+300,
+264
+],
+[
+420,
+270
+],
+[
+520,
+262
+],
+[
+626,
+268
+],
+[
+722,
+260
+],
+[
+806,
+278
+],
+[
+868,
+304
+]
+],
+"branches": [
+[
+[
+300,
+264
+],
+[
+286,
+330
+],
+[
+290,
+410
+],
+[
+300,
+480
+],
+[
+288,
+548
+]
+],
+[
+[
+520,
+262
+],
+[
+520,
+330
+],
+[
+522,
+400
+],
+[
+526,
+470
+],
+[
+520,
+548
+]
+]
+],
+"campfire": [
+806,
+344
+],
+"objects": [
+{
+"n": "mine_entrance",
+"x": 802,
+"by": 308
+},
+{
+"n": "banner_stick_1_purple",
+"x": 778,
+"by": 310
+},
+{
+"n": "lamppost_3",
+"x": 735,
+"by": 322
+},
+{
+"n": "crate_large_empty",
+"x": 904,
+"by": 326
+},
+{
+"n": "crate_medium_closed",
+"x": 922,
+"by": 332
+},
+{
+"n": "sack_3",
+"x": 896,
+"by": 334
+},
+{
+"n": "animation_campfire_f0",
+"x": 790,
+"by": 352
+},
+{
+"n": "bench_1",
+"x": 773,
+"by": 356
+},
+{
+"n": "bench_3",
+"x": 827,
+"by": 358
+},
+{
+"n": "lamppost_3",
+"x": 213,
+"by": 210
+},
+{
+"n": "lamppost_3",
+"x": 429,
+"by": 214
+},
+{
+"n": "lamppost_3",
+"x": 645,
+"by": 218
+},
+{
+"n": "lamppost_3",
+"x": 87,
+"by": 300
+},
+{
+"n": "lamppost_3",
+"x": 581,
+"by": 300
+},
+{
+"n": "bulletinboard_1",
+"x": 24,
+"by": 214
+},
+{
+"n": "sign_2",
+"x": 8,
+"by": 292
+},
+{
+"n": "sign_1",
+"x": 288,
+"by": 486
+},
+{
+"n": "plant_2",
+"x": 191,
+"by": 212
+},
+{
+"n": "bench_3",
+"x": 487,
+"by": 231
+},
+{
+"n": "crate_medium_closed",
+"x": 842,
+"by": 207
+},
+{
+"n": "sack_3",
+"x": 78,
+"by": 431
+},
+{
+"n": "barrel_small_empty",
+"x": 96,
+"by": 429
+},
+{
+"n": "plant_2",
+"x": 497,
+"by": 552
+},
+{
+"n": "barrel_small_empty",
+"x": 650,
+"by": 554
+},
+{
+"n": "tree_emerald_4",
+"x": 825,
+"by": 15
+},
+{
+"n": "tree_emerald_1",
+"x": 733,
+"by": 15
+},
+{
+"n": "tree_emerald_2",
+"x": 386,
+"by": 15
+},
+{
+"n": "tree_emerald_2",
+"x": 35,
+"by": 15
+},
+{
+"n": "tree_emerald_3",
+"x": 917,
+"by": 15
+},
+{
+"n": "tree_emerald_4",
+"x": 613,
+"by": 15
+},
+{
+"n": "tree_emerald_4",
+"x": 659,
+"by": 16
+},
+{
+"n": "tree_emerald_2",
+"x": 529,
+"by": 16
+},
+{
+"n": "tree_emerald_3",
+"x": 490,
+"by": 16
+},
+{
+"n": "tree_emerald_4",
+"x": 353,
+"by": 17
+},
+{
+"n": "tree_emerald_3",
+"x": -1,
+"by": 17
+},
+{
+"n": "tree_emerald_1",
+"x": 421,
+"by": 17
+},
+{
+"n": "tree_emerald_4",
+"x": 885,
+"by": 17
+},
+{
+"n": "tree_emerald_1",
+"x": 561,
+"by": 17
+},
+{
+"n": "tree_emerald_3",
+"x": 76,
+"by": 18
+},
+{
+"n": "tree_emerald_2",
+"x": 969,
+"by": 18
+},
+{
+"n": "tree_emerald_4",
+"x": 172,
+"by": 19
+},
+{
+"n": "tree_emerald_4",
+"x": 283,
+"by": 19
+},
+{
+"n": "tree_emerald_4",
+"x": -42,
+"by": 20
+},
+{
+"n": "tree_emerald_1",
+"x": 225,
+"by": 20
+},
+{
+"n": "tree_emerald_2",
+"x": 858,
+"by": 22
+},
+{
+"n": "tree_emerald_2",
+"x": 471,
+"by": 22
+},
+{
+"n": "tree_emerald_2",
+"x": 419,
+"by": 23
+},
+{
+"n": "tree_emerald_4",
+"x": 140,
+"by": 23
+},
+{
+"n": "tree_emerald_3",
+"x": 690,
+"by": 23
+},
+{
+"n": "tree_emerald_2",
+"x": 548,
+"by": 23
+},
+{
+"n": "tree_emerald_1",
+"x": 57,
+"by": 24
+},
+{
+"n": "tree_emerald_2",
+"x": 618,
+"by": 25
+},
+{
+"n": "tree_emerald_1",
+"x": 469,
+"by": 28
+},
+{
+"n": "tree_emerald_4",
+"x": 789,
+"by": 28
+},
+{
+"n": "tree_emerald_1",
+"x": 693,
+"by": 29
+},
+{
+"n": "tree_emerald_1",
+"x": 351,
+"by": 29
+},
+{
+"n": "tree_emerald_1",
+"x": -36,
+"by": 30
+},
+{
+"n": "tree_emerald_2",
+"x": 542,
+"by": 30
+},
+{
+"n": "tree_emerald_2",
+"x": 268,
+"by": 31
+},
+{
+"n": "tree_emerald_3",
+"x": 576,
+"by": 32
+},
+{
+"n": "tree_emerald_2",
+"x": 632,
+"by": 32
+},
+{
+"n": "tree_emerald_1",
+"x": 24,
+"by": 32
+},
+{
+"n": "tree_emerald_1",
+"x": 175,
+"by": 32
+},
+{
+"n": "tree_emerald_1",
+"x": 839,
+"by": 33
+},
+{
+"n": "tree_emerald_4",
+"x": 973,
+"by": 33
+},
+{
+"n": "tree_emerald_1",
+"x": 390,
+"by": 35
+},
+{
+"n": "tree_emerald_2",
+"x": 115,
+"by": 35
+},
+{
+"n": "tree_emerald_2",
+"x": 907,
+"by": 35
+},
+{
+"n": "tree_emerald_1",
+"x": 722,
+"by": 35
+},
+{
+"n": "tree_emerald_2",
+"x": 806,
+"by": 36
+},
+{
+"n": "tree_emerald_1",
+"x": 453,
+"by": 36
+},
+{
+"n": "tree_emerald_2",
+"x": -49,
+"by": 36
+},
+{
+"n": "tree_emerald_2",
+"x": 236,
+"by": 37
+},
+{
+"n": "tree_emerald_2",
+"x": 24,
+"by": 38
+},
+{
+"n": "tree_emerald_4",
+"x": 298,
+"by": 38
+},
+{
+"n": "tree_emerald_2",
+"x": 946,
+"by": 38
+},
+{
+"n": "tree_emerald_2",
+"x": 238,
+"by": 42
+},
+{
+"n": "tree_emerald_2",
+"x": 100,
+"by": 42
+},
+{
+"n": "tree_emerald_1",
+"x": 801,
+"by": 42
+},
+{
+"n": "tree_emerald_2",
+"x": 56,
+"by": 42
+},
+{
+"n": "tree_emerald_2",
+"x": 618,
+"by": 42
+},
+{
+"n": "tree_emerald_2",
+"x": 689,
+"by": 42
+},
+{
+"n": "tree_emerald_2",
+"x": 583,
+"by": 42
+},
+{
+"n": "tree_emerald_1",
+"x": -24,
+"by": 43
+},
+{
+"n": "tree_emerald_2",
+"x": -58,
+"by": 43
+},
+{
+"n": "tree_emerald_2",
+"x": 849,
+"by": 43
+},
+{
+"n": "tree_emerald_1",
+"x": 393,
+"by": 44
+},
+{
+"n": "tree_emerald_2",
+"x": 897,
+"by": 44
+},
+{
+"n": "tree_emerald_1",
+"x": 743,
+"by": 44
+},
+{
+"n": "tree_emerald_2",
+"x": 961,
+"by": 45
+},
+{
+"n": "tree_emerald_2",
+"x": 191,
+"by": 47
+},
+{
+"n": "tree_emerald_2",
+"x": 444,
+"by": 47
+},
+{
+"n": "tree_emerald_1",
+"x": 344,
+"by": 47
+},
+{
+"n": "tree_emerald_4",
+"x": 510,
+"by": 47
+},
+{
+"n": "tree_emerald_1",
+"x": 558,
+"by": 48
+},
+{
+"n": "tree_emerald_2",
+"x": -38,
+"by": 48
+},
+{
+"n": "tree_emerald_2",
+"x": 261,
+"by": 48
+},
+{
+"n": "tree_emerald_1",
+"x": 15,
+"by": 48
+},
+{
+"n": "tree_emerald_3",
+"x": 655,
+"by": 49
+},
+{
+"n": "tree_emerald_1",
+"x": 766,
+"by": 50
+},
+{
+"n": "tree_emerald_1",
+"x": 145,
+"by": 50
+},
+{
+"n": "tree_emerald_1",
+"x": 475,
+"by": 54
+},
+{
+"n": "tree_emerald_2",
+"x": 251,
+"by": 54
+},
+{
+"n": "tree_emerald_2",
+"x": 852,
+"by": 55
+},
+{
+"n": "tree_emerald_2",
+"x": 15,
+"by": 55
+},
+{
+"n": "tree_emerald_1",
+"x": 667,
+"by": 55
+},
+{
+"n": "tree_emerald_2",
+"x": 428,
+"by": 55
+},
+{
+"n": "tree_emerald_1",
+"x": 783,
+"by": 55
+},
+{
+"n": "tree_emerald_2",
+"x": 95,
+"by": 55
+},
+{
+"n": "tree_emerald_1",
+"x": 194,
+"by": 56
+},
+{
+"n": "tree_emerald_1",
+"x": 376,
+"by": 56
+},
+{
+"n": "tree_emerald_2",
+"x": 133,
+"by": 57
+},
+{
+"n": "tree_emerald_1",
+"x": -54,
+"by": 57
+},
+{
+"n": "tree_emerald_4",
+"x": 612,
+"by": 58
+},
+{
+"n": "tree_emerald_1",
+"x": 492,
+"by": 59
+},
+{
+"n": "tree_emerald_1",
+"x": 70,
+"by": 60
+},
+{
+"n": "tree_emerald_4",
+"x": 310,
+"by": 60
+},
+{
+"n": "tree_emerald_4",
+"x": 736,
+"by": 60
+},
+{
+"n": "tree_emerald_2",
+"x": 34,
+"by": 60
+},
+{
+"n": "tree_emerald_2",
+"x": 865,
+"by": 61
+},
+{
+"n": "tree_emerald_4",
+"x": 929,
+"by": 61
+},
+{
+"n": "tree_emerald_1",
+"x": 352,
+"by": 61
+},
+{
+"n": "tree_emerald_2",
+"x": 579,
+"by": 62
+},
+{
+"n": "tree_emerald_1",
+"x": 970,
+"by": 62
+},
+{
+"n": "tree_emerald_2",
+"x": 171,
+"by": 62
+},
+{
+"n": "tree_emerald_2",
+"x": 406,
+"by": 63
+},
+{
+"n": "tree_emerald_1",
+"x": 437,
+"by": 64
+},
+{
+"n": "tree_emerald_2",
+"x": 650,
+"by": 64
+},
+{
+"n": "tree_emerald_1",
+"x": 935,
+"by": 67
+},
+{
+"n": "tree_emerald_2",
+"x": 835,
+"by": 67
+},
+{
+"n": "tree_emerald_1",
+"x": 557,
+"by": 67
+},
+{
+"n": "tree_emerald_2",
+"x": 522,
+"by": 68
+},
+{
+"n": "tree_emerald_2",
+"x": 441,
+"by": 69
+},
+{
+"n": "tree_emerald_2",
+"x": 648,
+"by": 69
+},
+{
+"n": "tree_emerald_1",
+"x": 286,
+"by": 71
+},
+{
+"n": "tree_emerald_2",
+"x": 738,
+"by": 72
+},
+{
+"n": "tree_emerald_2",
+"x": 362,
+"by": 72
+},
+{
+"n": "tree_emerald_2",
+"x": 528,
+"by": 73
+},
+{
+"n": "tree_emerald_1",
+"x": 102,
+"by": 73
+},
+{
+"n": "tree_emerald_1",
+"x": 676,
+"by": 73
+},
+{
+"n": "tree_emerald_1",
+"x": 4,
+"by": 73
+},
+{
+"n": "tree_emerald_2",
+"x": 496,
+"by": 73
+},
+{
+"n": "tree_emerald_2",
+"x": -28,
+"by": 73
+},
+{
+"n": "tree_emerald_1",
+"x": 883,
+"by": 74
+},
+{
+"n": "tree_emerald_4",
+"x": 775,
+"by": 74
+},
+{
+"n": "tree_emerald_4",
+"x": 618,
+"by": 74
+},
+{
+"n": "tree_emerald_2",
+"x": 158,
+"by": 74
+},
+{
+"n": "tree_emerald_2",
+"x": 450,
+"by": 74
+},
+{
+"n": "tree_emerald_1",
+"x": 237,
+"by": 75
+},
+{
+"n": "tree_emerald_2",
+"x": 69,
+"by": 75
+},
+{
+"n": "tree_emerald_2",
+"x": 959,
+"by": 76
+},
+{
+"n": "tree_emerald_2",
+"x": 455,
+"by": 80
+},
+{
+"n": "tree_emerald_1",
+"x": 561,
+"by": 80
+},
+{
+"n": "tree_emerald_1",
+"x": 667,
+"by": 81
+},
+{
+"n": "tree_emerald_3",
+"x": 407,
+"by": 82
+},
+{
+"n": "tree_emerald_1",
+"x": -39,
+"by": 82
+},
+{
+"n": "tree_emerald_1",
+"x": 137,
+"by": 82
+},
+{
+"n": "tree_emerald_1",
+"x": 508,
+"by": 83
+},
+{
+"n": "tree_emerald_1",
+"x": 45,
+"by": 84
+},
+{
+"n": "tree_emerald_2",
+"x": 328,
+"by": 84
+},
+{
+"n": "tree_emerald_2",
+"x": 464,
+"by": 85
+},
+{
+"n": "tree_emerald_2",
+"x": 93,
+"by": 86
+},
+{
+"n": "tree_emerald_2",
+"x": 300,
+"by": 87
+},
+{
+"n": "tree_emerald_1",
+"x": 495,
+"by": 88
+},
+{
+"n": "tree_emerald_1",
+"x": 345,
+"by": 89
+},
+{
+"n": "tree_emerald_1",
+"x": 34,
+"by": 90
+},
+{
+"n": "tree_emerald_2",
+"x": 923,
+"by": 90
+},
+{
+"n": "tree_emerald_2",
+"x": -38,
+"by": 90
+},
+{
+"n": "tree_emerald_1",
+"x": 852,
+"by": 94
+},
+{
+"n": "tree_emerald_2",
+"x": 974,
+"by": 95
+},
+{
+"n": "tree_emerald_1",
+"x": 72,
+"by": 96
+},
+{
+"n": "tree_emerald_1",
+"x": 7,
+"by": 96
+},
+{
+"n": "tree_emerald_1",
+"x": 547,
+"by": 97
+},
+{
+"n": "tree_emerald_3",
+"x": 415,
+"by": 97
+},
+{
+"n": "tree_emerald_2",
+"x": 120,
+"by": 97
+},
+{
+"n": "tree_emerald_1",
+"x": -67,
+"by": 98
+},
+{
+"n": "tree_emerald_1",
+"x": 497,
+"by": 98
+},
+{
+"n": "tree_emerald_1",
+"x": 948,
+"by": 100
+},
+{
+"n": "tree_emerald_2",
+"x": 47,
+"by": 101
+},
+{
+"n": "tree_emerald_4",
+"x": 458,
+"by": 102
+},
+{
+"n": "tree_emerald_2",
+"x": 971,
+"by": 107
+},
+{
+"n": "tree_emerald_4",
+"x": 906,
+"by": 108
+},
+{
+"n": "tree_emerald_2",
+"x": -53,
+"by": 108
+},
+{
+"n": "tree_emerald_1",
+"x": 455,
+"by": 109
+},
+{
+"n": "tree_emerald_3",
+"x": -19,
+"by": 111
+},
+{
+"n": "tree_emerald_1",
+"x": 936,
+"by": 112
+},
+{
+"n": "tree_emerald_1",
+"x": 466,
+"by": 114
+},
+{
+"n": "tree_emerald_2",
+"x": 893,
+"by": 116
+},
+{
+"n": "tree_emerald_2",
+"x": 966,
+"by": 120
+},
+{
+"n": "tree_emerald_1",
+"x": 896,
+"by": 121
+},
+{
+"n": "tree_emerald_1",
+"x": -28,
+"by": 122
+},
+{
+"n": "tree_emerald_1",
+"x": -57,
+"by": 127
+},
+{
+"n": "tree_emerald_2",
+"x": 944,
+"by": 128
+},
+{
+"n": "tree_emerald_2",
+"x": 891,
+"by": 134
+},
+{
+"n": "tree_emerald_2",
+"x": 947,
+"by": 136
+},
+{
+"n": "tree_emerald_2",
+"x": 977,
+"by": 139
+},
+{
+"n": "tree_emerald_2",
+"x": -13,
+"by": 140
+},
+{
+"n": "tree_emerald_2",
+"x": 931,
+"by": 141
+},
+{
+"n": "tree_emerald_2",
+"x": 891,
+"by": 146
+},
+{
+"n": "tree_emerald_1",
+"x": 951,
+"by": 152
+},
+{
+"n": "tree_emerald_1",
+"x": -60,
+"by": 152
+},
+{
+"n": "tree_emerald_2",
+"x": 917,
+"by": 155
+},
+{
+"n": "tree_emerald_1",
+"x": -61,
+"by": 158
+},
+{
+"n": "tree_emerald_1",
+"x": -36,
+"by": 163
+},
+{
+"n": "tree_emerald_4",
+"x": 886,
+"by": 164
+},
+{
+"n": "tree_emerald_2",
+"x": 921,
+"by": 168
+},
+{
+"n": "tree_emerald_2",
+"x": 886,
+"by": 174
+},
+{
+"n": "tree_emerald_4",
+"x": 969,
+"by": 174
+},
+{
+"n": "tree_emerald_1",
+"x": -45,
+"by": 178
+},
+{
+"n": "tree_emerald_2",
+"x": 934,
+"by": 180
+},
+{
+"n": "tree_emerald_2",
+"x": 923,
+"by": 185
+},
+{
+"n": "tree_emerald_2",
+"x": 976,
+"by": 190
+},
+{
+"n": "tree_emerald_1",
+"x": 927,
+"by": 199
+},
+{
+"n": "tree_emerald_3",
+"x": 880,
+"by": 203
+},
+{
+"n": "tree_emerald_2",
+"x": 949,
+"by": 206
+},
+{
+"n": "tree_emerald_2",
+"x": 910,
+"by": 212
+},
+{
+"n": "tree_emerald_2",
+"x": 964,
+"by": 213
+},
+{
+"n": "tree_emerald_2",
+"x": 953,
+"by": 227
+},
+{
+"n": "tree_emerald_2",
+"x": 951,
+"by": 238
+},
+{
+"n": "tree_emerald_2",
+"x": 960,
+"by": 252
+},
+{
+"n": "tree_emerald_2",
+"x": 975,
+"by": 266
+},
+{
+"n": "tree_emerald_2",
+"x": 946,
+"by": 282
+},
+{
+"n": "tree_emerald_1",
+"x": 970,
+"by": 289
+},
+{
+"n": "tree_emerald_2",
+"x": 946,
+"by": 307
+},
+{
+"n": "tree_emerald_4",
+"x": 975,
+"by": 310
+},
+{
+"n": "tree_emerald_1",
+"x": 953,
+"by": 320
+},
+{
+"n": "tree_emerald_3",
+"x": 919,
+"by": 329
+},
+{
+"n": "tree_emerald_2",
+"x": 974,
+"by": 333
+},
+{
+"n": "tree_emerald_2",
+"x": 895,
+"by": 335
+},
+{
+"n": "tree_emerald_2",
+"x": 918,
+"by": 347
+},
+{
+"n": "tree_emerald_4",
+"x": 956,
+"by": 349
+},
+{
+"n": "tree_emerald_1",
+"x": 897,
+"by": 355
+},
+{
+"n": "tree_emerald_1",
+"x": 962,
+"by": 359
+},
+{
+"n": "tree_emerald_1",
+"x": 925,
+"by": 366
+},
+{
+"n": "tree_emerald_2",
+"x": 972,
+"by": 372
+},
+{
+"n": "tree_emerald_1",
+"x": 901,
+"by": 372
+},
+{
+"n": "tree_emerald_2",
+"x": 945,
+"by": 381
+},
+{
+"n": "tree_emerald_2",
+"x": 914,
+"by": 383
+},
+{
+"n": "tree_emerald_2",
+"x": 897,
+"by": 388
+},
+{
+"n": "tree_emerald_1",
+"x": 960,
+"by": 395
+},
+{
+"n": "tree_emerald_2",
+"x": 919,
+"by": 395
+},
+{
+"n": "tree_emerald_2",
+"x": 939,
+"by": 400
+},
+{
+"n": "tree_emerald_1",
+"x": 918,
+"by": 405
+},
+{
+"n": "tree_emerald_1",
+"x": 953,
+"by": 414
+},
+{
+"n": "tree_emerald_2",
+"x": 964,
+"by": 425
+},
+{
+"n": "tree_emerald_1",
+"x": 966,
+"by": 433
+},
+{
+"n": "tree_emerald_2",
+"x": 951,
+"by": 439
+},
+{
+"n": "tree_emerald_1",
+"x": 964,
+"by": 458
+},
+{
+"n": "tree_emerald_2",
+"x": 945,
+"by": 466
+},
+{
+"n": "tree_emerald_2",
+"x": 951,
+"by": 474
+},
+{
+"n": "tree_emerald_4",
+"x": 955,
+"by": 490
+},
+{
+"n": "tree_emerald_1",
+"x": 947,
+"by": 498
+},
+{
+"n": "tree_emerald_2",
+"x": 965,
+"by": 509
+},
+{
+"n": "tree_emerald_3",
+"x": 940,
+"by": 525
+},
+{
+"n": "tree_emerald_2",
+"x": 842,
+"by": 535
+},
+{
+"n": "tree_emerald_2",
+"x": 891,
+"by": 537
+},
+{
+"n": "tree_emerald_1",
+"x": 953,
+"by": 539
+},
+{
+"n": "tree_emerald_2",
+"x": 830,
+"by": 540
+},
+{
+"n": "tree_emerald_4",
+"x": 755,
+"by": 541
+},
+{
+"n": "tree_emerald_3",
+"x": 786,
+"by": 545
+},
+{
+"n": "tree_emerald_4",
+"x": 685,
+"by": 545
+},
+{
+"n": "tree_emerald_2",
+"x": 951,
+"by": 548
+},
+{
+"n": "tree_emerald_2",
+"x": 842,
+"by": 552
+},
+{
+"n": "tree_emerald_2",
+"x": 809,
+"by": 552
+},
+{
+"n": "tree_emerald_1",
+"x": 703,
+"by": 553
+},
+{
+"n": "tree_emerald_1",
+"x": 908,
+"by": 556
+},
+{
+"n": "tree_emerald_4",
+"x": 751,
+"by": 556
+},
+{
+"n": "tree_emerald_1",
+"x": 962,
+"by": 558
+},
+{
+"n": "tree_emerald_2",
+"x": 835,
+"by": 558
+},
+{
+"n": "tree_emerald_2",
+"x": 792,
+"by": 562
+},
+{
+"n": "tree_emerald_1",
+"x": 892,
+"by": 562
+},
+{
+"n": "tree_emerald_2",
+"x": 722,
+"by": 563
+},
+{
+"n": "tree_emerald_2",
+"x": 756,
+"by": 564
+},
+{
+"n": "tree_emerald_2",
+"x": 857,
+"by": 565
+},
+{
+"n": "tree_emerald_1",
+"x": 957,
+"by": 567
+},
+{
+"n": "tree_emerald_4",
+"x": 671,
+"by": 569
+},
+{
+"n": "tree_emerald_2",
+"x": 711,
+"by": 570
+},
+{
+"n": "tree_emerald_2",
+"x": 814,
+"by": 570
+},
+{
+"n": "tree_emerald_2",
+"x": 639,
+"by": 571
+},
+{
+"n": "tree_emerald_2",
+"x": 855,
+"by": 574
+},
+{
+"n": "tree_emerald_2",
+"x": 774,
+"by": 574
+},
+{
+"n": "tree_emerald_1",
+"x": 942,
+"by": 574
+},
+{
+"n": "tree_emerald_2",
+"x": 712,
+"by": 575
+},
+{
+"n": "tree_emerald_2",
+"x": 803,
+"by": 578
+},
+{
+"n": "tree_emerald_2",
+"x": 634,
+"by": 579
+},
+{
+"n": "tree_emerald_1",
+"x": 675,
+"by": 580
+},
+{
+"n": "tree_emerald_2",
+"x": 961,
+"by": 580
+},
+{
+"n": "tree_emerald_2",
+"x": 897,
+"by": 584
+},
+{
+"n": "tree_emerald_2",
+"x": 648,
+"by": 588
+},
+{
+"n": "tree_emerald_2",
+"x": 761,
+"by": 588
+},
+{
+"n": "tree_emerald_1",
+"x": 874,
+"by": 589
+},
+{
+"n": "tree_emerald_1",
+"x": 820,
+"by": 590
+},
+{
+"n": "tree_emerald_2",
+"x": 783,
+"by": 593
+},
+{
+"n": "tree_emerald_2",
+"x": 659,
+"by": 595
+},
+{
+"n": "tree_emerald_1",
+"x": 950,
+"by": 595
+},
+{
+"n": "tree_emerald_1",
+"x": 795,
+"by": 601
+},
+{
+"n": "tree_emerald_1",
+"x": 748,
+"by": 601
+},
+{
+"n": "tree_emerald_1",
+"x": 960,
+"by": 602
+},
+{
+"n": "tree_emerald_1",
+"x": 613,
+"by": 605
+},
+{
+"n": "tree_emerald_3",
+"x": 699,
+"by": 606
+},
+{
+"n": "tree_emerald_3",
+"x": 903,
+"by": 606
+},
+{
+"n": "tree_emerald_1",
+"x": 788,
+"by": 606
+},
+{
+"n": "tree_emerald_1",
+"x": 838,
+"by": 608
+},
+{
+"n": "tree_emerald_1",
+"x": 649,
+"by": 610
+},
+{
+"n": "tree_emerald_1",
+"x": 968,
+"by": 614
+},
+{
+"n": "tree_emerald_1",
+"x": 845,
+"by": 614
+},
+{
+"n": "tree_emerald_1",
+"x": 657,
+"by": 616
+},
+{
+"n": "tree_emerald_1",
+"x": 744,
+"by": 617
+},
+{
+"n": "tree_emerald_2",
+"x": 714,
+"by": 618
+},
+{
+"n": "tree_emerald_2",
+"x": 816,
+"by": 618
+},
+{
+"n": "tree_emerald_2",
+"x": 887,
+"by": 619
+},
+{
+"n": "tree_emerald_2",
+"x": 946,
+"by": 619
+},
+{
+"n": "tree_emerald_2",
+"x": 678,
+"by": 622
+},
+{
+"n": "bush_emerald_4",
+"x": 22,
+"by": 178
+},
+{
+"n": "bush_emerald_6",
+"x": 226,
+"by": 136
+},
+{
+"n": "rock_brown_6",
+"x": 455,
+"by": 151
+},
+{
+"n": "bush_emerald_5",
+"x": 454,
+"by": 521
+},
+{
+"n": "tree_emerald_4",
+"x": 219,
+"by": 503
+},
+{
+"n": "bush_emerald_3",
+"x": 847,
+"by": 397
+},
+{
+"n": "bush_emerald_2",
+"x": 332,
+"by": 325
+},
+{
+"n": "bush_emerald_4",
+"x": 346,
+"by": 310
+},
+{
+"n": "bush_emerald_3",
+"x": 355,
+"by": 485
+},
+{
+"n": "bush_emerald_2",
+"x": 167,
+"by": 304
+},
+{
+"n": "flowers_red_f0",
+"x": 146,
+"by": 317
+},
+{
+"n": "bush_emerald_5",
+"x": 178,
+"by": 311
+},
+{
+"n": "bush_emerald_4",
+"x": 42,
+"by": 428
+},
+{
+"n": "flowers_white_f0",
+"x": 4,
+"by": 425
+},
+{
+"n": "bush_emerald_3",
+"x": 91,
+"by": 480
+},
+{
+"n": "bush_emerald_3",
+"x": 135,
+"by": 480
+},
+{
+"n": "bush_emerald_6",
+"x": 172,
+"by": 476
+},
+{
+"n": "bush_emerald_6",
+"x": 159,
+"by": 494
+},
+{
+"n": "flowers_white_f0",
+"x": 302,
+"by": 338
+},
+{
+"n": "rock_brown_6",
+"x": 417,
+"by": 463
+},
+{
+"n": "rock_brown_6",
+"x": 26,
+"by": 463
+},
+{
+"n": "flowers_white_f0",
+"x": 694,
+"by": 507
+},
+{
+"n": "rock_brown_9",
+"x": 461,
+"by": 185
+},
+{
+"n": "flowers_white_f0",
+"x": 709,
+"by": 231
+},
+{
+"n": "rock_brown_9",
+"x": 71,
+"by": 290
+},
+{
+"n": "bush_emerald_7",
+"x": 684,
+"by": 462
+},
+{
+"n": "rock_brown_6",
+"x": 406,
+"by": 297
+},
+{
+"n": "bush_emerald_7",
+"x": 671,
+"by": 191
+},
+{
+"n": "rock_brown_6",
+"x": 665,
+"by": 438
+},
+{
+"n": "bush_emerald_6",
+"x": 632,
+"by": 302
+},
+{
+"n": "bush_emerald_6",
+"x": 103,
+"by": 209
+},
+{
+"n": "bush_emerald_5",
+"x": 170,
+"by": 280
+},
+{
+"n": "flowers_white_f0",
+"x": 227,
+"by": 463
+},
+{
+"n": "bush_emerald_6",
+"x": 657,
+"by": 130
+},
+{
+"n": "rock_brown_9",
+"x": 343,
+"by": 494
+},
+{
+"n": "bush_emerald_6",
+"x": 326,
+"by": 497
+},
+{
+"n": "bush_emerald_7",
+"x": 356,
+"by": 513
+},
+{
+"n": "flowers_white_f0",
+"x": 366,
+"by": 253
+},
+{
+"n": "bush_emerald_5",
+"x": 470,
+"by": 241
+},
+{
+"n": "bush_emerald_7",
+"x": 57,
+"by": 343
+},
+{
+"n": "rock_brown_9",
+"x": 564,
+"by": 310
+},
+{
+"n": "bush_emerald_6",
+"x": 285,
+"by": 230
+},
+{
+"n": "flowers_red_f0",
+"x": 341,
+"by": 293
+},
+{
+"n": "rock_brown_9",
+"x": 189,
+"by": 318
+},
+{
+"n": "rock_brown_9",
+"x": 874,
+"by": 334
+},
+{
+"n": "bush_emerald_5",
+"x": 714,
+"by": 242
+},
+{
+"n": "bush_emerald_6",
+"x": 319,
+"by": 530
+},
+{
+"n": "bush_emerald_5",
+"x": 24,
+"by": 436
+},
+{
+"n": "bush_emerald_6",
+"x": 47,
+"by": 506
+},
+{
+"n": "rock_brown_9",
+"x": 136,
+"by": 521
+},
+{
+"n": "bush_emerald_7",
+"x": 139,
+"by": 529
+},
+{
+"n": "flowers_white_f0",
+"x": 628,
+"by": 248
+},
+{
+"n": "bush_emerald_5",
+"x": 705,
+"by": 433
+},
+{
+"n": "bush_emerald_5",
+"x": 67,
+"by": 309
+},
+{
+"n": "bush_emerald_7",
+"x": 22,
+"by": 532
+},
+{
+"n": "rock_brown_1",
+"x": 95,
+"by": 513
+},
+{
+"n": "rock_brown_9",
+"x": 236,
+"by": 528
+},
+{
+"n": "rock_brown_2",
+"x": 55,
+"by": 452
+},
+{
+"n": "rock_brown_4",
+"x": 146,
+"by": 441
+},
+{
+"n": "rock_brown_6",
+"x": 162,
+"by": 427
+},
+{
+"n": "rock_brown_2",
+"x": 190,
+"by": 466
+},
+{
+"n": "rock_brown_9",
+"x": 186,
+"by": 509
+},
+{
+"n": "rock_brown_9",
+"x": 81,
+"by": 439
+},
+{
+"n": "bush_emerald_5",
+"x": 197,
+"by": 511
+},
+{
+"n": "rock_brown_2",
+"x": 135,
+"by": 461
+},
+{
+"n": "rock_brown_9",
+"x": 11,
+"by": 517
+},
+{
+"n": "rock_brown_9",
+"x": 180,
+"by": 439
+},
+{
+"n": "rock_brown_4",
+"x": 86,
+"by": 494
+},
+{
+"n": "bush_emerald_6",
+"x": 48,
+"by": 515
+},
+{
+"n": "rock_brown_4",
+"x": 10,
+"by": 478
+},
+{
+"n": "rock_brown_1",
+"x": 68,
+"by": 470
+},
+{
+"n": "rock_brown_9",
+"x": 155,
+"by": 504
+},
+{
+"n": "rock_brown_9",
+"x": 56,
+"by": 438
+},
+{
+"n": "bush_emerald_6",
+"x": 223,
+"by": 532
+},
+{
+"n": "bush_emerald_6",
+"x": 212,
+"by": 508
+},
+{
+"n": "bush_emerald_7",
+"x": 106,
+"by": 453
+},
+{
+"n": "bush_emerald_5",
+"x": 176,
+"by": 499
+},
+{
+"n": "rock_brown_4",
+"x": 179,
+"by": 525
+},
+{
+"n": "rock_brown_1",
+"x": 176,
+"by": 535
+},
+{
+"n": "rock_brown_2",
+"x": 55,
+"by": 529
+},
+{
+"n": "rock_brown_6",
+"x": 99,
+"by": 535
+}
+],
+"idleSpots": [
+[
+790,
+362
+],
+[
+826,
+366
+],
+[
+760,
+346
+],
+[
+404,
+300
+],
+[
+96,
+300
+],
+[
+620,
+300
+],
+[
+300,
+500
+],
+[
+700,
+440
+]
+],
+"lamps": [
+[
+236,
+170
+],
+[
+452,
+174
+],
+[
+668,
+178
+],
+[
+110,
+260
+],
+[
+604,
+260
+],
+[
+758,
+270
+]
+],
+"credit_line": "\ud0c0\uc77c\u00b7\uac74\ubb3c\u00b7\ub098\ubb34: The Fan-tasy Tileset (Free) \u2014 Ventilatore",
+"credit": "The Fan-tasy Tileset (Free) by Ventilatore \u2014 non-commercial use"
+}

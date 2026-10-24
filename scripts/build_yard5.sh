@@ -11,3 +11,5 @@ $PY scripts/critter_kit.py $OUT/critters
 $PY scripts/shaft_kit.py "$PACK" $OUT/shaft
 $PY scripts/yard_map.py "$PACK" $OUT --mock $OUT/bld
 echo "→ $OUT"
+
+for r in 2 3 4; do $PY scripts/yard_map.py "$PACK" $OUT/region$r --region $r --mock $OUT/bld; done

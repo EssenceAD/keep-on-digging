@@ -14,7 +14,8 @@ TS = lambda n: load_tsx(os.path.join(PACK, "Tiled", "Tilesets", n + ".tsx"))
 NAMES = {}
 def A(p):
     im = Image.open(os.path.join(PACK, "Art", p)).convert("RGBA"); NAMES[id(im)] = os.path.splitext(os.path.basename(p))[0].lower(); return im
-rng = random.Random(11); os.makedirs(OUT, exist_ok=True)
+REGION = int(sys.argv[sys.argv.index("--region") + 1]) if "--region" in sys.argv else 1   # 1 뒷산 · 2 안개 계곡 · 3 붉은 협곡 · 4 얼음 동굴
+rng = random.Random(11 if REGION == 1 else 11 + REGION * 7); os.makedirs(OUT, exist_ok=True)
 def noise(x, s=1.0):                                                       # 부드러운 1D 노이즈
     return sum(math.sin(x * f * s + p) * a for f, p, a in ((0.013, 1.3, 1.0), (0.031, 4.1, 0.5), (0.071, 2.2, 0.25))) / 1.75
 
@@ -50,6 +51,12 @@ water = grid(0)
 stroke(water, [(-20, 442), (60, 462), (128, 488), (180, 520), (214, 560)], 30, 1)
 for x, y, px, py in cells():
     if py > 500 and px < 120: water[y][x] = 1
+if REGION == 2:                                                             # 안개 계곡: 위에서 내려오는 넓은 강 + 아래 호수
+    stroke(water, [(-20, 120), (40, 180), (30, 260), (60, 330), (40, 420)], 26, 1); stroke(water, [(330, 560), (420, 528), (520, 552)], 34, 1)
+if REGION == 3:                                                             # 붉은 협곡: 물 없음
+    water = grid(0)
+if REGION == 4:                                                             # 얼음 동굴: 작은 얼음 연못
+    water = grid(0); stroke(water, [(40, 470), (110, 500), (150, 540)], 34, 1)
 
 # ------------------------------------------------------------ 길: 한 줄기 구불길 + 갈래 둘 + 문 앞 샛길
 road = grid(0)
@@ -70,6 +77,10 @@ blob(ground, ENTRANCE[0] - 20, ENTRANCE[1] + 4, 70, 30, 2); blob(ground, 806, 34
 for x, y, *_ in cells():
     if water[y][x]: ground[y][x] = 1
 
+if REGION == 3:                                                             # 붉은 협곡: 흙 땅이 넓게
+    for _ in range(14): blob(ground, rng.randrange(40, 920), rng.randrange(120, 530), rng.randrange(30, 70), rng.randrange(18, 34), 2, 0.4)
+    for x, y, *_ in cells():
+        if road[y][x]: ground[y][x] = 2
 # ------------------------------------------------------------ 둔덕: 윗줄 집들이 앉는 높은 땅 (U) → 입력(2 윗선 · 1 벽면 · 3 계단) → 팩 자동 매핑 규칙
 from automap import load_rules, apply as automap
 edge_row = []
@@ -201,24 +212,48 @@ for gx, gy in ((250, 150), (466, 150), (90, 360), (700, 520), (470, 520), (230, 
     for _ in range(rng.randrange(2, 5)):
         r = rng.random(); x, y = gx + rng.randrange(-26, 27), gy + rng.randrange(-16, 17)
         put(rng.choice(trees) if r < 0.3 else rng.choice(big_bush) if r < 0.6 else rng.choice(small_bush) if r < 0.8 else rng.choice(rocks), x, y)
-for _ in range(40):                                                         # 뭉치: 큰 덤불 + 작은 덤불·꽃 둘레
+for _ in range({1: 40, 2: 46, 3: 18, 4: 26}[REGION]):                                                         # 뭉치: 큰 덤불 + 작은 덤불·꽃 둘레
     gx, gy = rng.randrange(30, W - 40), rng.randrange(120, H - 6)
     if put(rng.choice(big_bush), gx, gy):
         for _ in range(rng.randrange(2, 5)): put(rng.choice(flowers + small_bush + small_bush), gx + rng.randrange(-30, 31), gy + rng.randrange(-12, 16))
-for _ in range(260):
+for _ in range({1: 260, 2: 300, 3: 120, 4: 160}[REGION]):
     x, y = rng.randrange(30, W - 30), rng.randrange(110, H - 4); put(rng.choice(flowers + small_bush + rocks[3:]), x, y)
 # 강가 바위·덤불
-for _ in range(18):
+for _ in range({1: 18, 2: 30, 3: 60, 4: 30}[REGION]):
     x, y = rng.randrange(0, 260), rng.randrange(400, 540); put(rng.choice(rocks + small_bush), x, y)
 
 # ------------------------------------------------------------ 출력 — 건물이 들어갈 y 기준으로 back/front 나눔 (Code는 건물·사람을 y 정렬로 그 사이에)
+import colorsys
+def grade(im):                                                              # 지역 색: 풀·잎(초록)·흙·물 색상 통째로 옮김 (팩 그림 그대로, 색만)
+    if REGION == 1: return im
+    a = np.array(im.convert("RGBA")).astype(float); rgb = a[:, :, :3] / 255; op = a[:, :, 3] > 0
+    flat = rgb[op]; out = flat.copy()
+    for i, (r, g, b) in enumerate(flat):
+        h, sat, v = colorsys.rgb_to_hsv(r, g, b); hd = h * 360
+        if 65 <= hd <= 170 and sat > 0.2:                                  # 초록
+            if REGION == 2: h, sat, v = 150 / 360, sat * 0.55, v * 0.86
+            if REGION == 3: h, sat, v = 52 / 360, sat * 0.5, v * 0.74
+            if REGION == 4: h, sat, v = 205 / 360, sat * 0.18, min(1, v * 1.12 + 0.08)
+        elif 15 <= hd < 50 and sat > 0.25:                                  # 흙·나무
+            if REGION == 3: h, sat = (hd - 14) / 360, min(1, sat * 1.15)
+            if REGION == 4: sat = sat * 0.8
+        elif 180 <= hd <= 230:                                              # 물
+            if REGION == 2: h, sat, v = 212 / 360, min(1, sat * 1.15), v * 0.92
+            if REGION == 4: sat, v = sat * 0.45, min(1, v * 1.1)
+        out[i] = colorsys.hsv_to_rgb(h, sat, v)
+    a[op, :3] = out * 255; return Image.fromarray(a.clip(0, 255).astype(np.uint8))
+import numpy as np
+_cache_g = {}
+def G(im):
+    k = id(im)
+    if k not in _cache_g: _cache_g[k] = grade(im)
+    return _cache_g[k]
 for f in range(4):
-    render(W, H, [(gTS, gt), (rTS, rt), (wTS, wt), (lTS, lt)], [], frame=f, bg=(160, 147, 138, 255)).save(os.path.join(OUT, f"yard_ground_f{f}.png"))
-render(W, H, [], objs).save(os.path.join(OUT, "yard_props_all.png"))
+    grade(render(W, H, [(gTS, gt), (rTS, rt), (wTS, wt), (lTS, lt)], [], frame=f, bg=(160, 147, 138, 255))).save(os.path.join(OUT, f"yard_ground_f{f}.png"))
 os.makedirs(os.path.join(OUT, "props"), exist_ok=True); saved = set()
 for im, x, by in objs:
     n = NAMES[id(im)]
-    if n not in saved: im.save(os.path.join(OUT, "props", n + ".png")); saved.add(n)
+    if n not in saved: G(im).save(os.path.join(OUT, "props", n + ".png")); saved.add(n)
 for i, f in enumerate(fires): f.save(os.path.join(OUT, "props", f"campfire_f{i}.png"))
 json.dump({"size": [W, H], "lots": [{"id": i, "cx": cx, "by": by, "w": LOT_W, "h": LOT_H} for i, (cx, by) in enumerate(LOTS)],
            "entrance": ENTRANCE, "spine": SPINE, "branches": [BR1, BR2], "campfire": [806, 344],
@@ -230,7 +265,7 @@ if MOCK:
     KIT = sys.argv[sys.argv.index("--mock") + 1] if len(sys.argv) > sys.argv.index("--mock") + 1 else None
     AN = json.load(open(os.path.join(KIT, "anchors.json")))
     img = Image.open(os.path.join(OUT, "yard_ground_f0.png")).convert("RGBA")
-    things = list(objs)
+    things = [(G(im), x, by) for im, x, by in objs]
     for (cx, by), n in zip(LOTS, ["lodge_1", "office_5", "smelter_3", "lanternshop_3", "warehouse_1", "pump_1", "cartshed_3", "molehome_1", "turretshop_1"]):
         b = Image.open(os.path.join(KIT, n + ".png")); ax, ay = AN[n]; things.append((b, cx - ax, by - ay + b.height))
     img = Image.alpha_composite(img, render(W, H, [], things))
